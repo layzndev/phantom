@@ -86,3 +86,46 @@ export function createNodeTokenRecord(nodeId: string, tokenHash: string) {
     data: { nodeId, tokenHash }
   });
 }
+
+export function findActiveNodeTokenRecord(nodeId: string, tokenHash: string) {
+  return db.nodeToken.findFirst({
+    where: {
+      nodeId,
+      tokenHash,
+      revokedAt: null
+    }
+  });
+}
+
+export function updateNodeHeartbeatRecord(
+  nodeId: string,
+  updates: { status: string; health: string }
+) {
+  return db.node.update({
+    where: { id: nodeId },
+    data: {
+      status: updates.status,
+      health: updates.health,
+      updatedAt: new Date()
+    },
+    include: {
+      statusEvents: { orderBy: { createdAt: "desc" }, take: 50 }
+    }
+  });
+}
+
+export function createNodeStatusEventRecord(input: {
+  nodeId: string;
+  previousStatus?: string | null;
+  newStatus: string;
+  reason?: string;
+}) {
+  return db.nodeStatusEvent.create({
+    data: {
+      nodeId: input.nodeId,
+      previousStatus: input.previousStatus ?? null,
+      newStatus: input.newStatus,
+      reason: input.reason
+    }
+  });
+}
