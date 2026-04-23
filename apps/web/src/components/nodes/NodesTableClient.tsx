@@ -14,6 +14,8 @@ import { SkeletonBlock } from "@/components/ui/SkeletonBlock";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { CreateNodePanel } from "./CreateNodePanel";
 
+const NODES_REFRESH_MS = 15_000;
+
 export function NodesTableClient() {
   const [nodes, setNodes] = useState<CompanyNode[]>([]);
   const [loading, setLoading] = useState(true);
@@ -23,14 +25,35 @@ export function NodesTableClient() {
   const [adminRole, setAdminRole] = useState<AdminRole | null>(null);
 
   useEffect(() => {
-    adminApi.nodes().then(({ nodes: nextNodes }) => {
-      setNodes(nextNodes);
-      setLoading(false);
-    });
+    let active = true;
+
+    async function refresh() {
+      try {
+        const { nodes: nextNodes } = await adminApi.nodes();
+        if (!active) return;
+        setNodes(nextNodes);
+      } catch {
+        // silent: keep showing the last known snapshot
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+
+    refresh();
     adminApi
       .me()
-      .then(({ admin }) => setAdminRole(admin.role))
-      .catch(() => setAdminRole(null));
+      .then(({ admin }) => {
+        if (active) setAdminRole(admin.role);
+      })
+      .catch(() => {
+        if (active) setAdminRole(null);
+      });
+
+    const timer = setInterval(refresh, NODES_REFRESH_MS);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
   }, []);
 
   function replaceNode(updated: CompanyNode) {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { adminApi } from "@/lib/api/admin-api";
 import { formatDateTime } from "@/lib/utils/format";
 import type { AdminRole, CompanyNode } from "@/types/admin";
@@ -14,20 +14,48 @@ import { DetailCard } from "@/components/ui/DetailCard";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { SkeletonBlock } from "@/components/ui/SkeletonBlock";
 
+const NODE_DETAIL_REFRESH_MS = 15_000;
+
 export function NodeDetailClient({ id }: { id: string }) {
   const [node, setNode] = useState<CompanyNode | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [adminRole, setAdminRole] = useState<AdminRole | null>(null);
+  const loadedOnceRef = useRef(false);
 
   useEffect(() => {
-    adminApi
-      .node(id)
-      .then(({ node: nextNode }) => setNode(nextNode))
-      .catch((detailError) => setError(detailError instanceof Error ? detailError.message : "Unable to load node"));
+    let active = true;
+    loadedOnceRef.current = false;
+
+    async function refresh() {
+      try {
+        const { node: nextNode } = await adminApi.node(id);
+        if (!active) return;
+        setNode(nextNode);
+        setError(null);
+        loadedOnceRef.current = true;
+      } catch (detailError) {
+        if (!active) return;
+        if (!loadedOnceRef.current) {
+          setError(detailError instanceof Error ? detailError.message : "Unable to load node");
+        }
+      }
+    }
+
+    refresh();
     adminApi
       .me()
-      .then(({ admin }) => setAdminRole(admin.role))
-      .catch(() => setAdminRole(null));
+      .then(({ admin }) => {
+        if (active) setAdminRole(admin.role);
+      })
+      .catch(() => {
+        if (active) setAdminRole(null);
+      });
+
+    const timer = setInterval(refresh, NODE_DETAIL_REFRESH_MS);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
   }, [id]);
 
   if (error) {
