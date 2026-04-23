@@ -4,6 +4,8 @@ export const nodeParamsSchema = z.object({
   id: z.string().min(3).max(128).regex(/^[a-zA-Z0-9._:-]+$/)
 });
 
+export const runtimeNodeParamsSchema = nodeParamsSchema;
+
 export const createNodeSchema = z
   .object({
     id: z.string().min(3).max(128).regex(/^[a-zA-Z0-9._:-]+$/),
@@ -26,4 +28,11 @@ export const createNodeSchema = z
 export const maintenanceSchema = z.object({
   maintenanceMode: z.boolean(),
   reason: z.string().max(240).optional()
+});
+
+export const nodeHeartbeatSchema = z.object({
+  status: z.enum(["healthy", "degraded", "offline"]).default("healthy"),
+  cpuUsed: z.coerce.number().min(0).optional(),
+  ramUsedMb: z.coerce.number().min(0).optional(),
+  diskUsedGb: z.coerce.number().min(0).optional()
 });

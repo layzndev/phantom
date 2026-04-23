@@ -1,7 +1,17 @@
 import { randomBytes, createHash } from "node:crypto";
 import { AppError } from "../../lib/appError.js";
 import type { CreateNodeResult, CompanyNode, NodeHealth, NodeStatus, RuntimeMode } from "./nodes.types.js";
-import { createNodeInRegistry, createNodeTokenInRegistry, findNodeFromRegistry, listNodesFromRegistry, rotateNodeTokenInRegistry, setNodeMaintenanceInRegistry } from "./nodes.repository.js";
+import {
+  createNodeInRegistry,
+  createNodeTokenInRegistry,
+  findActiveNodeTokenInRegistry,
+  findNodeFromRegistry,
+  listNodesFromRegistry,
+  rotateNodeTokenInRegistry,
+  setNodeMaintenanceInRegistry,
+  updateNodeHeartbeatInRegistry,
+  createNodeStatusEventInRegistry
+} from "./nodes.repository.js";
 import type { createNodeSchema } from "./nodes.schema.js";
 import type { z } from "zod";
 
@@ -53,7 +63,11 @@ export async function getNodeSummary() {
 export async function setNodeMaintenance(id: string, maintenanceMode: boolean, reason?: string) {
   const node = await findNodeFromRegistry(id);
   if (!node) throw new AppError(404, "Node not found.", "NODE_NOT_FOUND");
-  const updated = await setNodeMaintenanceInRegistry(id, maintenanceMode, reason ?? (maintenanceMode ? "maintenance enabled" : "maintenance disabled"));
+  const updated = await setNodeMaintenanceInRegistry(
+    id,
+    maintenanceMode,
+    reason ?? (maintenanceMode ? "maintenance enabled" : "maintenance disabled")
+  );
   return toCompanyNode(updated);
 }
 
@@ -69,6 +83,61 @@ export async function rotateNodeToken(id: string) {
     nodeId: id,
     token,
     rotatedAt: new Date().toISOString()
+  };
+}
+
+export async function acceptNodeHeartbeat(
+  nodeId: string,
+  rawToken: string,
+  payload: {
+    status: "healthy" | "degraded" | "offline";
+    cpuUsed?: number;
+    ramUsedMb?: number;
+    diskUsedGb?: number;
+  }
+) {
+  const node = await findNodeFromRegistry(nodeId);
+  if (!node) {
+    throw new AppError(404, "Node not found.", "NODE_NOT_FOUND");
+  }
+
+  const tokenHash = hashNodeToken(rawToken);
+  const activeToken = await findActiveNodeTokenInRegistry(nodeId, tokenHash);
+
+  if (!activeToken) {
+    throw new AppError(401, "Invalid node token.", "INVALID_NODE_TOKEN");
+  }
+
+  const nextStatus =
+    payload.status === "offline"
+      ? "offline"
+      : payload.status === "degraded"
+        ? "degraded"
+        : "healthy";
+
+  const nextHealth =
+    payload.status === "offline"
+      ? "unreachable"
+      : payload.status === "degraded"
+        ? "degraded"
+        : "healthy";
+
+  await updateNodeHeartbeatInRegistry(nodeId, {
+    status: nextStatus,
+    health: nextHealth
+  });
+
+  await createNodeStatusEventInRegistry({
+    nodeId,
+    previousStatus: node.status,
+    newStatus: nextStatus,
+    reason: `heartbeat cpu=${payload.cpuUsed ?? "n/a"} ramMb=${payload.ramUsedMb ?? "n/a"} diskGb=${payload.diskUsedGb ?? "n/a"}`
+  });
+
+  return {
+    ok: true,
+    nodeId,
+    receivedAt: new Date().toISOString()
   };
 }
 
