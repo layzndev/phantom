@@ -53,9 +53,9 @@ export async function getNodeSummary() {
     offlineNodes: nodes.filter((node) => node.status === "offline" || node.health === "unreachable").length,
     totalHostedServers: 0,
     totalRamMb: nodes.reduce((sum, node) => sum + node.totalRamMb, 0),
-    usedRamMb: 0,
+    usedRamMb: nodes.reduce((sum, node) => sum + node.usedRamMb, 0),
     totalCpu: nodes.reduce((sum, node) => sum + node.totalCpu, 0),
-    usedCpu: 0,
+    usedCpu: nodes.reduce((sum, node) => sum + node.usedCpu, 0),
     recentIncidents: []
   };
 }
@@ -153,6 +153,16 @@ function toCompanyNode(node: NonNullNodeRecord): CompanyNode {
   const portRange = `${node.portRangeStart}-${node.portRangeEnd}`;
   const totalPorts = node.portRangeEnd - node.portRangeStart + 1;
 
+  const latestHeartbeatEvent = node.statusEvents.find((event) =>
+    event.reason?.startsWith("heartbeat ")
+  );
+
+  const cpuMatch = latestHeartbeatEvent?.reason?.match(/cpu=([0-9.]+)/);
+  const ramMatch = latestHeartbeatEvent?.reason?.match(/ramMb=([0-9.]+)/);
+
+  const usedCpu = cpuMatch ? Number(cpuMatch[1]) : 0;
+  const usedRamMb = ramMatch ? Number(ramMatch[1]) : 0;
+
   return {
     id: node.id,
     name: node.name,
@@ -163,11 +173,11 @@ function toCompanyNode(node: NonNullNodeRecord): CompanyNode {
     status: node.status as NodeStatus,
     health: node.health as NodeHealth,
     runtimeMode: node.runtimeMode as RuntimeMode,
-    heartbeat: null,
+    heartbeat: node.updatedAt?.toISOString() ?? null,
     totalRamMb: node.totalRamMb,
-    usedRamMb: 0,
+    usedRamMb,
     totalCpu: node.totalCpu,
-    usedCpu: 0,
+    usedCpu,
     hostedServers: 0,
     availablePorts: totalPorts,
     reservedPorts: 0,
