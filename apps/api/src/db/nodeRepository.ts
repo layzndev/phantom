@@ -35,6 +35,9 @@ export function createNodeRecord(input: CreateNodeRecordInput) {
       status: "offline",
       health: "unknown",
       maintenanceMode: false,
+      usedRamMb: 0,
+      usedCpu: 0,
+      lastHeartbeatAt: null,
       statusEvents: {
         create: {
           previousStatus: null,
