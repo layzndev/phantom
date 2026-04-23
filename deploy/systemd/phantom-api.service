@@ -1,0 +1,27 @@
+[Unit]
+Description=Phantom API
+Documentation=https://github.com/layzndev/phantom
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=phantom
+Group=phantom
+WorkingDirectory=/opt/phantom
+EnvironmentFile=/etc/phantom/phantom-api.env
+ExecStart=/usr/bin/node /opt/phantom/apps/api/dist/server.js
+Restart=always
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=30
+SyslogIdentifier=phantom-api
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/opt/phantom/apps/api/node_modules/.prisma /opt/phantom/node_modules/.prisma
+
+[Install]
+WantedBy=multi-user.target

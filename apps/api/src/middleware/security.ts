@@ -6,7 +6,14 @@ import { env } from "../config/env.js";
 import { PrismaAdminSessionStore } from "../modules/auth/auth-session.store.js";
 
 export const corsMiddleware = cors({
-  origin: env.webOrigin,
+  origin(origin, callback) {
+    if (!origin || env.corsOrigins.includes(origin)) {
+      callback(null, true);
+      return;
+    }
+
+    callback(new Error("CORS origin is not allowed."));
+  },
   credentials: true
 });
 
@@ -31,7 +38,7 @@ export const adminSession = session({
   cookie: {
     httpOnly: true,
     secure: env.isProduction,
-    sameSite: "strict",
+    sameSite: env.cookieSameSite,
     maxAge: 1000 * 60 * 60 * 8
   }
 });

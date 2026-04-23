@@ -1,12 +1,26 @@
 import "dotenv/config";
 
 const isProduction = process.env.NODE_ENV === "production";
+const corsOrigins = (process.env.CORS_ORIGINS ?? process.env.WEB_ORIGIN ?? "http://localhost:3000")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+const cookieSameSite = process.env.COOKIE_SAMESITE ?? (isProduction ? "none" : "lax");
+
+if (!["lax", "strict", "none"].includes(cookieSameSite)) {
+  throw new Error("COOKIE_SAMESITE must be one of: lax, strict, none.");
+}
 
 export const env = {
   nodeEnv: process.env.NODE_ENV ?? "development",
   isProduction,
+  host: process.env.HOST ?? "127.0.0.1",
   port: Number(process.env.PORT ?? 4200),
   webOrigin: process.env.WEB_ORIGIN ?? "http://localhost:3000",
+  corsOrigins,
+  trustProxy: process.env.TRUST_PROXY ?? (isProduction ? "loopback" : "1"),
+  cookieSameSite: cookieSameSite as "lax" | "strict" | "none",
   databaseUrl: process.env.DATABASE_URL ?? "",
   sessionSecret: process.env.SESSION_SECRET ?? (isProduction ? "" : "dev-phantom-session-secret-change-me"),
   adminBootstrapEmail: process.env.ADMIN_BOOTSTRAP_EMAIL ?? (isProduction ? "" : "admin@company.local"),

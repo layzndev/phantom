@@ -5,6 +5,6 @@ assertRuntimeConfig();
 
 const app = createApp();
 
-app.listen(env.port, () => {
-  console.log(`Phantom API listening on http://localhost:${env.port}`);
+app.listen(env.port, env.host, () => {
+  console.log(`Phantom API listening on http://${env.host}:${env.port}`);
 });

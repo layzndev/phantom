@@ -7,14 +7,16 @@ import { nodesController } from "./modules/nodes/nodes.controller.js";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
 import { requestContext } from "./middleware/requestContext.js";
 import { adminSession, corsMiddleware, helmetMiddleware } from "./middleware/security.js";
+import { env } from "./config/env.js";
 
 export function createApp() {
   const app = express();
 
-  app.set("trust proxy", 1);
+  app.set("trust proxy", env.trustProxy);
   app.use(requestContext);
   app.use(helmetMiddleware);
   app.use(corsMiddleware);
+  app.options("*", corsMiddleware);
   app.use(express.json({ limit: "1mb" }));
   app.use(cookieParser());
   app.use(adminSession);
