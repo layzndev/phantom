@@ -100,14 +100,18 @@ export function findActiveNodeTokenRecord(nodeId: string, tokenHash: string) {
   });
 }
 
+export interface UpdateNodeHeartbeatRecordInput {
+  status: string;
+  health: string;
+  usedRamMb: number;
+  usedCpu: number;
+  totalRamMb?: number;
+  totalCpu?: number;
+}
+
 export function updateNodeHeartbeatRecord(
   nodeId: string,
-  updates: {
-    status: string;
-    health: string;
-    usedRamMb: number;
-    usedCpu: number;
-  }
+  updates: UpdateNodeHeartbeatRecordInput
 ) {
   return db.node.update({
     where: { id: nodeId },
@@ -116,8 +120,44 @@ export function updateNodeHeartbeatRecord(
       health: updates.health,
       usedRamMb: updates.usedRamMb,
       usedCpu: updates.usedCpu,
+      ...(updates.totalRamMb !== undefined ? { totalRamMb: updates.totalRamMb } : {}),
+      ...(updates.totalCpu !== undefined ? { totalCpu: updates.totalCpu } : {}),
       lastHeartbeatAt: new Date(),
       updatedAt: new Date()
+    },
+    include: {
+      statusEvents: { orderBy: { createdAt: "desc" }, take: 50 }
+    }
+  });
+}
+
+export interface UpdateNodeRecordInput {
+  name?: string;
+  provider?: string;
+  region?: string;
+  internalHost?: string;
+  publicHost?: string;
+  runtimeMode?: string;
+  totalRamMb?: number;
+  totalCpu?: number;
+  portRangeStart?: number;
+  portRangeEnd?: number;
+}
+
+export function updateNodeRecord(nodeId: string, updates: UpdateNodeRecordInput) {
+  return db.node.update({
+    where: { id: nodeId },
+    data: {
+      ...(updates.name !== undefined ? { name: updates.name } : {}),
+      ...(updates.provider !== undefined ? { provider: updates.provider } : {}),
+      ...(updates.region !== undefined ? { region: updates.region } : {}),
+      ...(updates.internalHost !== undefined ? { internalHost: updates.internalHost } : {}),
+      ...(updates.publicHost !== undefined ? { publicHost: updates.publicHost } : {}),
+      ...(updates.runtimeMode !== undefined ? { runtimeMode: updates.runtimeMode } : {}),
+      ...(updates.totalRamMb !== undefined ? { totalRamMb: updates.totalRamMb } : {}),
+      ...(updates.totalCpu !== undefined ? { totalCpu: updates.totalCpu } : {}),
+      ...(updates.portRangeStart !== undefined ? { portRangeStart: updates.portRangeStart } : {}),
+      ...(updates.portRangeEnd !== undefined ? { portRangeEnd: updates.portRangeEnd } : {})
     },
     include: {
       statusEvents: { orderBy: { createdAt: "desc" }, take: 50 }

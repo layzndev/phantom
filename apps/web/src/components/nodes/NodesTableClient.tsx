@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { adminApi } from "@/lib/api/admin-api";
 import { formatDateTime, formatRam, percent } from "@/lib/utils/format";
-import type { CompanyNode, NodeHealth, NodeStatus } from "@/types/admin";
+import type { AdminRole, CompanyNode, NodeHealth, NodeStatus } from "@/types/admin";
 import { NodeHealthBadge } from "./NodeHealthBadge";
 import { NodeStatusBadge } from "./NodeStatusBadge";
 import { NodeActions } from "./NodeActions";
@@ -20,12 +20,17 @@ export function NodesTableClient() {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<NodeStatus | "all">("all");
   const [health, setHealth] = useState<NodeHealth | "all">("all");
+  const [adminRole, setAdminRole] = useState<AdminRole | null>(null);
 
   useEffect(() => {
     adminApi.nodes().then(({ nodes: nextNodes }) => {
       setNodes(nextNodes);
       setLoading(false);
     });
+    adminApi
+      .me()
+      .then(({ admin }) => setAdminRole(admin.role))
+      .catch(() => setAdminRole(null));
   }, []);
 
   function replaceNode(updated: CompanyNode) {
@@ -149,7 +154,7 @@ export function NodesTableClient() {
                 )
               },
               { key: "maintenance", header: "Maint.", cell: (node) => <span className="text-slate-300">{node.maintenanceMode ? "Enabled" : "Disabled"}</span> },
-              { key: "actions", header: "Actions", cell: (node) => <NodeActions node={node} onUpdated={replaceNode} /> }
+              { key: "actions", header: "Actions", cell: (node) => <NodeActions node={node} onUpdated={replaceNode} adminRole={adminRole} /> }
             ]}
           />
         )}

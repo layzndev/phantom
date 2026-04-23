@@ -3,8 +3,8 @@ import { asyncHandler } from "../../lib/asyncHandler.js";
 import { validateBody, validateParams } from "../../lib/validate.js";
 import { requireAdmin, requireRole } from "../../middleware/authMiddleware.js";
 import { writeAuditLog } from "../audit/audit.service.js";
-import { createNode, getNode, getNodeSummary, listNodes, rotateNodeToken, setNodeMaintenance } from "./nodes.service.js";
-import { createNodeSchema, maintenanceSchema, nodeParamsSchema } from "./nodes.schema.js";
+import { createNode, getNode, getNodeSummary, listNodes, rotateNodeToken, setNodeMaintenance, updateNode } from "./nodes.service.js";
+import { createNodeSchema, maintenanceSchema, nodeParamsSchema, updateNodeSchema } from "./nodes.schema.js";
 
 export const nodesController = Router();
 
@@ -57,6 +57,26 @@ nodesController.get(
       actorEmail: actor.email,
       targetType: "node",
       targetId: req.params.id
+    });
+    res.json({ node });
+  })
+);
+
+nodesController.patch(
+  "/:id",
+  requireRole(["superadmin", "ops"]),
+  validateParams(nodeParamsSchema),
+  validateBody(updateNodeSchema),
+  asyncHandler(async (req, res) => {
+    const actor = req.session.admin!;
+    const node = await updateNode(req.params.id, req.body);
+    await writeAuditLog(req, {
+      action: "node.update",
+      actorId: actor.id,
+      actorEmail: actor.email,
+      targetType: "node",
+      targetId: req.params.id,
+      metadata: { fields: Object.keys(req.body) }
     });
     res.json({ node });
   })

@@ -69,6 +69,19 @@ export interface CreateNodePayload {
   portRangeEnd: number;
 }
 
+export interface UpdateNodePayload {
+  name?: string;
+  provider?: string;
+  region?: string;
+  internalHost?: string;
+  publicHost?: string;
+  runtimeMode?: RuntimeMode;
+  totalRamMb?: number;
+  totalCpu?: number;
+  portRangeStart?: number;
+  portRangeEnd?: number;
+}
+
 export interface NodeSummary {
   totalNodes: number;
   healthyNodes: number;

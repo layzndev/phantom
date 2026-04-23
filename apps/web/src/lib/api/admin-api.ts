@@ -1,4 +1,11 @@
-import type { AdminUser, AuditLogEntry, CompanyNode, CreateNodePayload, NodeSummary } from "@/types/admin";
+import type {
+  AdminUser,
+  AuditLogEntry,
+  CompanyNode,
+  CreateNodePayload,
+  NodeSummary,
+  UpdateNodePayload
+} from "@/types/admin";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_ADMIN_API_URL ?? "http://localhost:4200";
 
@@ -35,6 +42,11 @@ export const adminApi = {
   createNode: (payload: CreateNodePayload) =>
     apiRequest<{ node: CompanyNode; token: string }>("/nodes", {
       method: "POST",
+      body: JSON.stringify(payload)
+    }),
+  updateNode: (id: string, payload: UpdateNodePayload) =>
+    apiRequest<{ node: CompanyNode }>(`/nodes/${encodeURIComponent(id)}`, {
+      method: "PATCH",
       body: JSON.stringify(payload)
     }),
   maintenanceNode: (id: string, maintenanceMode: boolean) =>

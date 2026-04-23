@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { adminApi } from "@/lib/api/admin-api";
 import { formatDateTime } from "@/lib/utils/format";
-import type { CompanyNode } from "@/types/admin";
+import type { AdminRole, CompanyNode } from "@/types/admin";
 import { NodeCapacityCard } from "./NodeCapacityCard";
 import { NodePortsCard } from "./NodePortsCard";
 import { NodeServersTable } from "./NodeServersTable";
@@ -17,12 +17,17 @@ import { SkeletonBlock } from "@/components/ui/SkeletonBlock";
 export function NodeDetailClient({ id }: { id: string }) {
   const [node, setNode] = useState<CompanyNode | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [adminRole, setAdminRole] = useState<AdminRole | null>(null);
 
   useEffect(() => {
     adminApi
       .node(id)
       .then(({ node: nextNode }) => setNode(nextNode))
       .catch((detailError) => setError(detailError instanceof Error ? detailError.message : "Unable to load node"));
+    adminApi
+      .me()
+      .then(({ admin }) => setAdminRole(admin.role))
+      .catch(() => setAdminRole(null));
   }, [id]);
 
   if (error) {
@@ -54,7 +59,7 @@ export function NodeDetailClient({ id }: { id: string }) {
               <div><dt className="text-slate-500">Maintenance</dt><dd className="mt-1 text-slate-200">{node.maintenanceMode ? "Enabled" : "Disabled"}</dd></div>
             </dl>
           </div>
-          <NodeActions node={node} onUpdated={setNode} />
+          <NodeActions node={node} onUpdated={setNode} adminRole={adminRole} />
         </div>
       </section>
 

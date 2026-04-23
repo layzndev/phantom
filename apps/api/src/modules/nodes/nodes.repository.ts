@@ -7,8 +7,11 @@ import {
   setNodeMaintenanceRecord,
   findActiveNodeTokenRecord,
   updateNodeHeartbeatRecord,
+  updateNodeRecord,
   createNodeStatusEventRecord,
-  type CreateNodeRecordInput
+  type CreateNodeRecordInput,
+  type UpdateNodeHeartbeatRecordInput,
+  type UpdateNodeRecordInput
 } from "../../db/nodeRepository.js";
 
 export function listNodesFromRegistry() {
@@ -42,9 +45,13 @@ export function findActiveNodeTokenInRegistry(nodeId: string, tokenHash: string)
 
 export function updateNodeHeartbeatInRegistry(
   nodeId: string,
-  updates: { status: string; health: string; usedRamMb: number; usedCpu: number }
+  updates: UpdateNodeHeartbeatRecordInput
 ) {
   return updateNodeHeartbeatRecord(nodeId, updates);
+}
+
+export function updateNodeInRegistry(nodeId: string, updates: UpdateNodeRecordInput) {
+  return updateNodeRecord(nodeId, updates);
 }
 
 export function createNodeStatusEventInRegistry(input: {

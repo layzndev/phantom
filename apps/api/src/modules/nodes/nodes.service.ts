@@ -16,12 +16,14 @@ import {
   rotateNodeTokenInRegistry,
   setNodeMaintenanceInRegistry,
   updateNodeHeartbeatInRegistry,
+  updateNodeInRegistry,
   createNodeStatusEventInRegistry
 } from "./nodes.repository.js";
-import type { createNodeSchema } from "./nodes.schema.js";
+import type { createNodeSchema, updateNodeSchema } from "./nodes.schema.js";
 import type { z } from "zod";
 
 type CreateNodeInput = z.infer<typeof createNodeSchema>;
+type UpdateNodeInput = z.infer<typeof updateNodeSchema>;
 type NodeRecord = Awaited<ReturnType<typeof findNodeFromRegistry>>;
 type NonNullNodeRecord = NonNullable<NodeRecord>;
 
@@ -117,6 +119,8 @@ export async function acceptNodeHeartbeat(
     cpuUsed?: number;
     ramUsedMb?: number;
     diskUsedGb?: number;
+    totalRamMb?: number;
+    totalCpu?: number;
   }
 ) {
   const node = await findNodeFromRegistry(nodeId);
@@ -149,21 +153,45 @@ export async function acceptNodeHeartbeat(
     status: nextStatus,
     health: nextHealth,
     usedRamMb: payload.ramUsedMb ?? 0,
-    usedCpu: payload.cpuUsed ?? 0
+    usedCpu: payload.cpuUsed ?? 0,
+    totalRamMb: payload.totalRamMb,
+    totalCpu: payload.totalCpu
   });
 
-  await createNodeStatusEventInRegistry({
-    nodeId,
-    previousStatus: node.status,
-    newStatus: nextStatus,
-    reason: `heartbeat cpu=${payload.cpuUsed ?? "n/a"} ramMb=${payload.ramUsedMb ?? "n/a"} diskGb=${payload.diskUsedGb ?? "n/a"}`
-  });
+  if (node.status !== nextStatus) {
+    await createNodeStatusEventInRegistry({
+      nodeId,
+      previousStatus: node.status,
+      newStatus: nextStatus,
+      reason: `heartbeat cpu=${payload.cpuUsed ?? "n/a"} ramMb=${payload.ramUsedMb ?? "n/a"} diskGb=${payload.diskUsedGb ?? "n/a"}`
+    });
+  }
 
   return {
     ok: true,
     nodeId,
     receivedAt: new Date().toISOString()
   };
+}
+
+export async function updateNode(id: string, input: UpdateNodeInput) {
+  const node = await findNodeFromRegistry(id);
+  if (!node) {
+    throw new AppError(404, "Node not found.", "NODE_NOT_FOUND");
+  }
+
+  const effectivePortStart = input.portRangeStart ?? node.portRangeStart;
+  const effectivePortEnd = input.portRangeEnd ?? node.portRangeEnd;
+  if (effectivePortEnd < effectivePortStart) {
+    throw new AppError(
+      400,
+      "portRangeEnd must be greater than or equal to portRangeStart.",
+      "INVALID_PORT_RANGE"
+    );
+  }
+
+  const updated = await updateNodeInRegistry(id, input);
+  return toCompanyNode(updated);
 }
 
 function generateNodeToken(nodeId: string) {
