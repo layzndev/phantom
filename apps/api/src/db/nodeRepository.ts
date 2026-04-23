@@ -87,7 +87,7 @@ export function createNodeTokenRecord(nodeId: string, tokenHash: string) {
   });
 }
 
-eexport function findActiveNodeTokenRecord(nodeId: string, tokenHash: string) {
+export function findActiveNodeTokenRecord(nodeId: string, tokenHash: string) {
   return db.nodeToken.findFirst({
     where: {
       nodeId,
