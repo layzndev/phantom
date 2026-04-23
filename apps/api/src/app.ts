@@ -4,7 +4,6 @@ import morgan from "morgan";
 import { auditController } from "./modules/audit/audit.controller.js";
 import { authController } from "./modules/auth/auth.controller.js";
 import { nodesController } from "./modules/nodes/nodes.controller.js";
-// import { startNodeRuntimeMonitor } from "./modules/nodes/nodes.runtime.monitor.js";
 import { nodesRuntimeController } from "./modules/nodes/nodes.runtime.controller.js";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
 import { requestContext } from "./middleware/requestContext.js";
@@ -35,7 +34,6 @@ export function createApp() {
 
   app.use(notFoundHandler);
   app.use(errorHandler);
-//  startNodeRuntimeMonitor();
 
   return app;
 }

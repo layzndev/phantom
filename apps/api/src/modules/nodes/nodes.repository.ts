@@ -8,8 +8,6 @@ import {
   findActiveNodeTokenRecord,
   updateNodeHeartbeatRecord,
   createNodeStatusEventRecord,
-  markStaleNodesOfflineRecord,
-  listStaleNodeIdsRecord,
   type CreateNodeRecordInput
 } from "../../db/nodeRepository.js";
 
@@ -58,10 +56,3 @@ export function createNodeStatusEventInRegistry(input: {
   return createNodeStatusEventRecord(input);
 }
 
-export function listStaleNodeIdsInRegistry(cutoff: Date) {
-  return listStaleNodeIdsRecord(cutoff);
-}
-
-export function markStaleNodesOfflineInRegistry(cutoff: Date) {
-  return markStaleNodesOfflineRecord(cutoff);
-}

@@ -29,7 +29,10 @@ export const env = {
   hostingApiToken: process.env.HOSTING_API_TOKEN ?? "",
   hostingApiNodesPath: process.env.HOSTING_API_NODES_PATH ?? "/admin/nodes",
   hostingApiTimeoutMs: Number(process.env.HOSTING_API_TIMEOUT_MS ?? 7000),
-  hostingApiRetryAttempts: Number(process.env.HOSTING_API_RETRY_ATTEMPTS ?? 1)
+  hostingApiRetryAttempts: Number(process.env.HOSTING_API_RETRY_ATTEMPTS ?? 1),
+  nodeHeartbeatTimeoutMs: Number(process.env.NODE_HEARTBEAT_TIMEOUT_MS ?? 45_000),
+  nodeMonitorTickMs: Number(process.env.NODE_MONITOR_TICK_MS ?? 10_000),
+  nodeMonitorEnabled: (process.env.NODE_MONITOR_ENABLED ?? "true").toLowerCase() !== "false"
 };
 
 export function assertRuntimeConfig() {
@@ -39,5 +42,18 @@ export function assertRuntimeConfig() {
 
   if (!env.databaseUrl) {
     throw new Error("DATABASE_URL is required for the dedicated Phantom Aurora PostgreSQL database.");
+  }
+
+  if (
+    !Number.isFinite(env.nodeHeartbeatTimeoutMs) ||
+    !Number.isFinite(env.nodeMonitorTickMs) ||
+    env.nodeHeartbeatTimeoutMs <= 0 ||
+    env.nodeMonitorTickMs <= 0
+  ) {
+    throw new Error("NODE_HEARTBEAT_TIMEOUT_MS and NODE_MONITOR_TICK_MS must be positive integers.");
+  }
+
+  if (env.nodeMonitorTickMs >= env.nodeHeartbeatTimeoutMs) {
+    throw new Error("NODE_MONITOR_TICK_MS must be smaller than NODE_HEARTBEAT_TIMEOUT_MS.");
   }
 }

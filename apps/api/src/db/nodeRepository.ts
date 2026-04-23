@@ -141,32 +141,3 @@ export function createNodeStatusEventRecord(input: {
   });
 }
 
-export function markStaleNodesOfflineRecord(cutoff: Date) {
-  return db.node.updateMany({
-    where: {
-      maintenanceMode: false,
-      lastHeartbeatAt: { lt: cutoff },
-      status: { not: "offline" }
-    },
-    data: {
-      status: "offline",
-      health: "unreachable",
-      usedRamMb: 0,
-      usedCpu: 0
-    }
-  });
-}
-
-export function listStaleNodeIdsRecord(cutoff: Date) {
-  return db.node.findMany({
-    where: {
-      maintenanceMode: false,
-      lastHeartbeatAt: { lt: cutoff },
-      status: { not: "offline" }
-    },
-    select: {
-      id: true,
-      status: true
-    }
-  });
-}
