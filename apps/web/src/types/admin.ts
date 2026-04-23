@@ -1,6 +1,7 @@
 export type AdminRole = "superadmin" | "ops";
-export type NodeStatus = "online" | "offline" | "maintenance" | "degraded";
-export type NodeHealth = "healthy" | "warning" | "critical" | "unknown";
+export type NodeStatus = "offline" | "healthy" | "maintenance";
+export type NodeHealth = "unknown" | "healthy" | "degraded" | "unreachable";
+export type RuntimeMode = "local" | "remote";
 
 export interface AdminUser {
   id: string;
@@ -22,7 +23,7 @@ export interface HostedServer {
 
 export interface NodeHistoryEvent {
   id: string;
-  type: "heartbeat" | "status" | "maintenance" | "sync" | "incident";
+  type: "status" | "maintenance";
   message: string;
   createdAt: string;
 }
@@ -36,7 +37,7 @@ export interface CompanyNode {
   publicHost: string;
   status: NodeStatus;
   health: NodeHealth;
-  runtimeMode: string;
+  runtimeMode: RuntimeMode;
   heartbeat: string | null;
   totalRamMb: number;
   usedRamMb: number;
@@ -46,10 +47,26 @@ export interface CompanyNode {
   availablePorts: number;
   reservedPorts: number;
   portRange: string;
+  portRangeStart: number;
+  portRangeEnd: number;
   maintenanceMode: boolean;
   hostedServersList?: HostedServer[];
   history?: NodeHistoryEvent[];
   logs?: string[];
+}
+
+export interface CreateNodePayload {
+  id: string;
+  name: string;
+  provider: string;
+  region: string;
+  internalHost: string;
+  publicHost: string;
+  runtimeMode: RuntimeMode;
+  totalRamMb: number;
+  totalCpu: number;
+  portRangeStart: number;
+  portRangeEnd: number;
 }
 
 export interface NodeSummary {

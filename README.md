@@ -108,6 +108,47 @@ ADMIN_BOOTSTRAP_EMAIL=admin@company.local ADMIN_BOOTSTRAP_PASSWORD='ChangeMe-Adm
 
 Il refuse de creer un admin si l'email existe deja.
 
+## Node Registry Interne
+
+Phantom est maintenant la source de verite des nodes. La Hosting API/runtime sera branchee plus tard.
+
+Tables Aurora:
+
+- `nodes`
+- `node_tokens`
+- `node_status_events`
+
+Appliquer la migration:
+
+```bash
+npm run db:migrate:deploy --workspace @phantom/api
+```
+
+Creer un node par CLI interne:
+
+```bash
+npm run node:register --workspace @phantom/api
+```
+
+Ou avec variables d'environnement:
+
+```bash
+NODE_ID=node-par-01 \
+NODE_NAME="Paris Edge 01" \
+NODE_PROVIDER=OVHcloud \
+NODE_REGION=eu-west-par \
+NODE_INTERNAL_HOST=10.40.0.11 \
+NODE_PUBLIC_HOST=par-01.nodes.nptnz.com \
+NODE_RUNTIME_MODE=remote \
+NODE_TOTAL_RAM_MB=65536 \
+NODE_TOTAL_CPU=32 \
+NODE_PORT_RANGE_START=25000 \
+NODE_PORT_RANGE_END=26000 \
+npm run node:register --workspace @phantom/api
+```
+
+Le token node est affiche une seule fois et stocke uniquement sous forme hashee.
+
 ## Note Prisma
 
 La V1 est volontairement verrouillee sur Prisma `6.17.1` pour accelerer la livraison Aurora PostgreSQL et eviter la complexite de configuration Prisma 7. L'upgrade vers Prisma 7 est preparee:

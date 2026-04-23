@@ -1,21 +1,13 @@
-export type NodeStatus = "online" | "offline" | "maintenance" | "degraded";
-export type NodeHealth = "healthy" | "warning" | "critical" | "unknown";
-export type RuntimeMode = "docker" | "firecracker" | "bare-metal" | "unknown";
+export type NodeStatus = "offline" | "healthy" | "maintenance";
+export type NodeHealth = "unknown" | "healthy" | "degraded" | "unreachable";
+export type RuntimeMode = "local" | "remote";
 
-export interface HostedServer {
+export interface NodeStatusEvent {
   id: string;
-  name: string;
-  ownerId?: string;
-  status: string;
-  ramMb: number;
-  cpu: number;
-  port?: number;
-}
-
-export interface NodeHistoryEvent {
-  id: string;
-  type: "heartbeat" | "status" | "maintenance" | "sync" | "incident";
-  message: string;
+  nodeId: string;
+  previousStatus: NodeStatus | null;
+  newStatus: NodeStatus;
+  reason: string | null;
   createdAt: string;
 }
 
@@ -38,10 +30,16 @@ export interface CompanyNode {
   availablePorts: number;
   reservedPorts: number;
   portRange: string;
+  portRangeStart: number;
+  portRangeEnd: number;
   maintenanceMode: boolean;
-  hostedServersList?: HostedServer[];
-  history?: NodeHistoryEvent[];
-  logs?: string[];
+  history?: Array<{
+    id: string;
+    type: "status" | "maintenance";
+    message: string;
+    createdAt: string;
+  }>;
+  statusEvents?: NodeStatusEvent[];
 }
 
 export interface NodeSummary {
@@ -53,5 +51,10 @@ export interface NodeSummary {
   usedRamMb: number;
   totalCpu: number;
   usedCpu: number;
-  recentIncidents: NodeHistoryEvent[];
+  recentIncidents: Array<{ id: string; type: string; message: string; createdAt: string }>;
+}
+
+export interface CreateNodeResult {
+  node: CompanyNode;
+  token: string;
 }

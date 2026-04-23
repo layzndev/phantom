@@ -12,6 +12,7 @@ import { DataTable } from "@/components/ui/DataTable";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { SkeletonBlock } from "@/components/ui/SkeletonBlock";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { CreateNodePanel } from "./CreateNodePanel";
 
 export function NodesTableClient() {
   const [nodes, setNodes] = useState<CompanyNode[]>([]);
@@ -31,6 +32,10 @@ export function NodesTableClient() {
     setNodes((current) => current.map((node) => (node.id === updated.id ? updated : node)));
   }
 
+  function addNode(created: CompanyNode) {
+    setNodes((current) => [created, ...current]);
+  }
+
   if (loading) {
     return <SkeletonBlock label="Loading nodes inventory..." />;
   }
@@ -44,9 +49,9 @@ export function NodesTableClient() {
     <div className="space-y-6">
       <section className="rounded-3xl border border-line bg-panel/70 p-6 shadow-soft">
         <SectionHeader
-          eyebrow="Hosting API inventory"
+          eyebrow="Phantom registry"
           title="Nodes"
-          description="Vue operateur centree sur la sante, la capacite et les actions a distance exposees par la Hosting API."
+          description="Source de verite interne des nodes. Le runtime et la Hosting API seront branches plus tard."
         />
         <div className="mt-6 grid gap-3 lg:grid-cols-[1fr_180px_180px]">
           <input
@@ -57,25 +62,26 @@ export function NodesTableClient() {
           />
           <select value={status} onChange={(event) => setStatus(event.target.value as NodeStatus | "all")} className="rounded-2xl border border-white/10 bg-obsidian px-4 py-3 text-sm text-slate-200 outline-none focus:border-accent/40">
             <option value="all">All status</option>
-            <option value="online">Online</option>
-            <option value="degraded">Degraded</option>
+            <option value="healthy">Healthy</option>
             <option value="maintenance">Maintenance</option>
             <option value="offline">Offline</option>
           </select>
           <select value={health} onChange={(event) => setHealth(event.target.value as NodeHealth | "all")} className="rounded-2xl border border-white/10 bg-obsidian px-4 py-3 text-sm text-slate-200 outline-none focus:border-accent/40">
             <option value="all">All health</option>
             <option value="healthy">Healthy</option>
-            <option value="warning">Warning</option>
-            <option value="critical">Critical</option>
+            <option value="degraded">Degraded</option>
+            <option value="unreachable">Unreachable</option>
             <option value="unknown">Unknown</option>
           </select>
         </div>
       </section>
 
+      <CreateNodePanel onCreated={addNode} />
+
       <div className="overflow-hidden rounded-2xl border border-line bg-panel/78 shadow-soft">
         {nodes.length === 0 ? (
           <div className="p-6">
-            <EmptyState title="No nodes returned" description="The Phantom API is reachable, but the Hosting API did not return any node." />
+            <EmptyState title="No nodes registered" description="Create the first Phantom node to prepare the future runtime connection." />
           </div>
         ) : (
           <DataTable

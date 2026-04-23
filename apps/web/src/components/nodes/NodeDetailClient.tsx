@@ -38,7 +38,7 @@ export function NodeDetailClient({ id }: { id: string }) {
       <section className="rounded-3xl border border-line bg-panel/78 p-6 shadow-soft">
         <div className="flex flex-col justify-between gap-5 xl:flex-row xl:items-start">
           <div>
-            <SectionHeader eyebrow="Node detail" title={node.name} description="Vue haute confiance pour inspecter la capacite, l'etat runtime et les actions operateur du node." />
+            <SectionHeader eyebrow="Node detail" title={node.name} description="Vue haute confiance du registre Phantom avant branchement runtime." />
             <div className="mt-4 flex flex-wrap gap-2">
               <NodeStatusBadge status={node.status} />
               <NodeHealthBadge health={node.health} />
@@ -66,7 +66,7 @@ export function NodeDetailClient({ id }: { id: string }) {
       <NodeServersTable servers={node.hostedServersList} />
 
       <section className="grid gap-6 xl:grid-cols-2">
-        <DetailCard title="Timeline / Heartbeat" description="Derniers evenements remontes par la Hosting API.">
+        <DetailCard title="Status timeline" description="Evenements d'etat du registre Phantom.">
           <div className="space-y-3">
             {(node.history ?? []).length === 0 ? <p className="text-slate-500">No history provided.</p> : null}
             {(node.history ?? []).map((event) => (
@@ -77,7 +77,7 @@ export function NodeDetailClient({ id }: { id: string }) {
             ))}
           </div>
         </DetailCard>
-        <DetailCard title="Node logs" description="Logs exposes si la Hosting API les fournit.">
+        <DetailCard title="Node logs" description="Disponible plus tard avec le runtime/heartbeat.">
           <div className="rounded-2xl border border-line bg-obsidian p-4 font-mono text-xs text-slate-300">
             {(node.logs ?? ["No logs exposed by Hosting API."]).map((line) => (
               <p key={line} className="py-1">{line}</p>

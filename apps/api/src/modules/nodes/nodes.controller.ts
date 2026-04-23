@@ -3,8 +3,8 @@ import { asyncHandler } from "../../lib/asyncHandler.js";
 import { validateBody, validateParams } from "../../lib/validate.js";
 import { requireAdmin, requireRole } from "../../middleware/authMiddleware.js";
 import { writeAuditLog } from "../audit/audit.service.js";
-import { getNode, getNodeSummary, listNodes, reconcileNode, refreshNode, rotateNodeToken, setNodeMaintenance, syncNode } from "./nodes.service.js";
-import { maintenanceSchema, nodeParamsSchema } from "./nodes.schema.js";
+import { createNode, getNode, getNodeSummary, listNodes, rotateNodeToken, setNodeMaintenance } from "./nodes.service.js";
+import { createNodeSchema, maintenanceSchema, nodeParamsSchema } from "./nodes.schema.js";
 
 export const nodesController = Router();
 
@@ -26,6 +26,25 @@ nodesController.get(
   })
 );
 
+nodesController.post(
+  "/",
+  requireRole(["superadmin", "ops"]),
+  validateBody(createNodeSchema),
+  asyncHandler(async (req, res) => {
+    const actor = req.session.admin!;
+    const result = await createNode(req.body);
+    await writeAuditLog(req, {
+      action: "node.create",
+      actorId: actor.id,
+      actorEmail: actor.email,
+      targetType: "node",
+      targetId: result.node.id,
+      metadata: { provider: result.node.provider, region: result.node.region }
+    });
+    res.status(201).json(result);
+  })
+);
+
 nodesController.get(
   "/:id",
   validateParams(nodeParamsSchema),
@@ -44,23 +63,13 @@ nodesController.get(
 );
 
 nodesController.post(
-  "/:id/sync",
-  requireRole(["superadmin", "ops"]),
-  validateParams(nodeParamsSchema),
-  asyncHandler(async (req, res) => {
-    const actor = req.session.admin!;
-    await writeAuditLog(req, { action: "node.sync", actorId: actor.id, actorEmail: actor.email, targetType: "node", targetId: req.params.id });
-    res.json({ node: await syncNode(req.params.id) });
-  })
-);
-
-nodesController.post(
   "/:id/maintenance",
   requireRole(["superadmin", "ops"]),
   validateParams(nodeParamsSchema),
   validateBody(maintenanceSchema),
   asyncHandler(async (req, res) => {
     const actor = req.session.admin!;
+    const node = await setNodeMaintenance(req.params.id, req.body.maintenanceMode, req.body.reason);
     await writeAuditLog(req, {
       action: "node.maintenance",
       actorId: actor.id,
@@ -69,29 +78,7 @@ nodesController.post(
       targetId: req.params.id,
       metadata: req.body
     });
-    res.json({ node: await setNodeMaintenance(req.params.id, req.body.maintenanceMode) });
-  })
-);
-
-nodesController.post(
-  "/:id/reconcile",
-  requireRole(["superadmin", "ops"]),
-  validateParams(nodeParamsSchema),
-  asyncHandler(async (req, res) => {
-    const actor = req.session.admin!;
-    await writeAuditLog(req, { action: "node.reconcile", actorId: actor.id, actorEmail: actor.email, targetType: "node", targetId: req.params.id });
-    res.json({ node: await reconcileNode(req.params.id) });
-  })
-);
-
-nodesController.post(
-  "/:id/refresh",
-  requireRole(["superadmin", "ops"]),
-  validateParams(nodeParamsSchema),
-  asyncHandler(async (req, res) => {
-    const actor = req.session.admin!;
-    await writeAuditLog(req, { action: "node.refresh", actorId: actor.id, actorEmail: actor.email, targetType: "node", targetId: req.params.id });
-    res.json({ node: await refreshNode(req.params.id) });
+    res.json({ node });
   })
 );
 
@@ -101,7 +88,14 @@ nodesController.post(
   validateParams(nodeParamsSchema),
   asyncHandler(async (req, res) => {
     const actor = req.session.admin!;
-    await writeAuditLog(req, { action: "node.rotate-token", actorId: actor.id, actorEmail: actor.email, targetType: "node", targetId: req.params.id });
-    res.json({ rotation: await rotateNodeToken(req.params.id) });
+    const rotation = await rotateNodeToken(req.params.id);
+    await writeAuditLog(req, {
+      action: "node.rotate-token",
+      actorId: actor.id,
+      actorEmail: actor.email,
+      targetType: "node",
+      targetId: req.params.id
+    });
+    res.json({ rotation });
   })
 );

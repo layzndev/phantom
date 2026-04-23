@@ -1,4 +1,4 @@
-import type { AdminUser, AuditLogEntry, CompanyNode, NodeSummary } from "@/types/admin";
+import type { AdminUser, AuditLogEntry, CompanyNode, CreateNodePayload, NodeSummary } from "@/types/admin";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_ADMIN_API_URL ?? "http://localhost:4200";
 
@@ -32,15 +32,17 @@ export const adminApi = {
   nodeSummary: () => apiRequest<{ summary: NodeSummary }>("/nodes/summary"),
   nodes: () => apiRequest<{ nodes: CompanyNode[] }>("/nodes"),
   node: (id: string) => apiRequest<{ node: CompanyNode }>(`/nodes/${encodeURIComponent(id)}`),
-  syncNode: (id: string) => apiRequest<{ node: CompanyNode }>(`/nodes/${encodeURIComponent(id)}/sync`, { method: "POST" }),
-  refreshNode: (id: string) => apiRequest<{ node: CompanyNode }>(`/nodes/${encodeURIComponent(id)}/refresh`, { method: "POST" }),
-  reconcileNode: (id: string) => apiRequest<{ node: CompanyNode }>(`/nodes/${encodeURIComponent(id)}/reconcile`, { method: "POST" }),
+  createNode: (payload: CreateNodePayload) =>
+    apiRequest<{ node: CompanyNode; token: string }>("/nodes", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
   maintenanceNode: (id: string, maintenanceMode: boolean) =>
     apiRequest<{ node: CompanyNode }>(`/nodes/${encodeURIComponent(id)}/maintenance`, {
       method: "POST",
       body: JSON.stringify({ maintenanceMode })
     }),
   rotateNodeToken: (id: string) =>
-    apiRequest<{ rotation: { accepted: boolean; nodeId: string; rotatedAt: string } }>(`/nodes/${encodeURIComponent(id)}/rotate-token`, { method: "POST" }),
+    apiRequest<{ rotation: { nodeId: string; token: string; rotatedAt: string } }>(`/nodes/${encodeURIComponent(id)}/rotate-token`, { method: "POST" }),
   auditLogs: () => apiRequest<{ auditLogs: AuditLogEntry[] }>("/audit-logs")
 };

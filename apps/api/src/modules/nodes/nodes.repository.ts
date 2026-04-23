@@ -1,14 +1,34 @@
-import { hostingApiClient } from "../integrations/hosting-api/hosting-api.client.js";
-import type { CompanyNode } from "./nodes.types.js";
+import {
+  createNodeRecord,
+  createNodeTokenRecord,
+  findNodeRecordById,
+  listNodeRecords,
+  revokeActiveNodeTokens,
+  setNodeMaintenanceRecord,
+  type CreateNodeRecordInput
+} from "../../db/nodeRepository.js";
 
-export function listNodeRecords() {
-  return hostingApiClient.listNodes();
+export function listNodesFromRegistry() {
+  return listNodeRecords();
 }
 
-export function getNodeRecord(id: string) {
-  return hostingApiClient.getNode(id);
+export function findNodeFromRegistry(id: string) {
+  return findNodeRecordById(id);
 }
 
-export function postNodeActionRecord<T = CompanyNode>(id: string, action: string, body?: Record<string, unknown>) {
-  return hostingApiClient.postNodeAction<T>(id, action, body);
+export function createNodeInRegistry(input: CreateNodeRecordInput) {
+  return createNodeRecord(input);
+}
+
+export function setNodeMaintenanceInRegistry(id: string, maintenanceMode: boolean, reason: string) {
+  return setNodeMaintenanceRecord(id, maintenanceMode, reason);
+}
+
+export async function rotateNodeTokenInRegistry(nodeId: string, tokenHash: string) {
+  await revokeActiveNodeTokens(nodeId);
+  return createNodeTokenRecord(nodeId, tokenHash);
+}
+
+export function createNodeTokenInRegistry(nodeId: string, tokenHash: string) {
+  return createNodeTokenRecord(nodeId, tokenHash);
 }

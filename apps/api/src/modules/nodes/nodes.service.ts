@@ -1,53 +1,124 @@
+import { randomBytes, createHash } from "node:crypto";
 import { AppError } from "../../lib/appError.js";
-import { getNodeRecord, listNodeRecords, postNodeActionRecord } from "./nodes.repository.js";
-import type { CompanyNode, NodeSummary } from "./nodes.types.js";
+import type { CreateNodeResult, CompanyNode, NodeHealth, NodeStatus, RuntimeMode } from "./nodes.types.js";
+import { createNodeInRegistry, createNodeTokenInRegistry, findNodeFromRegistry, listNodesFromRegistry, rotateNodeTokenInRegistry, setNodeMaintenanceInRegistry } from "./nodes.repository.js";
+import type { createNodeSchema } from "./nodes.schema.js";
+import type { z } from "zod";
+
+type CreateNodeInput = z.infer<typeof createNodeSchema>;
+type NodeRecord = Awaited<ReturnType<typeof findNodeFromRegistry>>;
+type NonNullNodeRecord = NonNullable<NodeRecord>;
 
 export async function listNodes() {
-  return listNodeRecords();
+  const nodes = await listNodesFromRegistry();
+  return nodes.map(toCompanyNode);
 }
 
 export async function getNode(id: string) {
-  const node = await getNodeRecord(id);
+  const node = await findNodeFromRegistry(id);
   if (!node) throw new AppError(404, "Node not found.", "NODE_NOT_FOUND");
-  return node;
+  return toCompanyNode(node);
 }
 
-export async function getNodeSummary(): Promise<NodeSummary> {
+export async function createNode(input: CreateNodeInput): Promise<CreateNodeResult> {
+  const existingNode = await findNodeFromRegistry(input.id);
+  if (existingNode) {
+    throw new AppError(409, "Node already exists.", "NODE_ALREADY_EXISTS");
+  }
+
+  const token = generateNodeToken(input.id);
+  const tokenHash = hashNodeToken(token);
+  const node = await createNodeInRegistry(input);
+  await createNodeTokenInRegistry(node.id, tokenHash);
+
+  return { node: toCompanyNode(node), token };
+}
+
+export async function getNodeSummary() {
   const nodes = await listNodes();
-  const recentIncidents = nodes
-    .flatMap((node) => node.history ?? [])
-    .filter((event) => event.type === "incident")
-    .slice(0, 5);
 
   return {
     totalNodes: nodes.length,
-    healthyNodes: nodes.filter((node) => node.health === "healthy").length,
-    offlineNodes: nodes.filter((node) => node.status === "offline").length,
-    totalHostedServers: nodes.reduce((sum, node) => sum + node.hostedServers, 0),
+    healthyNodes: nodes.filter((node) => node.status === "healthy" || node.health === "healthy").length,
+    offlineNodes: nodes.filter((node) => node.status === "offline" || node.health === "unreachable").length,
+    totalHostedServers: 0,
     totalRamMb: nodes.reduce((sum, node) => sum + node.totalRamMb, 0),
-    usedRamMb: nodes.reduce((sum, node) => sum + node.usedRamMb, 0),
+    usedRamMb: 0,
     totalCpu: nodes.reduce((sum, node) => sum + node.totalCpu, 0),
-    usedCpu: nodes.reduce((sum, node) => sum + node.usedCpu, 0),
-    recentIncidents
+    usedCpu: 0,
+    recentIncidents: []
   };
 }
 
-export async function syncNode(id: string) {
-  return postNodeActionRecord<CompanyNode>(id, "sync");
-}
-
-export async function refreshNode(id: string) {
-  return postNodeActionRecord<CompanyNode>(id, "refresh");
-}
-
-export async function reconcileNode(id: string) {
-  return postNodeActionRecord<CompanyNode>(id, "reconcile");
-}
-
-export async function setNodeMaintenance(id: string, maintenanceMode: boolean) {
-  return postNodeActionRecord<CompanyNode>(id, "maintenance", { maintenanceMode });
+export async function setNodeMaintenance(id: string, maintenanceMode: boolean, reason?: string) {
+  const node = await findNodeFromRegistry(id);
+  if (!node) throw new AppError(404, "Node not found.", "NODE_NOT_FOUND");
+  const updated = await setNodeMaintenanceInRegistry(id, maintenanceMode, reason ?? (maintenanceMode ? "maintenance enabled" : "maintenance disabled"));
+  return toCompanyNode(updated);
 }
 
 export async function rotateNodeToken(id: string) {
-  return postNodeActionRecord<{ accepted: boolean; nodeId: string; rotatedAt: string }>(id, "rotate-token");
+  const node = await findNodeFromRegistry(id);
+  if (!node) throw new AppError(404, "Node not found.", "NODE_NOT_FOUND");
+
+  const token = generateNodeToken(id);
+  const tokenHash = hashNodeToken(token);
+  await rotateNodeTokenInRegistry(id, tokenHash);
+
+  return {
+    nodeId: id,
+    token,
+    rotatedAt: new Date().toISOString()
+  };
+}
+
+function generateNodeToken(nodeId: string) {
+  return `phn_${nodeId}_${randomBytes(32).toString("base64url")}`;
+}
+
+function hashNodeToken(token: string) {
+  return createHash("sha256").update(token).digest("hex");
+}
+
+function toCompanyNode(node: NonNullNodeRecord): CompanyNode {
+  const portRange = `${node.portRangeStart}-${node.portRangeEnd}`;
+  const totalPorts = node.portRangeEnd - node.portRangeStart + 1;
+
+  return {
+    id: node.id,
+    name: node.name,
+    provider: node.provider,
+    region: node.region,
+    internalHost: node.internalHost,
+    publicHost: node.publicHost,
+    status: node.status as NodeStatus,
+    health: node.health as NodeHealth,
+    runtimeMode: node.runtimeMode as RuntimeMode,
+    heartbeat: null,
+    totalRamMb: node.totalRamMb,
+    usedRamMb: 0,
+    totalCpu: node.totalCpu,
+    usedCpu: 0,
+    hostedServers: 0,
+    availablePorts: totalPorts,
+    reservedPorts: 0,
+    portRange,
+    portRangeStart: node.portRangeStart,
+    portRangeEnd: node.portRangeEnd,
+    maintenanceMode: node.maintenanceMode,
+    history: node.statusEvents.map((event) => ({
+      id: event.id,
+      type: event.newStatus === "maintenance" ? "maintenance" : "status",
+      message: `${event.previousStatus ?? "none"} -> ${event.newStatus}${event.reason ? `: ${event.reason}` : ""}`,
+      createdAt: event.createdAt.toISOString()
+    })),
+    statusEvents: node.statusEvents.map((event) => ({
+      id: event.id,
+      nodeId: event.nodeId,
+      previousStatus: event.previousStatus as NodeStatus | null,
+      newStatus: event.newStatus as NodeStatus,
+      reason: event.reason,
+      createdAt: event.createdAt.toISOString()
+    }))
+  };
 }

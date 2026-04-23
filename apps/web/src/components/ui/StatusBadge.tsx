@@ -8,6 +8,7 @@ const statusStyles: Record<string, string> = {
   healthy: "border-accent/25 bg-accent/[0.08] text-accent",
   warning: "border-amber/25 bg-amber/[0.08] text-amber",
   critical: "border-red-300/25 bg-red-400/[0.075] text-red-200",
+  unreachable: "border-red-300/25 bg-red-400/[0.075] text-red-200",
   unknown: "border-slate-500/30 bg-slate-500/10 text-slate-300"
 };
 

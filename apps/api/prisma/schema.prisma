@@ -79,3 +79,56 @@ model AuditLog {
   @@index([createdAt])
   @@map("audit_logs")
 }
+
+model Node {
+  id              String            @id
+  name            String
+  provider        String
+  region          String
+  internalHost    String            @map("internal_host")
+  publicHost      String            @map("public_host")
+  status          String            @default("offline")
+  health          String            @default("unknown")
+  runtimeMode     String            @default("remote") @map("runtime_mode")
+  totalRamMb      Int               @map("total_ram_mb")
+  totalCpu        Float             @map("total_cpu")
+  portRangeStart  Int               @map("port_range_start")
+  portRangeEnd    Int               @map("port_range_end")
+  maintenanceMode Boolean           @default(false) @map("maintenance_mode")
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+  tokens          NodeToken[]
+  statusEvents    NodeStatusEvent[]
+
+  @@index([status])
+  @@index([health])
+  @@index([region])
+  @@map("nodes")
+}
+
+model NodeToken {
+  id        String    @id @default(uuid())
+  nodeId    String    @map("node_id")
+  node      Node      @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  tokenHash String    @map("token_hash")
+  createdAt DateTime  @default(now()) @map("created_at")
+  revokedAt DateTime? @map("revoked_at")
+
+  @@index([nodeId])
+  @@index([revokedAt])
+  @@map("node_tokens")
+}
+
+model NodeStatusEvent {
+  id             String   @id @default(uuid())
+  nodeId         String   @map("node_id")
+  node           Node     @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  previousStatus String?  @map("previous_status")
+  newStatus      String   @map("new_status")
+  reason         String?
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@index([nodeId])
+  @@index([createdAt])
+  @@map("node_status_events")
+}

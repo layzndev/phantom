@@ -14,7 +14,8 @@
     "prisma:generate": "npm run db:generate",
     "prisma:migrate:dev": "npm run db:migrate:dev",
     "prisma:migrate:deploy": "npm run db:migrate:deploy",
-    "admin:bootstrap": "tsx src/scripts/bootstrap-admin.ts"
+    "admin:bootstrap": "tsx src/scripts/bootstrap-admin.ts",
+    "node:register": "tsx src/scripts/register-node.ts"
   },
   "dependencies": {
     "@prisma/client": "6.17.1",

@@ -1,9 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { env } from "../../../config/env.js";
 import { AppError } from "../../../lib/appError.js";
-import type { CompanyNode } from "../../nodes/nodes.types.js";
 
-const mockNodes: CompanyNode[] = [
+type HostingApiNode = Record<string, unknown> & { id: string; maintenanceMode?: boolean; status?: string; history?: Array<Record<string, unknown>> };
+
+const mockNodes: HostingApiNode[] = [
   {
     id: "node-par-01",
     name: "Paris Edge 01",
@@ -132,17 +133,17 @@ async function hostingFetch<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const hostingApiClient = {
-  async listNodes() {
+  async listNodes<T = HostingApiNode[]>() {
     if (!env.hostingApiBaseUrl) return mockNodes;
-    return hostingFetch<CompanyNode[]>(env.hostingApiNodesPath);
+    return hostingFetch<T>(env.hostingApiNodesPath);
   },
 
-  async getNode(id: string) {
+  async getNode<T = HostingApiNode>(id: string) {
     if (!env.hostingApiBaseUrl) return mockNodes.find((node) => node.id === id) ?? null;
-    return hostingFetch<CompanyNode>(`${env.hostingApiNodesPath}/${encodeURIComponent(id)}`);
+    return hostingFetch<T>(`${env.hostingApiNodesPath}/${encodeURIComponent(id)}`);
   },
 
-  async postNodeAction<T = CompanyNode>(id: string, action: string, body?: Record<string, unknown>) {
+  async postNodeAction<T = HostingApiNode>(id: string, action: string, body?: Record<string, unknown>) {
     if (!env.hostingApiBaseUrl) {
       const node = mockNodes.find((item) => item.id === id);
       if (!node) return null as T;
