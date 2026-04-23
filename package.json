@@ -1,0 +1,15 @@
+{
+  "name": "phantom",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/api",
+    "apps/web"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace @phantom/api & npm run dev --workspace @phantom/web",
+    "build": "npm run build --workspace @phantom/api && npm run build --workspace @phantom/web",
+    "typecheck": "npm run typecheck --workspace @phantom/api && npm run typecheck --workspace @phantom/web",
+    "lint": "npm run lint --workspace @phantom/web"
+  }
+}

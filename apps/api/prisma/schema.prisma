@@ -1,0 +1,81 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model AdminRole {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  admins      Admin[]
+
+  @@map("admin_roles")
+}
+
+model Admin {
+  id                        String         @id @default(uuid())
+  email                     String         @unique
+  displayName               String         @map("display_name")
+  passwordHash              String         @map("password_hash")
+  roleId                    String         @map("role_id")
+  role                      AdminRole      @relation(fields: [roleId], references: [id])
+  status                    String         @default("active")
+  twoFactorEnabled          Boolean        @default(false) @map("two_factor_enabled")
+  twoFactorSecretEncrypted  String?        @map("two_factor_secret_encrypted")
+  ipAllowlist               Json           @default("[]") @map("ip_allowlist")
+  failedLoginAttempts       Int            @default(0) @map("failed_login_attempts")
+  lockedUntil               DateTime?      @map("locked_until")
+  lastLoginAt               DateTime?      @map("last_login_at")
+  createdAt                 DateTime       @default(now()) @map("created_at")
+  updatedAt                 DateTime       @updatedAt @map("updated_at")
+  sessions                  AdminSession[]
+  auditLogs                 AuditLog[]
+
+  @@index([roleId])
+  @@index([status])
+  @@index([lockedUntil])
+  @@map("admins")
+}
+
+model AdminSession {
+  id        String   @id
+  adminId   String?  @map("admin_id")
+  admin     Admin?   @relation(fields: [adminId], references: [id], onDelete: SetNull)
+  data      Json
+  expiresAt DateTime @map("expires_at")
+  ipAddress String?  @map("ip_address")
+  userAgent String?  @map("user_agent")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([adminId])
+  @@index([expiresAt])
+  @@map("admin_sessions")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  action     String
+  actorId    String?  @map("actor_id")
+  actorEmail String   @map("actor_email")
+  actor      Admin?   @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  targetType String?  @map("target_type")
+  targetId   String?  @map("target_id")
+  metadata   Json?
+  ipAddress  String?  @map("ip_address")
+  userAgent  String?  @map("user_agent")
+  sessionId  String?  @map("session_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([action])
+  @@index([actorId])
+  @@index([targetType, targetId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
