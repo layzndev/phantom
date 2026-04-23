@@ -91,7 +91,10 @@ model Node {
   health          String            @default("unknown")
   runtimeMode     String            @default("remote") @map("runtime_mode")
   totalRamMb      Int               @map("total_ram_mb")
+  usedRamMb       Int               @default(0) @map("used_ram_mb")
   totalCpu        Float             @map("total_cpu")
+  usedCpu         Float             @default(0) @map("used_cpu")
+  lastHeartbeatAt DateTime?         @map("last_heartbeat_at")
   portRangeStart  Int               @map("port_range_start")
   portRangeEnd    Int               @map("port_range_end")
   maintenanceMode Boolean           @default(false) @map("maintenance_mode")
@@ -103,6 +106,7 @@ model Node {
   @@index([status])
   @@index([health])
   @@index([region])
+  @@index([lastHeartbeatAt])
   @@map("nodes")
 }
 

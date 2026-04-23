@@ -87,7 +87,7 @@ export function createNodeTokenRecord(nodeId: string, tokenHash: string) {
   });
 }
 
-export function findActiveNodeTokenRecord(nodeId: string, tokenHash: string) {
+eexport function findActiveNodeTokenRecord(nodeId: string, tokenHash: string) {
   return db.nodeToken.findFirst({
     where: {
       nodeId,
@@ -99,13 +99,21 @@ export function findActiveNodeTokenRecord(nodeId: string, tokenHash: string) {
 
 export function updateNodeHeartbeatRecord(
   nodeId: string,
-  updates: { status: string; health: string }
+  updates: {
+    status: string;
+    health: string;
+    usedRamMb: number;
+    usedCpu: number;
+  }
 ) {
   return db.node.update({
     where: { id: nodeId },
     data: {
       status: updates.status,
       health: updates.health,
+      usedRamMb: updates.usedRamMb,
+      usedCpu: updates.usedCpu,
+      lastHeartbeatAt: new Date(),
       updatedAt: new Date()
     },
     include: {
@@ -126,6 +134,36 @@ export function createNodeStatusEventRecord(input: {
       previousStatus: input.previousStatus ?? null,
       newStatus: input.newStatus,
       reason: input.reason
+    }
+  });
+}
+
+export function markStaleNodesOfflineRecord(cutoff: Date) {
+  return db.node.updateMany({
+    where: {
+      maintenanceMode: false,
+      lastHeartbeatAt: { lt: cutoff },
+      status: { not: "offline" }
+    },
+    data: {
+      status: "offline",
+      health: "unreachable",
+      usedRamMb: 0,
+      usedCpu: 0
+    }
+  });
+}
+
+export function listStaleNodeIdsRecord(cutoff: Date) {
+  return db.node.findMany({
+    where: {
+      maintenanceMode: false,
+      lastHeartbeatAt: { lt: cutoff },
+      status: { not: "offline" }
+    },
+    select: {
+      id: true,
+      status: true
     }
   });
 }

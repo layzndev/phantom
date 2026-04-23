@@ -8,6 +8,8 @@ import {
   findActiveNodeTokenRecord,
   updateNodeHeartbeatRecord,
   createNodeStatusEventRecord,
+  markStaleNodesOfflineRecord,
+  listStaleNodeIdsRecord,
   type CreateNodeRecordInput
 } from "../../db/nodeRepository.js";
 
@@ -23,39 +25,26 @@ export function createNodeInRegistry(input: CreateNodeRecordInput) {
   return createNodeRecord(input);
 }
 
-export function setNodeMaintenanceInRegistry(
-  id: string,
-  maintenanceMode: boolean,
-  reason: string
-) {
+export function setNodeMaintenanceInRegistry(id: string, maintenanceMode: boolean, reason: string) {
   return setNodeMaintenanceRecord(id, maintenanceMode, reason);
 }
 
-export async function rotateNodeTokenInRegistry(
-  nodeId: string,
-  tokenHash: string
-) {
+export async function rotateNodeTokenInRegistry(nodeId: string, tokenHash: string) {
   await revokeActiveNodeTokens(nodeId);
   return createNodeTokenRecord(nodeId, tokenHash);
 }
 
-export function createNodeTokenInRegistry(
-  nodeId: string,
-  tokenHash: string
-) {
+export function createNodeTokenInRegistry(nodeId: string, tokenHash: string) {
   return createNodeTokenRecord(nodeId, tokenHash);
 }
 
-export function findActiveNodeTokenInRegistry(
-  nodeId: string,
-  tokenHash: string
-) {
+export function findActiveNodeTokenInRegistry(nodeId: string, tokenHash: string) {
   return findActiveNodeTokenRecord(nodeId, tokenHash);
 }
 
 export function updateNodeHeartbeatInRegistry(
   nodeId: string,
-  updates: { status: string; health: string }
+  updates: { status: string; health: string; usedRamMb: number; usedCpu: number }
 ) {
   return updateNodeHeartbeatRecord(nodeId, updates);
 }
@@ -67,4 +56,12 @@ export function createNodeStatusEventInRegistry(input: {
   reason?: string;
 }) {
   return createNodeStatusEventRecord(input);
+}
+
+export function listStaleNodeIdsInRegistry(cutoff: Date) {
+  return listStaleNodeIdsRecord(cutoff);
+}
+
+export function markStaleNodesOfflineInRegistry(cutoff: Date) {
+  return markStaleNodesOfflineRecord(cutoff);
 }
