@@ -29,12 +29,15 @@ export function NodeDetailClient({ id }: { id: string }) {
     async function refresh() {
       try {
         const { node: nextNode } = await adminApi.node(id);
+
         if (!active) return;
+
         setNode(nextNode);
         setError(null);
         loadedOnceRef.current = true;
       } catch (detailError) {
         if (!active) return;
+
         if (!loadedOnceRef.current) {
           setError(detailError instanceof Error ? detailError.message : "Unable to load node");
         }
@@ -73,15 +76,12 @@ export function NodeDetailClient({ id }: { id: string }) {
       <section className="rounded-3xl border border-line bg-panel/78 p-6 shadow-soft">
         <div className="flex flex-col justify-between gap-5 xl:flex-row xl:items-start">
           <div>
-            <SectionHeader
-              eyebrow="Node detail"
-              title={node.name}
-              description="Vue haute confiance du registre Phantom avant branchement runtime."
-            />
+            <SectionHeader eyebrow="Node detail" title={node.name} />
             <div className="mt-4 flex flex-wrap gap-2">
               <NodeStatusBadge status={node.status} />
               <NodeHealthBadge health={node.health} />
             </div>
+
             <dl className="mt-6 grid gap-4 text-sm md:grid-cols-2 xl:grid-cols-4">
               <div><dt className="text-slate-500">ID</dt><dd className="mt-1 font-mono text-slate-200">{node.id}</dd></div>
               <div><dt className="text-slate-500">Provider</dt><dd className="mt-1 text-slate-200">{node.provider}</dd></div>
@@ -108,7 +108,10 @@ export function NodeDetailClient({ id }: { id: string }) {
       <section className="grid gap-6 xl:grid-cols-2">
         <DetailCard title="Timeline">
           <div className="space-y-3">
-            {(node.history ?? []).length === 0 ? <p className="text-slate-500">No history provided.</p> : null}
+            {(node.history ?? []).length === 0 ? (
+              <p className="text-slate-500">No history provided.</p>
+            ) : null}
+
             {(node.history ?? []).map((event) => (
               <div key={event.id} className="rounded-2xl bg-white/[0.04] p-4">
                 <p className="text-sm font-medium text-white">{event.message}</p>
