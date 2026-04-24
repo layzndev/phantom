@@ -42,6 +42,7 @@ export function NodeDetailClient({ id }: { id: string }) {
     }
 
     refresh();
+
     adminApi
       .me()
       .then(({ admin }) => {
@@ -52,6 +53,7 @@ export function NodeDetailClient({ id }: { id: string }) {
       });
 
     const timer = setInterval(refresh, NODE_DETAIL_REFRESH_MS);
+
     return () => {
       active = false;
       clearInterval(timer);
@@ -71,7 +73,11 @@ export function NodeDetailClient({ id }: { id: string }) {
       <section className="rounded-3xl border border-line bg-panel/78 p-6 shadow-soft">
         <div className="flex flex-col justify-between gap-5 xl:flex-row xl:items-start">
           <div>
-            <SectionHeader eyebrow="Node detail" title={node.name} description="Vue haute confiance du registre Phantom avant branchement runtime." />
+            <SectionHeader
+              eyebrow="Node detail"
+              title={node.name}
+              description="Vue haute confiance du registre Phantom avant branchement runtime."
+            />
             <div className="mt-4 flex flex-wrap gap-2">
               <NodeStatusBadge status={node.status} />
               <NodeHealthBadge health={node.health} />
@@ -87,6 +93,7 @@ export function NodeDetailClient({ id }: { id: string }) {
               <div><dt className="text-slate-500">Maintenance</dt><dd className="mt-1 text-slate-200">{node.maintenanceMode ? "Enabled" : "Disabled"}</dd></div>
             </dl>
           </div>
+
           <NodeActions node={node} onUpdated={setNode} adminRole={adminRole} />
         </div>
       </section>
@@ -99,20 +106,23 @@ export function NodeDetailClient({ id }: { id: string }) {
       <NodeServersTable servers={node.hostedServersList} />
 
       <section className="grid gap-6 xl:grid-cols-2">
-        <DetailCard title="Status timeline" description="Evenements d'etat du registre Phantom.">
+        <DetailCard title="Timeline">
           <div className="space-y-3">
             {(node.history ?? []).length === 0 ? <p className="text-slate-500">No history provided.</p> : null}
             {(node.history ?? []).map((event) => (
               <div key={event.id} className="rounded-2xl bg-white/[0.04] p-4">
                 <p className="text-sm font-medium text-white">{event.message}</p>
-                <p className="mt-1 text-xs uppercase tracking-[0.2em] text-slate-500">{event.type} - {formatDateTime(event.createdAt)}</p>
+                <p className="mt-1 text-xs uppercase tracking-[0.2em] text-slate-500">
+                  {event.type} - {formatDateTime(event.createdAt)}
+                </p>
               </div>
             ))}
           </div>
         </DetailCard>
-        <DetailCard title="Node logs" description="Disponible plus tard avec le runtime/heartbeat.">
+
+        <DetailCard title="Node logs">
           <div className="rounded-2xl border border-line bg-obsidian p-4 font-mono text-xs text-slate-300">
-            {(node.logs ?? ["No logs exposed by Hosting API."]).map((line) => (
+            {(node.logs ?? ["No logs."]).map((line) => (
               <p key={line} className="py-1">{line}</p>
             ))}
           </div>
