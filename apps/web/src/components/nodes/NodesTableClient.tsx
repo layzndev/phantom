@@ -169,7 +169,6 @@ export function NodesTableClient() {
                   </div>
                 )
               },
-              { key: "maintenance", header: "Maint.", cell: (node) => <span className="text-slate-300">{node.maintenanceMode ? "Enabled" : "Disabled"}</span> },
               { key: "actions", header: "Actions", cell: (node) => ( <div className="flex flex-wrap items-center gap-2"> <NodeActions node={node} onUpdated={replaceNode} adminRole={adminRole} compact />
               </div> 
                 )
