@@ -11,5 +11,8 @@
     "build": "npm run build --workspace @phantom/api && npm run build --workspace @phantom/web",
     "typecheck": "npm run typecheck --workspace @phantom/api && npm run typecheck --workspace @phantom/web",
     "lint": "npm run lint --workspace @phantom/web"
+  },
+  "dependencies": {
+    "lucide-react": "^1.9.0"
   }
 }
