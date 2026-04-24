@@ -5,6 +5,7 @@ import { auditController } from "./modules/audit/audit.controller.js";
 import { authController } from "./modules/auth/auth.controller.js";
 import { nodesController } from "./modules/nodes/nodes.controller.js";
 import { nodesRuntimeController } from "./modules/nodes/nodes.runtime.controller.js";
+import { workloadsController } from "./modules/workloads/workloads.controller.js";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
 import { requestContext } from "./middleware/requestContext.js";
 import { adminSession, corsMiddleware, helmetMiddleware } from "./middleware/security.js";
@@ -29,6 +30,7 @@ export function createApp() {
 
   app.use("/auth", authController);
   app.use("/nodes", nodesController);
+  app.use("/workloads", workloadsController);
   app.use("/runtime/nodes", nodesRuntimeController);
   app.use("/audit-logs", auditController);
 

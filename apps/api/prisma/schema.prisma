@@ -104,6 +104,7 @@ model Node {
   updatedAt       DateTime          @updatedAt @map("updated_at")
   tokens          NodeToken[]
   statusEvents    NodeStatusEvent[]
+  workloads       Workload[]
 
   @@index([status])
   @@index([health])
@@ -137,4 +138,68 @@ model NodeStatusEvent {
   @@index([nodeId])
   @@index([createdAt])
   @@map("node_status_events")
+}
+
+model Workload {
+  id              String   @id @default(uuid())
+  name            String
+  type            String
+  image           String
+  nodeId          String?  @map("node_id")
+  node            Node?    @relation(fields: [nodeId], references: [id], onDelete: SetNull)
+
+  status          String   @default("pending")
+  desiredStatus   String   @default("running") @map("desired_status")
+
+  requestedCpu    Float    @map("requested_cpu")
+  requestedRamMb  Int      @map("requested_ram_mb")
+  requestedDiskGb Int      @map("requested_disk_gb")
+
+  config          Json     @default("{}")
+  containerId     String?  @map("container_id")
+  lastHeartbeatAt DateTime? @map("last_heartbeat_at")
+  lastExitCode    Int?     @map("last_exit_code")
+  restartCount    Int      @default(0) @map("restart_count")
+
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt       @map("updated_at")
+  deletedAt       DateTime? @map("deleted_at")
+
+  ports           WorkloadPort[]
+  statusEvents    WorkloadStatusEvent[]
+
+  @@index([nodeId])
+  @@index([status])
+  @@index([type])
+  @@index([deletedAt])
+  @@map("workloads")
+}
+
+model WorkloadPort {
+  id           String   @id @default(uuid())
+  workloadId   String   @map("workload_id")
+  workload     Workload @relation(fields: [workloadId], references: [id], onDelete: Cascade)
+  nodeId       String   @map("node_id")
+  internalPort Int      @map("internal_port")
+  externalPort Int      @map("external_port")
+  protocol     String   @default("tcp")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@unique([nodeId, externalPort, protocol])
+  @@index([workloadId])
+  @@map("workload_ports")
+}
+
+model WorkloadStatusEvent {
+  id             String   @id @default(uuid())
+  workloadId     String   @map("workload_id")
+  workload       Workload @relation(fields: [workloadId], references: [id], onDelete: Cascade)
+  previousStatus String?  @map("previous_status")
+  newStatus      String   @map("new_status")
+  reason         String?
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@index([workloadId])
+  @@index([createdAt])
+  @@map("workload_status_events")
 }
