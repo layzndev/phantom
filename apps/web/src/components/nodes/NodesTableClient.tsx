@@ -119,7 +119,7 @@ export function NodesTableClient() {
             emptyTitle="No node matches these filters"
             emptyDescription="Clear search or filters to recover the full inventory."
             columns={[
-              { key: "heartbeat", header: "Heartbeat", cell: (node) => <HeartbeatHeart heartbeat={node.heartbeat} status={node.status} health={node.health} /> },
+              { key: "heartbeat", header: "", cell: (node) => <HeartbeatHeart heartbeat={node.heartbeat} status={node.status} health={node.health} /> },
               {
                 key: "node",
                 header: "Node",
