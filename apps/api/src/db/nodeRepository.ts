@@ -103,6 +103,18 @@ export function findActiveNodeTokenRecord(nodeId: string, tokenHash: string) {
   });
 }
 
+export function findActiveNodeTokenRecordByHash(tokenHash: string) {
+  return db.nodeToken.findFirst({
+    where: {
+      tokenHash,
+      revokedAt: null
+    },
+    include: {
+      node: true
+    }
+  });
+}
+
 export interface UpdateNodeHeartbeatRecordInput {
   status: string;
   health: string;
@@ -193,4 +205,3 @@ export function createNodeStatusEventRecord(input: {
     }
   });
 }
-

@@ -5,6 +5,7 @@ export const workloadParamsSchema = z.object({
 });
 
 const portField = z.coerce.number().int().min(1).max(65535);
+const runtimeMetricField = z.coerce.number().min(0);
 
 const portSpecShape = z.object({
   internalPort: portField,
@@ -42,7 +43,48 @@ export const workloadListQuerySchema = z.object({
   type: workloadTypeEnum.optional()
 });
 
+export const workloadRuntimeHeartbeatSchema = z
+  .object({
+    status: z.enum(["creating", "running", "stopped", "crashed"]),
+    containerId: z.string().min(1).max(255).optional(),
+    exitCode: z.coerce.number().int().nullable().optional(),
+    restartCount: z.coerce.number().int().min(0).optional(),
+    cpuPercent: runtimeMetricField.optional(),
+    memoryMb: runtimeMetricField.optional(),
+    startedAt: z.string().datetime().optional(),
+    finishedAt: z.string().datetime().nullable().optional(),
+    reason: z.string().max(500).optional()
+  })
+  .strict();
+
+export const workloadRuntimeEventSchema = z
+  .object({
+    type: z.enum([
+      "pulled",
+      "created",
+      "started",
+      "stopped",
+      "killed",
+      "crashed"
+    ]),
+    status: z.enum(["creating", "running", "stopped", "crashed"]).optional(),
+    reason: z.string().min(1).max(500).optional()
+  })
+  .strict();
+
+export const workloadRuntimeAckActionSchema = z
+  .object({
+    handledDesiredStatus: z.enum(["restart", "kill"]),
+    status: z.enum(["creating", "running", "stopped", "crashed"]).optional(),
+    containerId: z.string().min(1).max(255).nullable().optional(),
+    reason: z.string().max(500).optional()
+  })
+  .strict();
+
 export type CreateWorkloadInput = z.infer<typeof createWorkloadSchema>;
 export type UpdateWorkloadInput = z.infer<typeof updateWorkloadSchema>;
 export type WorkloadPortSpec = z.infer<typeof portSpecShape>;
 export type WorkloadListQuery = z.infer<typeof workloadListQuerySchema>;
+export type WorkloadRuntimeHeartbeatInput = z.infer<typeof workloadRuntimeHeartbeatSchema>;
+export type WorkloadRuntimeEventInput = z.infer<typeof workloadRuntimeEventSchema>;
+export type WorkloadRuntimeAckActionInput = z.infer<typeof workloadRuntimeAckActionSchema>;

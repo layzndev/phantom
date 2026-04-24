@@ -11,6 +11,7 @@ import {
   createNodeInRegistry,
   createNodeTokenInRegistry,
   deleteNodeFromRegistry,
+  findActiveNodeTokenByHashInRegistry,
   findActiveNodeTokenInRegistry,
   findNodeFromRegistry,
   listNodesFromRegistry,
@@ -177,6 +178,17 @@ export async function acceptNodeHeartbeat(
     nodeId,
     receivedAt: new Date().toISOString()
   };
+}
+
+export async function authenticateRuntimeNode(rawToken: string) {
+  const tokenHash = hashNodeToken(rawToken);
+  const activeToken = await findActiveNodeTokenByHashInRegistry(tokenHash);
+
+  if (!activeToken) {
+    throw new AppError(401, "Invalid node token.", "INVALID_NODE_TOKEN");
+  }
+
+  return activeToken.node;
 }
 
 export async function deleteNode(id: string) {

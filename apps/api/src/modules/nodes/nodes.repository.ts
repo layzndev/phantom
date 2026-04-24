@@ -7,6 +7,7 @@ import {
   revokeActiveNodeTokens,
   setNodeMaintenanceRecord,
   findActiveNodeTokenRecord,
+  findActiveNodeTokenRecordByHash,
   updateNodeHeartbeatRecord,
   updateNodeRecord,
   createNodeStatusEventRecord,
@@ -48,6 +49,10 @@ export function findActiveNodeTokenInRegistry(nodeId: string, tokenHash: string)
   return findActiveNodeTokenRecord(nodeId, tokenHash);
 }
 
+export function findActiveNodeTokenByHashInRegistry(tokenHash: string) {
+  return findActiveNodeTokenRecordByHash(tokenHash);
+}
+
 export function updateNodeHeartbeatInRegistry(
   nodeId: string,
   updates: UpdateNodeHeartbeatRecordInput
@@ -67,4 +72,3 @@ export function createNodeStatusEventInRegistry(input: {
 }) {
   return createNodeStatusEventRecord(input);
 }
-

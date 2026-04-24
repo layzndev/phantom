@@ -163,3 +163,55 @@ export function listWorkloadsByNodeIds(nodeIds: string[]) {
     }
   });
 }
+
+export function listRuntimeAssignedWorkloadRecords(nodeId: string) {
+  return db.workload.findMany({
+    where: {
+      nodeId,
+      deletedAt: null,
+      status: {
+        notIn: ["deleting", "deleted"]
+      }
+    },
+    orderBy: { createdAt: "asc" },
+    include: workloadInclude
+  });
+}
+
+export function findAssignedWorkloadRecordById(nodeId: string, workloadId: string) {
+  return db.workload.findFirst({
+    where: {
+      id: workloadId,
+      nodeId,
+      deletedAt: null
+    },
+    include: workloadInclude
+  });
+}
+
+export interface UpdateWorkloadRuntimeRecordInput {
+  status?: string;
+  desiredStatus?: string;
+  containerId?: string | null;
+  lastExitCode?: number | null;
+  restartCount?: number;
+}
+
+export function updateWorkloadRuntimeRecord(
+  workloadId: string,
+  updates: UpdateWorkloadRuntimeRecordInput
+) {
+  return db.workload.update({
+    where: { id: workloadId },
+    data: {
+      ...(updates.status !== undefined ? { status: updates.status } : {}),
+      ...(updates.desiredStatus !== undefined ? { desiredStatus: updates.desiredStatus } : {}),
+      ...(updates.containerId !== undefined ? { containerId: updates.containerId } : {}),
+      ...(updates.lastExitCode !== undefined ? { lastExitCode: updates.lastExitCode } : {}),
+      ...(updates.restartCount !== undefined ? { restartCount: updates.restartCount } : {}),
+      lastHeartbeatAt: new Date(),
+      updatedAt: new Date()
+    },
+    include: workloadInclude
+  });
+}

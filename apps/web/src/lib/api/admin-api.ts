@@ -2,9 +2,13 @@ import type {
   AdminUser,
   AuditLogEntry,
   CompanyNode,
+  CompanyWorkload,
+  CreateWorkloadPayload,
+  CreateWorkloadResult,
   CreateNodePayload,
   NodeSummary,
-  UpdateNodePayload
+  UpdateNodePayload,
+  UpdateWorkloadPayload
 } from "@/types/admin";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_ADMIN_API_URL ?? "http://localhost:4200";
@@ -58,5 +62,36 @@ export const adminApi = {
     }),
   rotateNodeToken: (id: string) =>
     apiRequest<{ rotation: { nodeId: string; token: string; rotatedAt: string } }>(`/nodes/${encodeURIComponent(id)}/rotate-token`, { method: "POST" }),
+  workloads: () => apiRequest<{ workloads: CompanyWorkload[] }>("/workloads"),
+  workload: (id: string) =>
+    apiRequest<{ workload: CompanyWorkload }>(`/workloads/${encodeURIComponent(id)}`),
+  createWorkload: (payload: CreateWorkloadPayload) =>
+    apiRequest<CreateWorkloadResult>("/workloads", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
+  updateWorkload: (id: string, payload: UpdateWorkloadPayload) =>
+    apiRequest<{ workload: CompanyWorkload }>(`/workloads/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload)
+    }),
+  startWorkload: (id: string) =>
+    apiRequest<{ workload: CompanyWorkload }>(`/workloads/${encodeURIComponent(id)}/start`, {
+      method: "POST"
+    }),
+  stopWorkload: (id: string) =>
+    apiRequest<{ workload: CompanyWorkload }>(`/workloads/${encodeURIComponent(id)}/stop`, {
+      method: "POST"
+    }),
+  restartWorkload: (id: string) =>
+    apiRequest<{ workload: CompanyWorkload }>(`/workloads/${encodeURIComponent(id)}/restart`, {
+      method: "POST"
+    }),
+  killWorkload: (id: string) =>
+    apiRequest<{ workload: CompanyWorkload }>(`/workloads/${encodeURIComponent(id)}/kill`, {
+      method: "POST"
+    }),
+  deleteWorkload: (id: string) =>
+    apiRequest<void>(`/workloads/${encodeURIComponent(id)}`, { method: "DELETE" }),
   auditLogs: () => apiRequest<{ auditLogs: AuditLogEntry[] }>("/audit-logs")
 };

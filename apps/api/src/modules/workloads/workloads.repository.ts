@@ -2,11 +2,15 @@ import {
   createWorkloadRecord,
   createWorkloadStatusEventRecord,
   deleteWorkloadRecord,
+  findAssignedWorkloadRecordById,
   findWorkloadRecordById,
   listWorkloadRecords,
+  listRuntimeAssignedWorkloadRecords,
   setWorkloadDesiredStatusRecord,
+  updateWorkloadRuntimeRecord,
   updateWorkloadRecord,
   type CreateWorkloadRecordInput,
+  type UpdateWorkloadRuntimeRecordInput,
   type UpdateWorkloadRecordInput,
   type WorkloadFilter
 } from "../../db/workloadRepository.js";
@@ -17,6 +21,14 @@ export function listWorkloadsFromRegistry(filter: WorkloadFilter = {}) {
 
 export function findWorkloadFromRegistry(id: string) {
   return findWorkloadRecordById(id);
+}
+
+export function listAssignedRuntimeWorkloadsFromRegistry(nodeId: string) {
+  return listRuntimeAssignedWorkloadRecords(nodeId);
+}
+
+export function findAssignedWorkloadFromRegistry(nodeId: string, workloadId: string) {
+  return findAssignedWorkloadRecordById(nodeId, workloadId);
 }
 
 export function createWorkloadInRegistry(input: CreateWorkloadRecordInput) {
@@ -46,4 +58,11 @@ export function emitWorkloadStatusEvent(input: {
 
 export function deleteWorkloadFromRegistry(id: string) {
   return deleteWorkloadRecord(id);
+}
+
+export function updateWorkloadRuntimeInRegistry(
+  workloadId: string,
+  updates: UpdateWorkloadRuntimeRecordInput
+) {
+  return updateWorkloadRuntimeRecord(workloadId, updates);
 }
