@@ -119,15 +119,12 @@ export function NodesTableClient() {
             emptyTitle="No node matches these filters"
             emptyDescription="Clear search or filters to recover the full inventory."
             columns={[
+              { key: "heartbeat", header: "Heartbeat", cell: (node) => <HeartbeatHeart heartbeat={node.heartbeat} status={node.status} health={node.health} /> },
               {
                 key: "node",
                 header: "Node",
                 cell: (node) => (
-                  <>
-                    <Link href={`/nodes/${node.id}`} className="font-semibold text-white hover:text-accent">{node.name}</Link>
-                    <p className="mt-1 font-mono text-xs text-slate-500">{node.id}</p>
-                    <p className="mt-2 text-xs text-slate-400">{node.region}</p>
-                  </>
+                  <Link href={`/nodes/${node.id}`} className="font-semibold text-white hover:text-accent">{node.name}</Link>
                 )
               },
               { key: "provider", header: "Provider", cell: (node) => <span className="text-slate-300">{node.provider}</span> },
@@ -151,38 +148,24 @@ export function NodesTableClient() {
                   </div>
                 )
               },
-              { key: "runtime", header: "Runtime", cell: (node) => <span className="text-slate-300">{node.runtimeMode}</span> },
-              { key: "heartbeat", header: "Heartbeat", cell: (node) => <HeartbeatHeart heartbeat={node.heartbeat} status={node.status} health={node.health} /> },
+              { key: "region", header: "Region", cell: (node) => <span className="text-slate-300">{node.region}</span> },
               {
-                key: "capacity",
-                header: "Capacity",
+                key: "ram",
+                header: "RAM",
                 cell: (node) => (
                   <div className="text-slate-300">
-                    <p>RAM {percent(node.usedRamMb, node.totalRamMb)}%</p>
+                    <p>{percent(node.usedRamMb, node.totalRamMb)}%</p>
                     <p className="text-xs text-slate-500">{formatRam(node.usedRamMb)} / {formatRam(node.totalRamMb)}</p>
-                    <p className="mt-2">CPU {percent(node.usedCpu, node.totalCpu)}%</p>
-                    <p className="text-xs text-slate-500">{node.usedCpu.toFixed(1)} / {node.totalCpu}</p>
-                    <p className="mt-2 text-xs text-slate-500">{node.hostedServers} servers</p>
                   </div>
                 )
               },
               {
-                key: "ports",
-                header: "Ports",
+                key: "cpu",
+                header: "CPU",
                 cell: (node) => (
                   <div className="text-slate-300">
-                    {node.portRange ? (
-                      <>
-                        <p>{node.availablePorts} available</p>
-                        <p className="text-xs text-slate-500">{node.reservedPorts} reserved</p>
-                        <p className="text-xs text-slate-500">{node.portRange}</p>
-                      </>
-                    ) : (
-                      <p className="text-xs text-slate-500">Awaiting heartbeat</p>
-                    )}
-                    {node.openPorts.length > 0 ? (
-                      <p className="mt-1 text-xs text-slate-500">{node.openPorts.length} open detected</p>
-                    ) : null}
+                    <p>{percent(node.usedCpu, node.totalCpu)}%</p>
+                    <p className="text-xs text-slate-500">{node.usedCpu.toFixed(1)} / {node.totalCpu}</p>
                   </div>
                 )
               },
