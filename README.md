@@ -1,15 +1,13 @@
 # Phantom Panel
 
-Panel admin interne, separe du panel client et du produit public. La V1 est centree sur l'exploitation des nodes via une Phantom API dediee qui consomme la Hosting API.
-
 ## Architecture
 
-- `apps/api`: API Express TypeScript, auth admin separee, Prisma/Aurora PostgreSQL dedie, sessions dediees, services Hosting API, nodes et audit.
-- `apps/web`: panel Next.js TypeScript/Tailwind, routes admin protegees, UI sombre entreprise.
+- `apps/api`: API Express TypeScript, auth admin, Prisma/Aurora PostgreSQL, sessions, nodes et audit.
+- `apps/web`: panel Next.js TypeScript/Tailwind, routes admin, UI sombre.
 
 ### API modules
 
-- `src/modules/auth`: login, logout, session admin, lockout leger et schemas auth.
+- `src/modules/auth`: login, logout, session admin, lockout et schemas auth.
 - `src/modules/admins`: comptes internes, roles `superadmin` et `ops`, bootstrap admin.
 - `src/modules/nodes`: endpoints nodes, schemas, service et repository d'acces Hosting API.
 - `src/modules/audit`: journal d'audit admin stocke dans la base Phantom.
