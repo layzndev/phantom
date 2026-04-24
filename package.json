@@ -4,13 +4,16 @@
   "private": true,
   "workspaces": [
     "apps/api",
-    "apps/web"
+    "apps/web",
+    "apps/agent"
   ],
   "scripts": {
     "dev": "npm run dev --workspace @phantom/api & npm run dev --workspace @phantom/web",
-    "build": "npm run build --workspace @phantom/api && npm run build --workspace @phantom/web",
-    "typecheck": "npm run typecheck --workspace @phantom/api && npm run typecheck --workspace @phantom/web",
-    "lint": "npm run lint --workspace @phantom/web"
+    "build": "npm run build --workspace @phantom/api && npm run build --workspace @phantom/web && npm run build --workspace @phantom/agent",
+    "typecheck": "npm run typecheck --workspace @phantom/api && npm run typecheck --workspace @phantom/web && npm run typecheck --workspace @phantom/agent",
+    "lint": "npm run lint --workspace @phantom/web",
+    "build:agent": "npm run build --workspace @phantom/agent",
+    "start:agent": "npm run start --workspace @phantom/agent"
   },
   "dependencies": {
     "lucide-react": "^1.9.0"
