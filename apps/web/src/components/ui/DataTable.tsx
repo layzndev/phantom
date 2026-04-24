@@ -14,9 +14,19 @@ interface DataTableProps<T> {
   getRowKey: (row: T) => string;
   emptyTitle: string;
   emptyDescription?: string;
+  onRowClick?: (row: T) => void;
+  rowClassName?: string;
 }
 
-export function DataTable<T>({ columns, rows, getRowKey, emptyTitle, emptyDescription }: DataTableProps<T>) {
+export function DataTable<T>({
+  columns,
+  rows,
+  getRowKey,
+  emptyTitle,
+  emptyDescription,
+  onRowClick,
+  rowClassName
+}: DataTableProps<T>) {
   if (rows.length === 0) {
     return <EmptyState title={emptyTitle} description={emptyDescription} />;
   }
@@ -27,15 +37,28 @@ export function DataTable<T>({ columns, rows, getRowKey, emptyTitle, emptyDescri
         <thead className="bg-white/[0.03] text-[11px] uppercase tracking-[0.16em] text-slate-500">
           <tr>
             {columns.map((column) => (
-              <th key={column.key} className={column.className ?? "px-5 py-4"}>{column.header}</th>
+              <th key={column.key} className={column.className ?? "px-5 py-4"}>
+                {column.header}
+              </th>
             ))}
           </tr>
         </thead>
+
         <tbody className="divide-y divide-line">
           {rows.map((row) => (
-            <tr key={getRowKey(row)} className="align-top transition hover:bg-white/[0.022]">
+            <tr
+              key={getRowKey(row)}
+              onClick={() => onRowClick?.(row)}
+              className={[
+                "align-top transition hover:bg-white/[0.022]",
+                onRowClick ? "cursor-pointer" : "",
+                rowClassName ?? ""
+              ].join(" ")}
+            >
               {columns.map((column) => (
-                <td key={column.key} className={column.className ?? "px-5 py-5"}>{column.cell(row)}</td>
+                <td key={column.key} className={column.className ?? "px-5 py-5"}>
+                  {column.cell(row)}
+                </td>
               ))}
             </tr>
           ))}

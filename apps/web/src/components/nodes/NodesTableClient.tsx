@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { adminApi } from "@/lib/api/admin-api";
 import { formatRam, percent } from "@/lib/utils/format";
 import type { AdminRole, CompanyNode, NodeHealth, NodeStatus } from "@/types/admin";
@@ -16,6 +17,8 @@ import { CreateNodePanel } from "./CreateNodePanel";
 const NODES_REFRESH_MS = 15_000;
 
 export function NodesTableClient() {
+  const router = useRouter();
+
   const [nodes, setNodes] = useState<CompanyNode[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
@@ -39,6 +42,7 @@ export function NodesTableClient() {
     }
 
     refresh();
+
     adminApi
       .me()
       .then(({ admin }) => {
@@ -49,6 +53,7 @@ export function NodesTableClient() {
       });
 
     const timer = setInterval(refresh, NODES_REFRESH_MS);
+
     return () => {
       active = false;
       clearInterval(timer);
@@ -69,7 +74,12 @@ export function NodesTableClient() {
 
   const filteredNodes = nodes.filter((node) => {
     const search = `${node.id} ${node.name} ${node.provider} ${node.region} ${node.internalHost} ${node.publicHost}`.toLowerCase();
-    return search.includes(query.toLowerCase()) && (status === "all" || node.status === status) && (health === "all" || node.health === health);
+
+    return (
+      search.includes(query.toLowerCase()) &&
+      (status === "all" || node.status === status) &&
+      (health === "all" || node.health === health)
+    );
   });
 
   return (
@@ -78,8 +88,8 @@ export function NodesTableClient() {
         <SectionHeader
           eyebrow="Phantom registry"
           title="Nodes"
-          description="Source de verite interne des nodes. Le runtime et la Hosting API seront branches plus tard."
         />
+
         <div className="mt-6 grid gap-3 lg:grid-cols-[1fr_180px_180px]">
           <input
             value={query}
@@ -87,13 +97,23 @@ export function NodesTableClient() {
             placeholder="Search by node, host, provider or region"
             className="rounded-2xl border border-white/10 bg-white/[0.035] px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-accent/40"
           />
-          <select value={status} onChange={(event) => setStatus(event.target.value as NodeStatus | "all")} className="rounded-2xl border border-white/10 bg-obsidian px-4 py-3 text-sm text-slate-200 outline-none focus:border-accent/40">
+
+          <select
+            value={status}
+            onChange={(event) => setStatus(event.target.value as NodeStatus | "all")}
+            className="rounded-2xl border border-white/10 bg-obsidian px-4 py-3 text-sm text-slate-200 outline-none focus:border-accent/40"
+          >
             <option value="all">All status</option>
             <option value="healthy">Healthy</option>
             <option value="maintenance">Maintenance</option>
             <option value="offline">Offline</option>
           </select>
-          <select value={health} onChange={(event) => setHealth(event.target.value as NodeHealth | "all")} className="rounded-2xl border border-white/10 bg-obsidian px-4 py-3 text-sm text-slate-200 outline-none focus:border-accent/40">
+
+          <select
+            value={health}
+            onChange={(event) => setHealth(event.target.value as NodeHealth | "all")}
+            className="rounded-2xl border border-white/10 bg-obsidian px-4 py-3 text-sm text-slate-200 outline-none focus:border-accent/40"
+          >
             <option value="all">All health</option>
             <option value="healthy">Healthy</option>
             <option value="degraded">Degraded</option>
@@ -108,24 +128,45 @@ export function NodesTableClient() {
       <div className="overflow-hidden rounded-2xl border border-line bg-panel/78 shadow-soft">
         {nodes.length === 0 ? (
           <div className="p-6">
-            <EmptyState title="No nodes registered" description="Create the first Phantom node to prepare the future runtime connection." />
+            <EmptyState
+              title="No nodes registered"
+              description="Create the first Phantom node to prepare the future runtime connection."
+            />
           </div>
         ) : (
           <DataTable
             rows={filteredNodes}
             getRowKey={(node) => node.id}
+            onRowClick={(node) => router.push(`/nodes/${node.id}`)}
+            rowClassName="cursor-pointer hover:bg-white/[0.025]"
             emptyTitle="No node matches these filters"
             emptyDescription="Clear search or filters to recover the full inventory."
             columns={[
-              { key: "heartbeat", header: "", cell: (node) => <HeartbeatHeart heartbeat={node.heartbeat} status={node.status} health={node.health} /> },
               {
-                key: "node",
-                header: "Node",
+                key: "heartbeat",
+                header: "",
                 cell: (node) => (
-                  <Link href={`/nodes/${node.id}`} className="font-semibold text-white hover:text-accent">{node.name}</Link>
+                  <HeartbeatHeart heartbeat={node.heartbeat} status={node.status} health={node.health} />
                 )
               },
-              { key: "provider", header: "Provider", cell: (node) => <span className="text-slate-300">{node.provider}</span> },
+              {
+                key: "node",
+                header: "Name",
+                cell: (node) => (
+                  <Link
+                    href={`/nodes/${node.id}`}
+                    className="font-semibold text-white hover:text-accent"
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    {node.name}
+                  </Link>
+                )
+              },
+              {
+                key: "provider",
+                header: "Provider",
+                cell: (node) => <span className="text-slate-300">{node.provider}</span>
+              },
               {
                 key: "hosts",
                 header: "Hosts",
@@ -136,14 +177,20 @@ export function NodesTableClient() {
                   </>
                 )
               },
-              { key: "region", header: "Region", cell: (node) => <span className="text-slate-300">{node.region}</span> },
+              {
+                key: "region",
+                header: "Region",
+                cell: (node) => <span className="text-slate-300">{node.region}</span>
+              },
               {
                 key: "ram",
                 header: "RAM",
                 cell: (node) => (
                   <div className="text-slate-300">
                     <p>{percent(node.usedRamMb, node.totalRamMb)}%</p>
-                    <p className="text-xs text-slate-500">{formatRam(node.usedRamMb)} / {formatRam(node.totalRamMb)}</p>
+                    <p className="text-xs text-slate-500">
+                      {formatRam(node.usedRamMb)} / {formatRam(node.totalRamMb)}
+                    </p>
                   </div>
                 )
               },
@@ -153,12 +200,22 @@ export function NodesTableClient() {
                 cell: (node) => (
                   <div className="text-slate-300">
                     <p>{percent(node.usedCpu, node.totalCpu)}%</p>
-                    <p className="text-xs text-slate-500">{node.usedCpu.toFixed(1)} / {node.totalCpu}</p>
+                    <p className="text-xs text-slate-500">
+                      {node.usedCpu.toFixed(1)} / {node.totalCpu}
+                    </p>
                   </div>
                 )
               },
-              { key: "actions", header: "Actions", cell: (node) => ( <div className="flex flex-wrap items-center gap-2"> <NodeActions node={node} onUpdated={replaceNode} adminRole={adminRole} compact />
-              </div> 
+              {
+                key: "actions",
+                header: "Actions",
+                cell: (node) => (
+                  <div
+                    className="flex flex-wrap items-center gap-2"
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <NodeActions node={node} onUpdated={replaceNode} adminRole={adminRole} compact />
+                  </div>
                 )
               }
             ]}
