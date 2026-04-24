@@ -152,7 +152,7 @@ export function NodesTableClient() {
                 )
               },
               { key: "runtime", header: "Runtime", cell: (node) => <span className="text-slate-300">{node.runtimeMode}</span> },
-              { key: "heartbeat", header: "Heartbeat", cell: (node) => <HeartbeatHeart heartbeat={node.heartbeat} /> },
+              { key: "heartbeat", header: "Heartbeat", cell: (node) => <HeartbeatHeart heartbeat={node.heartbeat} status={node.status} health={node.health} /> },
               {
                 key: "capacity",
                 header: "Capacity",

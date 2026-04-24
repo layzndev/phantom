@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { formatDateTime } from "@/lib/utils/format";
+import type { NodeHealth, NodeStatus } from "@/types/admin";
 
 const FRESH_MS = 60_000;
 const STALE_MS = 5 * 60_000;
@@ -9,10 +10,11 @@ const TICK_MS = 15_000;
 
 type Tone = "fresh" | "stale" | "cold" | "missing";
 
-function toneFor(heartbeat: string | null): Tone {
+function toneFor(heartbeat: string | null, status: NodeStatus, health: NodeHealth): Tone {
   if (!heartbeat) return "missing";
+  if (status === "offline" || health === "unreachable") return "cold";
   const age = Date.now() - new Date(heartbeat).getTime();
-  if (!Number.isFinite(age) || age < 0) return "missing";
+  if (!Number.isFinite(age) || age < 0) return "fresh";
   if (age < FRESH_MS) return "fresh";
   if (age < STALE_MS) return "stale";
   return "cold";
@@ -28,11 +30,19 @@ const TONE_CLASS: Record<Tone, string> = {
 const TONE_LABEL: Record<Tone, string> = {
   fresh: "Heartbeat fresh",
   stale: "Heartbeat stale",
-  cold: "Heartbeat cold",
+  cold: "Node offline",
   missing: "No heartbeat yet"
 };
 
-export function HeartbeatHeart({ heartbeat }: { heartbeat: string | null }) {
+export function HeartbeatHeart({
+  heartbeat,
+  status,
+  health
+}: {
+  heartbeat: string | null;
+  status: NodeStatus;
+  health: NodeHealth;
+}) {
   const [, setTick] = useState(0);
 
   useEffect(() => {
@@ -40,7 +50,7 @@ export function HeartbeatHeart({ heartbeat }: { heartbeat: string | null }) {
     return () => clearInterval(timer);
   }, []);
 
-  const tone = toneFor(heartbeat);
+  const tone = toneFor(heartbeat, status, health);
   const formatted = heartbeat ? formatDateTime(heartbeat) : "No heartbeat";
   const title = `${TONE_LABEL[tone]} - ${formatted}`;
 
