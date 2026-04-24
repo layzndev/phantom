@@ -1,7 +1,11 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import { formatDateTime } from "@/lib/utils/format";
 
 const FRESH_MS = 60_000;
 const STALE_MS = 5 * 60_000;
+const TICK_MS = 15_000;
 
 type Tone = "fresh" | "stale" | "cold" | "missing";
 
@@ -29,6 +33,13 @@ const TONE_LABEL: Record<Tone, string> = {
 };
 
 export function HeartbeatHeart({ heartbeat }: { heartbeat: string | null }) {
+  const [, setTick] = useState(0);
+
+  useEffect(() => {
+    const timer = setInterval(() => setTick((value) => value + 1), TICK_MS);
+    return () => clearInterval(timer);
+  }, []);
+
   const tone = toneFor(heartbeat);
   const formatted = heartbeat ? formatDateTime(heartbeat) : "No heartbeat";
   const title = `${TONE_LABEL[tone]} - ${formatted}`;
