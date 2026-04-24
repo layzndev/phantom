@@ -13,8 +13,6 @@ const initialForm: CreateNodePayload = {
   internalHost: "",
   publicHost: "",
   runtimeMode: "remote",
-  totalRamMb: 32768,
-  totalCpu: 16,
   portRangeStart: 25000,
   portRangeEnd: 26000
 };
@@ -85,8 +83,6 @@ export function CreateNodePanel({ onCreated }: { onCreated: (node: CompanyNode) 
             </select>
           </label>
           {[
-            ["totalRamMb", "RAM MB"],
-            ["totalCpu", "CPU"],
             ["portRangeStart", "Port start"],
             ["portRangeEnd", "Port end"]
           ].map(([key, label]) => (
@@ -100,6 +96,9 @@ export function CreateNodePanel({ onCreated }: { onCreated: (node: CompanyNode) 
               />
             </label>
           ))}
+          <p className="md:col-span-2 xl:col-span-4 rounded-2xl border border-white/5 bg-white/[0.025] px-4 py-3 text-xs text-slate-400">
+            RAM and CPU are detected automatically from the first heartbeat sent by the node runtime.
+          </p>
           <div className="md:col-span-2 xl:col-span-4">
             <ActionButton disabled={busy} type="submit">{busy ? "Creating..." : "Create node and token"}</ActionButton>
           </div>

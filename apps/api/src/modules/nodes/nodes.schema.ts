@@ -19,8 +19,8 @@ export const createNodeSchema = z
     internalHost: z.string().min(2).max(255),
     publicHost: z.string().min(2).max(255),
     runtimeMode: z.enum(["local", "remote"]).default("remote"),
-    totalRamMb: totalRamField,
-    totalCpu: totalCpuField,
+    totalRamMb: totalRamField.optional(),
+    totalCpu: totalCpuField.optional(),
     portRangeStart: portField,
     portRangeEnd: portField
   })

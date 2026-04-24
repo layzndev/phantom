@@ -63,8 +63,8 @@ export interface CreateNodePayload {
   internalHost: string;
   publicHost: string;
   runtimeMode: RuntimeMode;
-  totalRamMb: number;
-  totalCpu: number;
+  totalRamMb?: number;
+  totalCpu?: number;
   portRangeStart: number;
   portRangeEnd: number;
 }

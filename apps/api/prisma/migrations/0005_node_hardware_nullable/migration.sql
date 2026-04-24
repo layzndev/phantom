@@ -1,0 +1,2 @@
+ALTER TABLE "nodes" ALTER COLUMN "total_ram_mb" DROP NOT NULL;
+ALTER TABLE "nodes" ALTER COLUMN "total_cpu" DROP NOT NULL;

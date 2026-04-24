@@ -8,8 +8,8 @@ export interface CreateNodeRecordInput {
   internalHost: string;
   publicHost: string;
   runtimeMode: string;
-  totalRamMb: number;
-  totalCpu: number;
+  totalRamMb?: number;
+  totalCpu?: number;
   portRangeStart: number;
   portRangeEnd: number;
 }
