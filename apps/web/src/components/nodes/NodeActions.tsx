@@ -58,7 +58,7 @@ export function NodeActions({ node, onUpdated, adminRole = null, compact = false
 
   if (compact) {
     const iconButtonClass =
-      "h-9 w-9 rounded-xl p-0 text-slate-300 hover:border-accent/40 hover:bg-accent/[0.08] hover:text-white";
+      "h-10 w-10 rounded-xl p-0 text-slate-200 hover:border-accent/40 hover:bg-accent/[0.08] hover:text-white";
 
     return (
       <div className="space-y-2">
@@ -71,7 +71,7 @@ export function NodeActions({ node, onUpdated, adminRole = null, compact = false
               disabled={Boolean(busy)}
               onClick={() => setEditing(true)}
             >
-              <SquarePen size={16} strokeWidth={2.1} />
+              <SquarePen className="h-5 w-5 shrink-0" strokeWidth={2.6} />
             </ActionButton>
           ) : null}
 
@@ -82,7 +82,7 @@ export function NodeActions({ node, onUpdated, adminRole = null, compact = false
             disabled={Boolean(busy)}
             onClick={() => run("maintenance", () => adminApi.maintenanceNode(node.id, !node.maintenanceMode))}
           >
-            <Wrench size={16} strokeWidth={2.1} />
+            <Wrench className="h-5 w-5 shrink-0" strokeWidth={2.6} />
           </ActionButton>
 
           <ActionButton
@@ -92,7 +92,7 @@ export function NodeActions({ node, onUpdated, adminRole = null, compact = false
             disabled={Boolean(busy)}
             onClick={() => run("rotate token", () => adminApi.rotateNodeToken(node.id))}
           >
-            <KeyRound size={16} strokeWidth={2.1} />
+            <KeyRound className="h-5 w-5 shrink-0" strokeWidth={2.6} />
           </ActionButton>
         </ActionBar>
 
