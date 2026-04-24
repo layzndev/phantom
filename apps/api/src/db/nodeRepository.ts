@@ -174,6 +174,10 @@ export function updateNodeRecord(nodeId: string, updates: UpdateNodeRecordInput)
   });
 }
 
+export function deleteNodeRecord(id: string) {
+  return db.node.delete({ where: { id } });
+}
+
 export function createNodeStatusEventRecord(input: {
   nodeId: string;
   previousStatus?: string | null;

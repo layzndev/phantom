@@ -68,6 +68,10 @@ export function NodesTableClient() {
     setNodes((current) => [created, ...current]);
   }
 
+  function removeNode(id: string) {
+    setNodes((current) => current.filter((node) => node.id !== id));
+  }
+
   if (loading) {
     return <SkeletonBlock label="Loading nodes inventory..." />;
   }
@@ -214,7 +218,13 @@ export function NodesTableClient() {
                     className="flex flex-wrap items-center gap-2"
                     onClick={(event) => event.stopPropagation()}
                   >
-                    <NodeActions node={node} onUpdated={replaceNode} adminRole={adminRole} compact />
+                    <NodeActions
+                      node={node}
+                      onUpdated={replaceNode}
+                      onRemoved={removeNode}
+                      adminRole={adminRole}
+                      compact
+                    />
                   </div>
                 )
               }

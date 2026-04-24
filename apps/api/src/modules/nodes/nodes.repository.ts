@@ -1,6 +1,7 @@
 import {
   createNodeRecord,
   createNodeTokenRecord,
+  deleteNodeRecord,
   findNodeRecordById,
   listNodeRecords,
   revokeActiveNodeTokens,
@@ -13,6 +14,10 @@ import {
   type UpdateNodeHeartbeatRecordInput,
   type UpdateNodeRecordInput
 } from "../../db/nodeRepository.js";
+
+export function deleteNodeFromRegistry(id: string) {
+  return deleteNodeRecord(id);
+}
 
 export function listNodesFromRegistry() {
   return listNodeRecords();

@@ -3,7 +3,7 @@ import { asyncHandler } from "../../lib/asyncHandler.js";
 import { validateBody, validateParams } from "../../lib/validate.js";
 import { requireAdmin, requireRole } from "../../middleware/authMiddleware.js";
 import { writeAuditLog } from "../audit/audit.service.js";
-import { createNode, getNode, getNodeSummary, listNodes, rotateNodeToken, setNodeMaintenance, updateNode } from "./nodes.service.js";
+import { createNode, deleteNode, getNode, getNodeSummary, listNodes, rotateNodeToken, setNodeMaintenance, updateNode } from "./nodes.service.js";
 import { createNodeSchema, maintenanceSchema, nodeParamsSchema, updateNodeSchema } from "./nodes.schema.js";
 
 export const nodesController = Router();
@@ -117,5 +117,23 @@ nodesController.post(
       targetId: req.params.id
     });
     res.json({ rotation });
+  })
+);
+
+nodesController.delete(
+  "/:id",
+  requireRole(["superadmin"]),
+  validateParams(nodeParamsSchema),
+  asyncHandler(async (req, res) => {
+    const actor = req.session.admin!;
+    await deleteNode(req.params.id);
+    await writeAuditLog(req, {
+      action: "node.delete",
+      actorId: actor.id,
+      actorEmail: actor.email,
+      targetType: "node",
+      targetId: req.params.id
+    });
+    res.status(204).send();
   })
 );

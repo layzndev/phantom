@@ -49,6 +49,8 @@ export const adminApi = {
       method: "PATCH",
       body: JSON.stringify(payload)
     }),
+  deleteNode: (id: string) =>
+    apiRequest<void>(`/nodes/${encodeURIComponent(id)}`, { method: "DELETE" }),
   maintenanceNode: (id: string, maintenanceMode: boolean) =>
     apiRequest<{ node: CompanyNode }>(`/nodes/${encodeURIComponent(id)}/maintenance`, {
       method: "POST",

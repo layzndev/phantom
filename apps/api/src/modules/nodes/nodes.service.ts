@@ -10,6 +10,7 @@ import type {
 import {
   createNodeInRegistry,
   createNodeTokenInRegistry,
+  deleteNodeFromRegistry,
   findActiveNodeTokenInRegistry,
   findNodeFromRegistry,
   listNodesFromRegistry,
@@ -176,6 +177,15 @@ export async function acceptNodeHeartbeat(
     nodeId,
     receivedAt: new Date().toISOString()
   };
+}
+
+export async function deleteNode(id: string) {
+  const node = await findNodeFromRegistry(id);
+  if (!node) {
+    throw new AppError(404, "Node not found.", "NODE_NOT_FOUND");
+  }
+
+  await deleteNodeFromRegistry(id);
 }
 
 export async function updateNode(id: string, input: UpdateNodeInput) {

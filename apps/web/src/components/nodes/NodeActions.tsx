@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { KeyRound, SquarePen, Wrench } from "lucide-react";
+import { KeyRound, SquarePen, Trash2, Wrench } from "lucide-react";
 import { adminApi } from "@/lib/api/admin-api";
 import type { AdminRole, CompanyNode } from "@/types/admin";
 import { ActionButton } from "@/components/ui/ActionButton";
@@ -9,19 +9,28 @@ import { ActionBar } from "@/components/ui/ActionBar";
 import { EditNodeModal } from "./EditNodeModal";
 
 const EDITABLE_ROLES: ReadonlyArray<AdminRole> = ["superadmin", "ops"];
+const DELETABLE_ROLES: ReadonlyArray<AdminRole> = ["superadmin"];
 
 type NodeActionsProps = {
   node: CompanyNode;
   onUpdated?: (node: CompanyNode) => void;
+  onRemoved?: (nodeId: string) => void;
   adminRole?: AdminRole | null;
   compact?: boolean;
 };
 
-export function NodeActions({ node, onUpdated, adminRole = null, compact = false }: NodeActionsProps) {
+export function NodeActions({
+  node,
+  onUpdated,
+  onRemoved,
+  adminRole = null,
+  compact = false
+}: NodeActionsProps) {
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   async function run(label: string, action: () => Promise<{ node?: CompanyNode } | unknown>) {
     setBusy(label);
@@ -54,7 +63,27 @@ export function NodeActions({ node, onUpdated, adminRole = null, compact = false
     }
   }
 
+  async function handleDelete() {
+    if (!confirmingDelete) {
+      setConfirmingDelete(true);
+      setMessage("Click delete again to confirm");
+      return;
+    }
+    setBusy("delete");
+    setMessage(null);
+    try {
+      await adminApi.deleteNode(node.id);
+      onRemoved?.(node.id);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Delete failed");
+      setConfirmingDelete(false);
+    } finally {
+      setBusy(null);
+    }
+  }
+
   const canEdit = adminRole !== null && EDITABLE_ROLES.includes(adminRole);
+  const canDelete = adminRole !== null && DELETABLE_ROLES.includes(adminRole);
 
   if (compact) {
     const iconButtonClass =
@@ -94,6 +123,22 @@ export function NodeActions({ node, onUpdated, adminRole = null, compact = false
           >
             <KeyRound className="h-5 w-5 shrink-0" strokeWidth={2.6} />
           </ActionButton>
+
+          {canDelete ? (
+            <ActionButton
+              title={confirmingDelete ? "Confirm delete" : "Delete node"}
+              aria-label={confirmingDelete ? "Confirm delete" : "Delete node"}
+              className={
+                confirmingDelete
+                  ? "h-10 w-10 rounded-xl border-red-500/55 bg-red-500/15 p-0 text-red-100 hover:border-red-500/70 hover:bg-red-500/25 hover:text-white"
+                  : "h-10 w-10 rounded-xl border-red-500/25 p-0 text-red-300 hover:border-red-500/50 hover:bg-red-500/10 hover:text-red-200"
+              }
+              disabled={Boolean(busy)}
+              onClick={handleDelete}
+            >
+              <Trash2 className="h-5 w-5 shrink-0" strokeWidth={2.6} />
+            </ActionButton>
+          ) : null}
         </ActionBar>
 
         {token ? (
@@ -139,6 +184,19 @@ export function NodeActions({ node, onUpdated, adminRole = null, compact = false
           <KeyRound size={16} />
           Rotate token
         </ActionButton>
+        {canDelete ? (
+          <ActionButton
+            disabled={Boolean(busy)}
+            onClick={handleDelete}
+            className={
+              confirmingDelete
+                ? "border-red-500/50 bg-red-500/15 text-red-200 hover:border-red-500/60 hover:bg-red-500/25 hover:text-red-100"
+                : "border-red-500/25 text-red-300 hover:border-red-500/45 hover:bg-red-500/10 hover:text-red-200"
+            }
+          >
+            {busy === "delete" ? "Deleting..." : confirmingDelete ? "Confirm delete" : "Delete"}
+          </ActionButton>
+        ) : null}
       </ActionBar>
 
       {message ? <p className="text-sm text-slate-400">{message}</p> : null}

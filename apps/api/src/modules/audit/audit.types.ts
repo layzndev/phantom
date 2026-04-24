@@ -6,6 +6,8 @@ export type AuditAction =
   | "node.create"
   | "node.detail"
   | "node.sync"
+  | "node.update"
+  | "node.delete"
   | "node.maintenance"
   | "node.reconcile"
   | "node.refresh"
