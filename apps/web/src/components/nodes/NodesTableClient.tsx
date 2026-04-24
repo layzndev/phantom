@@ -170,7 +170,10 @@ export function NodesTableClient() {
                 )
               },
               { key: "maintenance", header: "Maint.", cell: (node) => <span className="text-slate-300">{node.maintenanceMode ? "Enabled" : "Disabled"}</span> },
-              { key: "actions", header: "Actions", cell: (node) => <NodeActions node={node} onUpdated={replaceNode} adminRole={adminRole} /> }
+              { key: "actions", header: "Actions", cell: (node) => ( <div className="flex flex-wrap items-center gap-2"> <NodeActions node={node} onUpdated={replaceNode} adminRole={adminRole} compact />
+              </div> 
+                )
+              }
             ]}
           />
         )}

@@ -9,15 +9,19 @@ import { EditNodeModal } from "./EditNodeModal";
 
 const EDITABLE_ROLES: ReadonlyArray<AdminRole> = ["superadmin", "ops"];
 
-export function NodeActions({
-  node,
-  onUpdated,
-  adminRole = null
-}: {
+type NodeActionsProps = {
   node: CompanyNode;
   onUpdated?: (node: CompanyNode) => void;
   adminRole?: AdminRole | null;
-}) {
+  compact?: boolean;
+};
+
+export function NodeActions({
+  node,
+  onUpdated,
+  adminRole = null,
+  compact = false
+}: NodeActionsProps) {
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [token, setToken] = useState<string | null>(null);
@@ -27,11 +31,14 @@ export function NodeActions({
     setBusy(label);
     setMessage(null);
     setToken(null);
+
     try {
       const result = await action();
+
       if (result && typeof result === "object" && "node" in result && result.node) {
         onUpdated?.(result.node as CompanyNode);
       }
+
       if (
         result &&
         typeof result === "object" &&
@@ -42,6 +49,7 @@ export function NodeActions({
       ) {
         setToken(String(result.rotation.token));
       }
+
       setMessage(`${label} accepted`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Action failed");
@@ -52,15 +60,25 @@ export function NodeActions({
 
   const canEdit = adminRole !== null && EDITABLE_ROLES.includes(adminRole);
 
+  const buttonClassName = compact
+    ? "rounded-xl px-3 py-2 text-xs"
+    : undefined;
+
   return (
-    <div className="space-y-3">
-      <ActionBar>
+    <div className={compact ? "space-y-2" : "space-y-3"}>
+      <ActionBar className={compact ? "flex flex-wrap items-center gap-2 rounded-none border-0 bg-transparent p-0" : undefined}>
         {canEdit ? (
-          <ActionButton disabled={Boolean(busy)} onClick={() => setEditing(true)}>
+          <ActionButton
+            className={buttonClassName}
+            disabled={Boolean(busy)}
+            onClick={() => setEditing(true)}
+          >
             Edit
           </ActionButton>
         ) : null}
+
         <ActionButton
+          className={buttonClassName}
           disabled={Boolean(busy)}
           onClick={() =>
             run("maintenance", () => adminApi.maintenanceNode(node.id, !node.maintenanceMode))
@@ -68,14 +86,18 @@ export function NodeActions({
         >
           {node.maintenanceMode ? "Maintenance off" : "Maintenance on"}
         </ActionButton>
+
         <ActionButton
+          className={buttonClassName}
           disabled={Boolean(busy)}
           onClick={() => run("rotate token", () => adminApi.rotateNodeToken(node.id))}
         >
           Rotate token
         </ActionButton>
       </ActionBar>
-      {message ? <p className="text-sm text-slate-400">{message}</p> : null}
+
+      {!compact && message ? <p className="text-sm text-slate-400">{message}</p> : null}
+
       {token ? (
         <div className="rounded-2xl border border-amber/25 bg-amber/[0.08] p-3">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber">
@@ -84,6 +106,7 @@ export function NodeActions({
           <p className="mt-2 break-all font-mono text-xs text-slate-100">{token}</p>
         </div>
       ) : null}
+
       {editing ? (
         <EditNodeModal
           node={node}
