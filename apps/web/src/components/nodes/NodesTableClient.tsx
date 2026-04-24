@@ -3,8 +3,9 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { adminApi } from "@/lib/api/admin-api";
-import { formatDateTime, formatRam, percent } from "@/lib/utils/format";
+import { formatRam, percent } from "@/lib/utils/format";
 import type { AdminRole, CompanyNode, NodeHealth, NodeStatus } from "@/types/admin";
+import { HeartbeatHeart } from "./HeartbeatHeart";
 import { NodeHealthBadge } from "./NodeHealthBadge";
 import { NodeStatusBadge } from "./NodeStatusBadge";
 import { NodeActions } from "./NodeActions";
@@ -151,7 +152,7 @@ export function NodesTableClient() {
                 )
               },
               { key: "runtime", header: "Runtime", cell: (node) => <span className="text-slate-300">{node.runtimeMode}</span> },
-              { key: "heartbeat", header: "Heartbeat", cell: (node) => <span className="text-slate-400">{formatDateTime(node.heartbeat)}</span> },
+              { key: "heartbeat", header: "Heartbeat", cell: (node) => <HeartbeatHeart heartbeat={node.heartbeat} /> },
               {
                 key: "capacity",
                 header: "Capacity",
