@@ -5,7 +5,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 
 export function NodeServersTable({ servers = [] }: { servers?: HostedServer[] }) {
   return (
-    <DetailCard title="Hosted Servers" description="Disponible plus tard avec la synchronisation runtime.">
+    <DetailCard title="Hosted Servers">
       {servers.length === 0 ? (
         <EmptyState title="No hosted servers" description="This node does not currently report hosted servers." />
       ) : (

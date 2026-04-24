@@ -15,7 +15,7 @@ export function NodeCapacityCard({ node }: { node: CompanyNode }) {
   const cpuPercent = percent(node.usedCpu, node.totalCpu);
 
   return (
-    <DetailCard title="Capacity" description="Utilisation agregee RAM et CPU du node.">
+    <DetailCard title="Capacity">
       <div className="space-y-6">
         <div>
           <div className="flex items-center justify-between text-sm">

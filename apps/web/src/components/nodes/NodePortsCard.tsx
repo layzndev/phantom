@@ -51,7 +51,7 @@ export function NodePortsCard({
   }
 
   return (
-    <DetailCard title="Ports" description="Range, ports reserves et capacite disponible.">
+    <DetailCard title="Ports">
       <div className="grid grid-cols-2 gap-4 text-sm">
         <div className="rounded-2xl bg-white/[0.04] p-4">
           <p className="text-slate-400">Range</p>
