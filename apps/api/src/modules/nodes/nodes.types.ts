@@ -11,6 +11,11 @@ export interface NodeStatusEvent {
   createdAt: string;
 }
 
+export interface SuggestedPortRange {
+  start: number;
+  end: number;
+}
+
 export interface CompanyNode {
   id: string;
   name: string;
@@ -29,9 +34,11 @@ export interface CompanyNode {
   hostedServers: number;
   availablePorts: number;
   reservedPorts: number;
-  portRange: string;
-  portRangeStart: number;
-  portRangeEnd: number;
+  portRange: string | null;
+  portRangeStart: number | null;
+  portRangeEnd: number | null;
+  openPorts: number[];
+  suggestedPortRanges: SuggestedPortRange[] | null;
   maintenanceMode: boolean;
   history?: Array<{
     id: string;

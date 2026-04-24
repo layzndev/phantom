@@ -28,6 +28,11 @@ export interface NodeHistoryEvent {
   createdAt: string;
 }
 
+export interface SuggestedPortRange {
+  start: number;
+  end: number;
+}
+
 export interface CompanyNode {
   id: string;
   name: string;
@@ -46,9 +51,11 @@ export interface CompanyNode {
   hostedServers: number;
   availablePorts: number;
   reservedPorts: number;
-  portRange: string;
-  portRangeStart: number;
-  portRangeEnd: number;
+  portRange: string | null;
+  portRangeStart: number | null;
+  portRangeEnd: number | null;
+  openPorts: number[];
+  suggestedPortRanges: SuggestedPortRange[] | null;
   maintenanceMode: boolean;
   hostedServersList?: HostedServer[];
   history?: NodeHistoryEvent[];
@@ -65,8 +72,8 @@ export interface CreateNodePayload {
   runtimeMode: RuntimeMode;
   totalRamMb?: number;
   totalCpu?: number;
-  portRangeStart: number;
-  portRangeEnd: number;
+  portRangeStart?: number;
+  portRangeEnd?: number;
 }
 
 export interface UpdateNodePayload {

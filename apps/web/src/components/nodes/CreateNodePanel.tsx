@@ -12,9 +12,7 @@ const initialForm: CreateNodePayload = {
   region: "",
   internalHost: "",
   publicHost: "",
-  runtimeMode: "remote",
-  portRangeStart: 25000,
-  portRangeEnd: 26000
+  runtimeMode: "remote"
 };
 
 export function CreateNodePanel({ onCreated }: { onCreated: (node: CompanyNode) => void }) {
@@ -82,22 +80,8 @@ export function CreateNodePanel({ onCreated }: { onCreated: (node: CompanyNode) 
               <option value="local">Local</option>
             </select>
           </label>
-          {[
-            ["portRangeStart", "Port start"],
-            ["portRangeEnd", "Port end"]
-          ].map(([key, label]) => (
-            <label key={key} className="block text-sm text-slate-400">
-              {label}
-              <input
-                type="number"
-                value={Number(form[key as keyof CreateNodePayload])}
-                onChange={(event) => setForm((current) => ({ ...current, [key]: Number(event.target.value) }))}
-                className="mt-2 w-full rounded-2xl border border-white/10 bg-white/[0.035] px-4 py-3 text-sm text-white outline-none focus:border-accent/40"
-              />
-            </label>
-          ))}
           <p className="md:col-span-2 xl:col-span-4 rounded-2xl border border-white/5 bg-white/[0.025] px-4 py-3 text-xs text-slate-400">
-            RAM and CPU are detected automatically from the first heartbeat sent by the node runtime.
+            RAM, CPU and port pool are detected automatically from the first heartbeat sent by the node runtime. Phantom will suggest a free port range when available.
           </p>
           <div className="md:col-span-2 xl:col-span-4">
             <ActionButton disabled={busy} type="submit">{busy ? "Creating..." : "Create node and token"}</ActionButton>

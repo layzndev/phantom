@@ -1,4 +1,7 @@
+import { Prisma } from "@prisma/client";
 import { db } from "./client.js";
+
+export type PortRange = { start: number; end: number };
 
 export interface CreateNodeRecordInput {
   id: string;
@@ -10,8 +13,8 @@ export interface CreateNodeRecordInput {
   runtimeMode: string;
   totalRamMb?: number;
   totalCpu?: number;
-  portRangeStart: number;
-  portRangeEnd: number;
+  portRangeStart?: number;
+  portRangeEnd?: number;
 }
 
 export function listNodeRecords() {
@@ -107,6 +110,8 @@ export interface UpdateNodeHeartbeatRecordInput {
   usedCpu: number;
   totalRamMb?: number;
   totalCpu?: number;
+  openPorts?: number[];
+  suggestedPortRanges?: PortRange[];
 }
 
 export function updateNodeHeartbeatRecord(
@@ -122,6 +127,10 @@ export function updateNodeHeartbeatRecord(
       usedCpu: updates.usedCpu,
       ...(updates.totalRamMb !== undefined ? { totalRamMb: updates.totalRamMb } : {}),
       ...(updates.totalCpu !== undefined ? { totalCpu: updates.totalCpu } : {}),
+      ...(updates.openPorts !== undefined ? { openPorts: { set: updates.openPorts } } : {}),
+      ...(updates.suggestedPortRanges !== undefined
+        ? { suggestedPortRanges: updates.suggestedPortRanges as unknown as Prisma.InputJsonValue }
+        : {}),
       lastHeartbeatAt: new Date(),
       updatedAt: new Date()
     },

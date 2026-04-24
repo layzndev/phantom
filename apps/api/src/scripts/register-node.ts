@@ -23,24 +23,35 @@ async function ask(question: string, fallback?: string) {
   return answer.trim();
 }
 
+async function askOptional(question: string, fallback?: string) {
+  const value = await ask(question, fallback);
+  return value === "" ? undefined : value;
+}
+
 async function main() {
   if (!process.env.DATABASE_URL) {
     throw new Error("DATABASE_URL is required to register a Phantom node.");
   }
 
-  const payload = {
+  const payload: Record<string, unknown> = {
     id: await ask("Node id: ", process.env.NODE_ID),
     name: await ask("Node name: ", process.env.NODE_NAME),
     provider: await ask("Provider: ", process.env.NODE_PROVIDER),
     region: await ask("Region: ", process.env.NODE_REGION),
     internalHost: await ask("Internal host: ", process.env.NODE_INTERNAL_HOST),
     publicHost: await ask("Public host: ", process.env.NODE_PUBLIC_HOST),
-    runtimeMode: await ask("Runtime mode (local|remote) [remote]: ", process.env.NODE_RUNTIME_MODE ?? "remote"),
-    totalRamMb: await ask("Total RAM MB: ", process.env.NODE_TOTAL_RAM_MB),
-    totalCpu: await ask("Total CPU cores: ", process.env.NODE_TOTAL_CPU),
-    portRangeStart: await ask("Port range start: ", process.env.NODE_PORT_RANGE_START),
-    portRangeEnd: await ask("Port range end: ", process.env.NODE_PORT_RANGE_END)
+    runtimeMode: await ask("Runtime mode (local|remote) [remote]: ", process.env.NODE_RUNTIME_MODE ?? "remote")
   };
+
+  const totalRamMb = await askOptional("Total RAM MB [auto from heartbeat]: ", process.env.NODE_TOTAL_RAM_MB);
+  const totalCpu = await askOptional("Total CPU cores [auto from heartbeat]: ", process.env.NODE_TOTAL_CPU);
+  const portRangeStart = await askOptional("Port range start [auto from heartbeat]: ", process.env.NODE_PORT_RANGE_START);
+  const portRangeEnd = await askOptional("Port range end [auto from heartbeat]: ", process.env.NODE_PORT_RANGE_END);
+
+  if (totalRamMb !== undefined) payload.totalRamMb = totalRamMb;
+  if (totalCpu !== undefined) payload.totalCpu = totalCpu;
+  if (portRangeStart !== undefined) payload.portRangeStart = portRangeStart;
+  if (portRangeEnd !== undefined) payload.portRangeEnd = portRangeEnd;
 
   const parsed = createNodeSchema.parse(payload);
   const result = await createNode(parsed);

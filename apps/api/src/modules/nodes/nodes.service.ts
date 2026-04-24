@@ -121,6 +121,8 @@ export async function acceptNodeHeartbeat(
     diskUsedGb?: number;
     totalRamMb?: number;
     totalCpu?: number;
+    openPorts?: number[];
+    portRanges?: Array<{ start: number; end: number }>;
   }
 ) {
   const node = await findNodeFromRegistry(nodeId);
@@ -155,7 +157,9 @@ export async function acceptNodeHeartbeat(
     usedRamMb: payload.ramUsedMb ?? 0,
     usedCpu: payload.cpuUsed ?? 0,
     totalRamMb: payload.totalRamMb,
-    totalCpu: payload.totalCpu
+    totalCpu: payload.totalCpu,
+    openPorts: payload.openPorts,
+    suggestedPortRanges: payload.portRanges
   });
 
   if (node.status !== nextStatus) {
@@ -182,7 +186,11 @@ export async function updateNode(id: string, input: UpdateNodeInput) {
 
   const effectivePortStart = input.portRangeStart ?? node.portRangeStart;
   const effectivePortEnd = input.portRangeEnd ?? node.portRangeEnd;
-  if (effectivePortEnd < effectivePortStart) {
+  if (
+    effectivePortStart !== null &&
+    effectivePortEnd !== null &&
+    effectivePortEnd < effectivePortStart
+  ) {
     throw new AppError(
       400,
       "portRangeEnd must be greater than or equal to portRangeStart.",
@@ -203,8 +211,12 @@ function hashNodeToken(token: string) {
 }
 
 function toCompanyNode(node: NonNullNodeRecord): CompanyNode {
-  const portRange = `${node.portRangeStart}-${node.portRangeEnd}`;
-  const totalPorts = node.portRangeEnd - node.portRangeStart + 1;
+  const hasRange = node.portRangeStart !== null && node.portRangeEnd !== null;
+  const portRange = hasRange ? `${node.portRangeStart}-${node.portRangeEnd}` : null;
+  const totalPorts = hasRange ? (node.portRangeEnd as number) - (node.portRangeStart as number) + 1 : 0;
+  const suggestedPortRanges = Array.isArray(node.suggestedPortRanges)
+    ? (node.suggestedPortRanges as Array<{ start: number; end: number }>)
+    : null;
 
   return {
     id: node.id,
@@ -227,6 +239,8 @@ function toCompanyNode(node: NonNullNodeRecord): CompanyNode {
     portRange,
     portRangeStart: node.portRangeStart,
     portRangeEnd: node.portRangeEnd,
+    openPorts: node.openPorts ?? [],
+    suggestedPortRanges,
     maintenanceMode: node.maintenanceMode,
     history: node.statusEvents.map((event) => ({
       id: event.id,

@@ -10,6 +10,16 @@ const totalRamField = z.coerce.number().int().positive().max(2_097_152);
 const totalCpuField = z.coerce.number().positive().max(4096);
 const portField = z.coerce.number().int().min(1).max(65535);
 
+const portRangeShape = z
+  .object({
+    start: portField,
+    end: portField
+  })
+  .refine((value) => value.end >= value.start, {
+    message: "portRanges[].end must be greater than or equal to start.",
+    path: ["end"]
+  });
+
 export const createNodeSchema = z
   .object({
     id: z.string().min(3).max(128).regex(/^[a-zA-Z0-9._:-]+$/),
@@ -21,13 +31,27 @@ export const createNodeSchema = z
     runtimeMode: z.enum(["local", "remote"]).default("remote"),
     totalRamMb: totalRamField.optional(),
     totalCpu: totalCpuField.optional(),
-    portRangeStart: portField,
-    portRangeEnd: portField
+    portRangeStart: portField.optional(),
+    portRangeEnd: portField.optional()
   })
-  .refine((value) => value.portRangeEnd >= value.portRangeStart, {
-    message: "portRangeEnd must be greater than or equal to portRangeStart.",
-    path: ["portRangeEnd"]
-  });
+  .refine(
+    (value) =>
+      (value.portRangeStart === undefined) === (value.portRangeEnd === undefined),
+    {
+      message: "portRangeStart and portRangeEnd must be provided together or both omitted.",
+      path: ["portRangeEnd"]
+    }
+  )
+  .refine(
+    (value) =>
+      value.portRangeStart === undefined ||
+      value.portRangeEnd === undefined ||
+      value.portRangeEnd >= value.portRangeStart,
+    {
+      message: "portRangeEnd must be greater than or equal to portRangeStart.",
+      path: ["portRangeEnd"]
+    }
+  );
 
 export const updateNodeSchema = z
   .object({
@@ -68,5 +92,7 @@ export const nodeHeartbeatSchema = z.object({
   ramUsedMb: z.coerce.number().min(0).optional(),
   diskUsedGb: z.coerce.number().min(0).optional(),
   totalRamMb: totalRamField.optional(),
-  totalCpu: totalCpuField.optional()
+  totalCpu: totalCpuField.optional(),
+  openPorts: z.array(portField).max(10_000).optional(),
+  portRanges: z.array(portRangeShape).max(100).optional()
 });

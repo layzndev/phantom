@@ -26,10 +26,10 @@ function toForm(node: CompanyNode): FormState {
     internalHost: node.internalHost,
     publicHost: node.publicHost,
     runtimeMode: node.runtimeMode,
-    totalRamMb: String(node.totalRamMb),
-    totalCpu: String(node.totalCpu),
-    portRangeStart: String(node.portRangeStart),
-    portRangeEnd: String(node.portRangeEnd)
+    totalRamMb: node.totalRamMb ? String(node.totalRamMb) : "",
+    totalCpu: node.totalCpu ? String(node.totalCpu) : "",
+    portRangeStart: node.portRangeStart !== null ? String(node.portRangeStart) : "",
+    portRangeEnd: node.portRangeEnd !== null ? String(node.portRangeEnd) : ""
   };
 }
 
@@ -57,11 +57,11 @@ function diffPayload(initial: FormState, current: FormState): UpdateNodePayload 
     "portRangeEnd"
   ];
   for (const key of numberKeys) {
-    if (initial[key] !== current[key]) {
-      const parsed = Number(current[key]);
-      if (Number.isFinite(parsed)) {
-        payload[key] = parsed;
-      }
+    if (initial[key] === current[key]) continue;
+    if (current[key].trim() === "") continue;
+    const parsed = Number(current[key]);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      payload[key] = parsed;
     }
   }
   return payload;

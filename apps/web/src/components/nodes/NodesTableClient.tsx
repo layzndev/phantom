@@ -170,9 +170,18 @@ export function NodesTableClient() {
                 header: "Ports",
                 cell: (node) => (
                   <div className="text-slate-300">
-                    <p>{node.availablePorts} available</p>
-                    <p className="text-xs text-slate-500">{node.reservedPorts} reserved</p>
-                    <p className="text-xs text-slate-500">{node.portRange}</p>
+                    {node.portRange ? (
+                      <>
+                        <p>{node.availablePorts} available</p>
+                        <p className="text-xs text-slate-500">{node.reservedPorts} reserved</p>
+                        <p className="text-xs text-slate-500">{node.portRange}</p>
+                      </>
+                    ) : (
+                      <p className="text-xs text-slate-500">Awaiting heartbeat</p>
+                    )}
+                    {node.openPorts.length > 0 ? (
+                      <p className="mt-1 text-xs text-slate-500">{node.openPorts.length} open detected</p>
+                    ) : null}
                   </div>
                 )
               },

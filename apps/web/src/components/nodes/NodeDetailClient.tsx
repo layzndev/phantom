@@ -93,7 +93,7 @@ export function NodeDetailClient({ id }: { id: string }) {
 
       <section className="grid gap-6 xl:grid-cols-2">
         <NodeCapacityCard node={node} />
-        <NodePortsCard node={node} />
+        <NodePortsCard node={node} adminRole={adminRole} onUpdated={setNode} />
       </section>
 
       <NodeServersTable servers={node.hostedServersList} />
