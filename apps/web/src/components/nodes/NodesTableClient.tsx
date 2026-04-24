@@ -6,8 +6,6 @@ import { adminApi } from "@/lib/api/admin-api";
 import { formatRam, percent } from "@/lib/utils/format";
 import type { AdminRole, CompanyNode, NodeHealth, NodeStatus } from "@/types/admin";
 import { HeartbeatHeart } from "./HeartbeatHeart";
-import { NodeHealthBadge } from "./NodeHealthBadge";
-import { NodeStatusBadge } from "./NodeStatusBadge";
 import { NodeActions } from "./NodeActions";
 import { DataTable } from "@/components/ui/DataTable";
 import { SectionHeader } from "@/components/ui/SectionHeader";
@@ -136,16 +134,6 @@ export function NodesTableClient() {
                     <p className="font-mono text-xs text-slate-300">{node.internalHost}</p>
                     <p className="mt-1 font-mono text-xs text-slate-500">{node.publicHost}</p>
                   </>
-                )
-              },
-              {
-                key: "state",
-                header: "State",
-                cell: (node) => (
-                  <div className="space-y-2">
-                    <NodeStatusBadge status={node.status} />
-                    <NodeHealthBadge health={node.health} />
-                  </div>
                 )
               },
               { key: "region", header: "Region", cell: (node) => <span className="text-slate-300">{node.region}</span> },
