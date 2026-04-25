@@ -2,6 +2,7 @@ import { loadConfig } from "./config.js";
 import { DockerRuntime } from "./docker.js";
 import { PhantomAgent } from "./agent.js";
 import { Logger } from "./logger.js";
+import { MinecraftOperationsProcessor } from "./minecraft.js";
 import { PhantomApiClient } from "./phantom-api.js";
 import { WorkloadReconciler } from "./reconciler.js";
 
@@ -14,13 +15,15 @@ async function main() {
     nodeId: config.nodeId,
     apiUrl: config.apiUrl,
     pollIntervalMs: config.pollIntervalMs,
-    heartbeatIntervalMs: config.heartbeatIntervalMs
+    heartbeatIntervalMs: config.heartbeatIntervalMs,
+    dataDir: config.dataDir
   });
 
   const api = new PhantomApiClient(config);
-  const docker = new DockerRuntime(logger);
+  const docker = new DockerRuntime(logger, { dataDir: config.dataDir });
   const reconciler = new WorkloadReconciler(config, api, docker, logger);
-  const agent = new PhantomAgent(reconciler, logger, config.pollIntervalMs);
+  const minecraftOps = new MinecraftOperationsProcessor(api, docker, logger);
+  const agent = new PhantomAgent(reconciler, minecraftOps, logger, config.pollIntervalMs);
 
   const shutdown = async (signal: string) => {
     logger.info("shutdown requested", { signal });

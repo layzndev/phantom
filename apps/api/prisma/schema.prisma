@@ -165,8 +165,10 @@ model Workload {
   updatedAt       DateTime  @updatedAt       @map("updated_at")
   deletedAt       DateTime? @map("deleted_at")
 
-  ports           WorkloadPort[]
-  statusEvents    WorkloadStatusEvent[]
+  ports               WorkloadPort[]
+  statusEvents        WorkloadStatusEvent[]
+  minecraftServer     MinecraftServer?
+  minecraftOperations MinecraftOperation[]
 
   @@index([nodeId])
   @@index([status])
@@ -202,4 +204,50 @@ model WorkloadStatusEvent {
   @@index([workloadId])
   @@index([createdAt])
   @@map("workload_status_events")
+}
+
+model MinecraftServer {
+  id               String    @id @default(uuid())
+  name             String
+  slug             String    @unique
+  workloadId       String    @unique @map("workload_id")
+  workload         Workload  @relation(fields: [workloadId], references: [id], onDelete: Cascade)
+  templateId       String    @map("template_id")
+  minecraftVersion String    @map("minecraft_version")
+  motd             String?
+  difficulty       String    @default("normal")
+  gameMode         String    @default("survival") @map("game_mode")
+  maxPlayers       Int       @default(20) @map("max_players")
+  eula             Boolean   @default(false)
+  serverProperties Json      @default("{}") @map("server_properties")
+  rconPassword     String?   @map("rcon_password")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+  deletedAt        DateTime? @map("deleted_at")
+
+  @@index([templateId])
+  @@index([deletedAt])
+  @@map("minecraft_servers")
+}
+
+model MinecraftOperation {
+  id          String    @id @default(uuid())
+  workloadId  String    @map("workload_id")
+  workload    Workload  @relation(fields: [workloadId], references: [id], onDelete: Cascade)
+  kind        String
+  payload     Json      @default("{}")
+  status      String    @default("pending")
+  result      Json?
+  error       String?
+  actorId     String?   @map("actor_id")
+  actorEmail  String?   @map("actor_email")
+  attempts    Int       @default(0)
+  createdAt   DateTime  @default(now()) @map("created_at")
+  startedAt   DateTime? @map("started_at")
+  completedAt DateTime? @map("completed_at")
+
+  @@index([workloadId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("minecraft_operations")
 }

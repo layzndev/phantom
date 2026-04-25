@@ -153,11 +153,27 @@ export class WorkloadReconciler {
     }
 
     if (container.running) {
-      await this.docker.stopContainer(container.id);
+      const timeoutSeconds = this.docker.getStopTimeoutSeconds(workload.config);
+      const gracefulCommand = readGracefulStopCommand(workload);
+      if (gracefulCommand) {
+        try {
+          await this.docker.execInContainer(container.id, ["rcon-cli", gracefulCommand]);
+          this.logger.debug("graceful stop command issued", {
+            workloadId: workload.id,
+            command: gracefulCommand
+          });
+        } catch (error) {
+          this.logger.warn("graceful stop command failed", {
+            workloadId: workload.id,
+            error: error instanceof Error ? error.message : "unknown"
+          });
+        }
+      }
+      await this.docker.stopContainer(container.id, { timeoutSeconds });
       await this.api.sendEvent(workload.id, {
         type: "stopped",
         status: "stopped",
-        reason: "container stopped gracefully"
+        reason: `container stopped gracefully (timeout=${timeoutSeconds}s)`
       });
       const inspected = await this.docker.inspectContainer(container.id);
       await this.sendHeartbeat(workload, inspected, "container stopped", true, "stopped");
@@ -231,6 +247,15 @@ function mapContainerToRuntimeStatus(
   }
 
   return "stopped";
+}
+
+function readGracefulStopCommand(workload: AssignedWorkload): string | null {
+  const minecraft = workload.config?.minecraft;
+  if (!minecraft || typeof minecraft !== "object") {
+    return null;
+  }
+  const value = (minecraft as Record<string, unknown>).gracefulStopCommand;
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
 
 function groupByWorkloadId(containers: DockerContainerSummary[]) {

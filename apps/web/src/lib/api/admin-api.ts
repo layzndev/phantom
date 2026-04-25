@@ -11,7 +11,10 @@ import type {
   UpdateWorkloadPayload
 } from "@/types/admin";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_ADMIN_API_URL ?? "http://localhost:4200";
+export const ADMIN_API_BASE_URL =
+  process.env.NEXT_PUBLIC_ADMIN_API_URL ?? "http://localhost:4200";
+
+const API_BASE_URL = ADMIN_API_BASE_URL;
 
 async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
