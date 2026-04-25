@@ -25,7 +25,8 @@ export interface MinecraftManagementTransport {
       onLine: (line: string) => void;
       onError?: (error: Error) => void;
       onClose?: () => void;
-    }
+    },
+    options?: { since?: string | null }
   ): { stop: () => void };
   getStatus(target: MinecraftManagementTarget): Promise<"running" | "stopped" | "missing">;
 }
@@ -71,11 +72,19 @@ export class DockerMinecraftManagementTransport implements MinecraftManagementTr
       onLine: (line: string) => void;
       onError?: (error: Error) => void;
       onClose?: () => void;
-    }
+    },
+    options: { since?: string | null } = {}
   ) {
+    const args = ["logs", "--timestamps"];
+    if (options.since) {
+      args.push("--since", options.since);
+    } else {
+      args.push("--tail", "40");
+    }
+    args.push("--follow", target.containerId);
     const child = spawn(
       "docker",
-      ["logs", "--timestamps", "--tail", "40", "--follow", target.containerId],
+      args,
       { stdio: ["ignore", "pipe", "pipe"] }
     );
 

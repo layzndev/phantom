@@ -217,12 +217,14 @@ export async function startMinecraftServer(id: string) {
   const updatedServer = await updateMinecraftServerRecord(record.id, {
     sleepingAt: null,
     sleepRequestedAt: null,
+    wakeRequestedAt: new Date(),
+    readyAt: null,
     idleSince: null,
     lastActivityAt: new Date()
   });
   const workload = await startWorkload(record.workloadId);
   publishPhantomConsoleLifecycle(record.id, "Waking server...");
-  minecraftConsoleGateway.publishStatus(record.id, workload.status);
+  minecraftConsoleGateway.publishStatus(record.id, "waking");
   return { server: toMinecraftServer(updatedServer), workload };
 }
 
@@ -230,11 +232,13 @@ export async function stopMinecraftServer(id: string) {
   const record = await ensureMinecraftServerRecord(id);
   const updatedServer = await updateMinecraftServerRecord(record.id, {
     sleepRequestedAt: null,
-    sleepingAt: null
+    sleepingAt: null,
+    wakeRequestedAt: null,
+    readyAt: null
   });
   const workload = await stopWorkload(record.workloadId);
   publishPhantomConsoleLifecycle(record.id, "Stopping server...");
-  minecraftConsoleGateway.publishStatus(record.id, workload.status);
+  minecraftConsoleGateway.publishStatus(record.id, "stopping");
   return { server: toMinecraftServer(updatedServer), workload };
 }
 
@@ -243,12 +247,14 @@ export async function restartMinecraftServer(id: string) {
   const updatedServer = await updateMinecraftServerRecord(record.id, {
     sleepingAt: null,
     sleepRequestedAt: null,
+    wakeRequestedAt: new Date(),
+    readyAt: null,
     idleSince: null,
     lastActivityAt: new Date()
   });
   const workload = await restartWorkload(record.workloadId);
   publishPhantomConsoleLifecycle(record.id, "Restarting server...");
-  minecraftConsoleGateway.publishStatus(record.id, workload.status);
+  minecraftConsoleGateway.publishStatus(record.id, "starting");
   return { server: toMinecraftServer(updatedServer), workload };
 }
 
@@ -297,7 +303,18 @@ export async function enqueueMinecraftOperation(
 ): Promise<MinecraftOperationResponse> {
   const record = await ensureMinecraftServerRecord(serverId);
   const workload = await getWorkload(record.workloadId);
-  if (workload.status !== "running") {
+  const runtimeState = deriveMinecraftRuntimeState(record, workload);
+  const requiresReady = kind === "command" || kind === "save" || kind === "players";
+
+  if (requiresReady && runtimeState !== "running") {
+    throw new AppError(
+      409,
+      "Minecraft server is still starting. Wait until it is ready.",
+      "MINECRAFT_SERVER_NOT_READY"
+    );
+  }
+
+  if (kind === "stop" && !["running", "starting", "waking", "stopping"].includes(runtimeState)) {
     throw new AppError(
       409,
       "Minecraft server is not running.",
@@ -364,6 +381,7 @@ export interface RuntimeMinecraftConsoleStream {
   serverId: string;
   workloadId: string;
   containerId: string | null;
+  runtimeStartedAt: string | null;
 }
 
 export interface RuntimeMinecraftRoutingResult {
@@ -413,7 +431,8 @@ export async function listRuntimeMinecraftConsoleStreams(rawToken: string) {
     streams.push({
       serverId: entry.serverId,
       workloadId: workload.id,
-      containerId: workload.containerId
+      containerId: workload.containerId,
+      runtimeStartedAt: workload.runtimeStartedAt?.toISOString() ?? null
     });
   }
 
@@ -435,7 +454,7 @@ export async function getRuntimeMinecraftRouting(rawToken: string, hostname: str
 
   return {
     serverId: record.id,
-    status: record.sleepingAt ? "sleeping" : workload.status,
+    status: deriveMinecraftRuntimeState(record, workload),
     nodeId: workload.nodeId,
     host: node?.publicHost ?? null,
     port: gamePort,
@@ -483,7 +502,9 @@ export async function completeRuntimeMinecraftOperation(
   });
 
   if (payload.status === "failed") {
-    minecraftConsoleGateway.publishError(op.workloadId, payload.error ?? "operation failed");
+    if (shouldSurfaceMinecraftOperationError(op, payload.error ?? "")) {
+      minecraftConsoleGateway.publishError(op.workloadId, payload.error ?? "operation failed");
+    }
   } else {
     await processMinecraftOperationSideEffects(op, completed);
     const output = formatMinecraftOperationOutput(
@@ -579,6 +600,7 @@ export async function runMinecraftAutoSleepTick() {
     await updateMinecraftServerRecord(record.id, {
       sleepRequestedAt: new Date()
     });
+    minecraftConsoleGateway.publishStatus(record.id, "stopping");
     await stopWorkload(record.workloadId);
     await createAuditLog({
       action: "minecraft.server.autosleep",
@@ -603,7 +625,7 @@ export async function publishRuntimeMinecraftConsoleLogs(
   payload: { lines: string[] }
 ) {
   const node = await authenticateRuntimeNode(rawToken);
-  const record = await ensureMinecraftServerRecord(serverId);
+  let record = await ensureMinecraftServerRecord(serverId);
   const workload = await findWorkloadFromRegistry(record.workloadId);
   if (!workload || workload.nodeId !== node.id || workload.type !== "minecraft") {
     throw new AppError(404, "Minecraft server not found.", "MINECRAFT_SERVER_NOT_FOUND");
@@ -614,8 +636,33 @@ export async function publishRuntimeMinecraftConsoleLogs(
     .filter((line) => line.length > 0)
     .slice(0, 200);
 
+  const workloadRecord = await getWorkload(record.workloadId);
+  let readyPromoted = false;
+  for (const line of lines) {
+    if (isMinecraftReadyLog(line)) {
+      if (record.readyAt === null) {
+        record = await updateMinecraftServerRecord(record.id, {
+          readyAt: new Date(),
+          wakeRequestedAt: null,
+          sleepRequestedAt: null
+        });
+        publishPhantomConsoleLifecycle(record.id, "Server marked as running");
+        minecraftConsoleGateway.publishStatus(record.id, "running");
+        readyPromoted = true;
+      }
+      break;
+    }
+  }
+
   if (lines.length > 0) {
     minecraftConsoleGateway.publishLogs(serverId, lines);
+  }
+
+  if (!readyPromoted) {
+    const runtimeState = deriveMinecraftRuntimeState(record, workloadRecord);
+    if (runtimeState !== "running") {
+      minecraftConsoleGateway.publishStatus(record.id, runtimeState);
+    }
   }
 
   return { ok: true };
@@ -787,6 +834,7 @@ function toMinecraftServer(record: MinecraftServerRecord): MinecraftServer {
     eula: record.eula,
     planTier: record.planTier as PlanTier,
     autoSleepEnabled: record.autoSleepEnabled,
+    runtimeState: record.sleepingAt !== null ? "sleeping" : "stopped",
     sleeping: record.sleepingAt !== null,
     currentPlayerCount: record.currentPlayerCount,
     idleSince: record.idleSince?.toISOString() ?? null,
@@ -795,6 +843,8 @@ function toMinecraftServer(record: MinecraftServerRecord): MinecraftServer {
     lastConsoleCommandAt: record.lastConsoleCommandAt?.toISOString() ?? null,
     sleepRequestedAt: record.sleepRequestedAt?.toISOString() ?? null,
     sleepingAt: record.sleepingAt?.toISOString() ?? null,
+    wakeRequestedAt: record.wakeRequestedAt?.toISOString() ?? null,
+    readyAt: record.readyAt?.toISOString() ?? null,
     serverProperties: (record.serverProperties as Record<string, unknown>) ?? {},
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
@@ -807,8 +857,10 @@ async function toMinecraftServerWithRuntime(
   workload: CompanyWorkload
 ): Promise<MinecraftServerWithWorkload> {
   const node = workload.nodeId ? await findNodeFromRegistry(workload.nodeId) : null;
+  const server = toMinecraftServer(record);
+  server.runtimeState = deriveMinecraftRuntimeState(record, workload);
   return {
-    server: toMinecraftServer(record),
+    server,
     workload,
     node: node
       ? {
@@ -915,10 +967,22 @@ async function processMinecraftOperationSideEffects(
 }
 
 function sanitizeConsoleLogLine(line: string) {
-  return line.replace(
+  const sanitized = line.replace(
     /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})\s+/,
     ""
   );
+  if (
+    /container .* is not running/i.test(sanitized) ||
+    /rcon.*connection refused/i.test(sanitized)
+  ) {
+    return "";
+  }
+  return sanitized;
+}
+
+function isMinecraftReadyLog(line: string) {
+  const sanitized = sanitizeConsoleLogLine(line);
+  return /\bDone \([^)]+\)! For help, type "help"/.test(sanitized);
 }
 
 function sanitizeCommandResultOutput(output: string) {
@@ -932,6 +996,54 @@ function sanitizeCommandResultOutput(output: string) {
 
 function publishPhantomConsoleLifecycle(serverId: string, message: string) {
   minecraftConsoleGateway.publishLogs(serverId, [`__PHANTOM__ ${message}`]);
+}
+
+function shouldSurfaceMinecraftOperationError(op: MinecraftOperationRecord, error: string) {
+  const normalized = error.trim().toLowerCase();
+  const payload = (op.payload as Record<string, unknown> | null) ?? null;
+  const source = typeof payload?.source === "string" ? payload.source : null;
+
+  if (
+    normalized.includes("container is not running") ||
+    normalized.includes("connection refused")
+  ) {
+    if (op.kind === "players" || source === "autosleep") {
+      return false;
+    }
+  }
+
+  return normalized.length > 0;
+}
+
+function deriveMinecraftRuntimeState(
+  record: MinecraftServerRecord,
+  workload: CompanyWorkload
+): MinecraftServer["runtimeState"] {
+  if (record.sleepingAt !== null) {
+    return "sleeping";
+  }
+  if (record.sleepRequestedAt !== null) {
+    return "stopping";
+  }
+  if (workload.status === "crashed") {
+    return "crashed";
+  }
+  if (workload.status === "stopped") {
+    return "stopped";
+  }
+  if (workload.status === "queued_start" || workload.status === "pending") {
+    return "waking";
+  }
+  if (workload.status === "creating") {
+    return record.wakeRequestedAt !== null ? "waking" : "starting";
+  }
+  if (workload.status === "running") {
+    if (record.readyAt !== null) {
+      return "running";
+    }
+    return record.wakeRequestedAt !== null ? "waking" : "starting";
+  }
+  return "starting";
 }
 
 async function prepareMinecraftServerForDelete(record: MinecraftServerRecord) {

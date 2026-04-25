@@ -444,6 +444,14 @@ function describeStatusTransition(status: string) {
   switch (status) {
     case "running":
       return "Server marked as running";
+    case "waking":
+      return "Waking server";
+    case "starting":
+      return "Starting Minecraft";
+    case "stopping":
+      return "Stopping server";
+    case "sleeping":
+      return "Server marked as sleeping";
     case "stopped":
       return "Server marked as stopped";
     case "creating":

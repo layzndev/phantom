@@ -8,7 +8,6 @@ import { DataTable } from "@/components/ui/DataTable";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { SkeletonBlock } from "@/components/ui/SkeletonBlock";
-import { WorkloadStatusBadge } from "@/components/workloads/WorkloadStatusBadge";
 import { formatCpu, formatDisk, formatRam } from "@/lib/utils/format";
 import type { MinecraftServerWithWorkload } from "@/types/admin";
 
@@ -156,8 +155,7 @@ export function MinecraftServicesClient() {
               {
                 key: "status",
                 header: "Status",
-                cell: ({ server, workload }) =>
-                  server.sleeping ? <StatusChip label="Sleeping" /> : <WorkloadStatusBadge status={workload.status} />
+                cell: ({ server }) => <StatusChip label={formatRuntimeState(server.runtimeState)} />
               },
               {
                 key: "port",
@@ -216,4 +214,23 @@ function StatusChip({ label }: { label: string }) {
       {label}
     </span>
   );
+}
+
+function formatRuntimeState(value: MinecraftServerWithWorkload["server"]["runtimeState"]) {
+  switch (value) {
+    case "sleeping":
+      return "Sleeping";
+    case "waking":
+      return "Waking";
+    case "starting":
+      return "Starting";
+    case "stopping":
+      return "Stopping";
+    case "running":
+      return "Running";
+    case "crashed":
+      return "Crashed";
+    default:
+      return "Stopped";
+  }
 }

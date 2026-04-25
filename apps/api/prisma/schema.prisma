@@ -257,6 +257,8 @@ model MinecraftServer {
   idleSince         DateTime? @map("idle_since")
   sleepRequestedAt  DateTime? @map("sleep_requested_at")
   sleepingAt        DateTime? @map("sleeping_at")
+  wakeRequestedAt   DateTime? @map("wake_requested_at")
+  readyAt           DateTime? @map("ready_at")
   serverProperties Json      @default("{}") @map("server_properties")
   rconPassword     String?   @map("rcon_password")
   createdAt        DateTime  @default(now()) @map("created_at")

@@ -55,6 +55,14 @@ export class MinecraftConsoleStreamManager {
             this.stopFollower(stream.workloadId);
           }
           this.startFollower(stream);
+          continue;
+        }
+
+        if (current.stream.runtimeStartedAt !== stream.runtimeStartedAt) {
+          if (current) {
+            this.stopFollower(stream.workloadId);
+          }
+          this.startFollower(stream);
         }
       }
 
@@ -112,7 +120,8 @@ export class MinecraftConsoleStreamManager {
             error: error.message
           });
         }
-      }
+      },
+      { since: stream.runtimeStartedAt }
     ).stop;
 
     this.followers.set(stream.workloadId, follower);

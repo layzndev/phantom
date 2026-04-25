@@ -4,6 +4,14 @@ export type MinecraftDifficulty = "peaceful" | "easy" | "normal" | "hard";
 export type MinecraftGameMode = "survival" | "creative" | "adventure" | "spectator";
 export type PlanTier = "free" | "premium";
 export type MinecraftDnsStatus = "wildcard" | "disabled" | "pending" | "active" | "failed";
+export type MinecraftRuntimeState =
+  | "sleeping"
+  | "waking"
+  | "starting"
+  | "running"
+  | "stopping"
+  | "stopped"
+  | "crashed";
 
 export const PLAN_TIERS: readonly PlanTier[] = ["free", "premium"] as const;
 
@@ -27,6 +35,7 @@ export interface MinecraftServer {
   eula: boolean;
   planTier: PlanTier;
   autoSleepEnabled: boolean;
+  runtimeState: MinecraftRuntimeState;
   sleeping: boolean;
   currentPlayerCount: number;
   idleSince: string | null;
@@ -35,6 +44,8 @@ export interface MinecraftServer {
   lastConsoleCommandAt: string | null;
   sleepRequestedAt: string | null;
   sleepingAt: string | null;
+  wakeRequestedAt: string | null;
+  readyAt: string | null;
   serverProperties: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;

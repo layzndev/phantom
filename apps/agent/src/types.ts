@@ -170,6 +170,7 @@ export interface RuntimeMinecraftConsoleStream {
   serverId: string;
   workloadId: string;
   containerId: string | null;
+  runtimeStartedAt: string | null;
 }
 
 export interface RuntimeMinecraftConsoleStreamsResponse {

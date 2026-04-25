@@ -7,7 +7,6 @@ import { adminApi } from "@/lib/api/admin-api";
 import { DetailCard } from "@/components/ui/DetailCard";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { SkeletonBlock } from "@/components/ui/SkeletonBlock";
-import { WorkloadStatusBadge } from "@/components/workloads/WorkloadStatusBadge";
 import {
   formatCpu,
   formatDateTime,
@@ -124,7 +123,7 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
               description="Dedicated admin view on top of the Phantom workload runtime."
             />
             <div className="mt-4 flex flex-wrap items-center gap-2">
-              {entry.server.sleeping ? <StatePill label="Sleeping" /> : <WorkloadStatusBadge status={entry.workload.status} />}
+              <StatePill label={formatRuntimeState(entry.server.runtimeState)} />
               <span className="rounded-full border border-white/10 bg-white/[0.035] px-3 py-1 font-mono text-[11px] text-slate-300">
                 {entry.server.templateId}
               </span>
@@ -306,6 +305,25 @@ function StatePill({ label }: { label: string }) {
       {label}
     </span>
   );
+}
+
+function formatRuntimeState(value: MinecraftServerWithWorkload["server"]["runtimeState"]) {
+  switch (value) {
+    case "sleeping":
+      return "Sleeping";
+    case "waking":
+      return "Waking";
+    case "starting":
+      return "Starting";
+    case "stopping":
+      return "Stopping";
+    case "running":
+      return "Running";
+    case "crashed":
+      return "Crashed";
+    default:
+      return "Stopped";
+  }
 }
 
 function Field({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {

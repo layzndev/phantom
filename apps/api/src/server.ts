@@ -194,7 +194,7 @@ async function handleMinecraftConsoleUpgrade(
     workloadId: detail.workload.id,
     adminId: admin.id
   });
-  connection.sendJson({ type: "status", status: detail.workload.status });
+  connection.sendJson({ type: "status", status: detail.server.runtimeState });
 }
 
 async function handleConsoleMessage(

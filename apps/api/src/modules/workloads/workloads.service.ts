@@ -555,14 +555,10 @@ async function syncMinecraftSleepStateFromRuntimeHeartbeat(
   }
 
   if (nextStatus === "running") {
-    if (server.sleepRequestedAt !== null || server.sleepingAt !== null) {
+    if (server.sleepingAt !== null) {
       await updateMinecraftServerRecord(server.id, {
-        sleepRequestedAt: null,
         sleepingAt: null
       });
-    }
-    if (previousStatus !== "running") {
-      minecraftConsoleGateway.publishLogs(server.id, ["__PHANTOM__ Server marked as running"]);
     }
     return;
   }
@@ -572,10 +568,13 @@ async function syncMinecraftSleepStateFromRuntimeHeartbeat(
     await updateMinecraftServerRecord(server.id, {
       sleepRequestedAt: null,
       sleepingAt: server.sleepingAt ?? confirmedAt,
+      wakeRequestedAt: null,
+      readyAt: null,
       currentPlayerCount: 0
     });
     if (previousStatus !== "stopped") {
       minecraftConsoleGateway.publishLogs(server.id, ["__PHANTOM__ Server marked as sleeping"]);
+      minecraftConsoleGateway.publishStatus(server.id, "sleeping");
     }
     await createAuditLog({
       action: "minecraft.server.autosleep",
@@ -593,8 +592,36 @@ async function syncMinecraftSleepStateFromRuntimeHeartbeat(
 
   if (nextStatus === "crashed" && server.sleepRequestedAt !== null) {
     await updateMinecraftServerRecord(server.id, {
-      sleepRequestedAt: null
+      sleepRequestedAt: null,
+      readyAt: null,
+      wakeRequestedAt: null
     });
+    return;
+  }
+
+  if (nextStatus === "stopped") {
+    await updateMinecraftServerRecord(server.id, {
+      readyAt: null,
+      wakeRequestedAt: null
+    });
+    minecraftConsoleGateway.publishStatus(server.id, "stopped");
+    return;
+  }
+
+  if (nextStatus === "crashed") {
+    await updateMinecraftServerRecord(server.id, {
+      readyAt: null,
+      wakeRequestedAt: null
+    });
+    minecraftConsoleGateway.publishStatus(server.id, "crashed");
+    return;
+  }
+
+  if (nextStatus === "creating") {
+    minecraftConsoleGateway.publishStatus(
+      server.id,
+      server.wakeRequestedAt !== null ? "waking" : "starting"
+    );
   }
 }
 

@@ -57,7 +57,7 @@ export function MinecraftConsole({
   operatorLabel = "operator",
   phantomIdentity = "phantom@system~"
 }: MinecraftConsoleProps) {
-  const consoleReady = entry?.workload.status === "running";
+  const consoleReady = entry?.server.runtimeState === "running";
 
   const startedAtMs = useMemo(() => {
     if (!entry || !entry.workload.runtimeStartedAt) return null;
@@ -112,7 +112,7 @@ export function MinecraftConsole({
               />
               {entry ? (
                 <span className="rounded-full border border-white/10 bg-white/[0.035] px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-slate-300">
-                  {entry.workload.status}
+                  {entry.server.runtimeState}
                 </span>
               ) : null}
             </div>
@@ -208,7 +208,7 @@ export function MinecraftConsole({
         <ToolbarButton onClick={onClear} disabled={lines.length === 0} label="Clear" />
         {entry && !consoleReady ? (
           <span className="ml-auto text-[11px] text-amber-300">
-            Server status: {entry.workload.status}. Console requires a running server.
+            Server status: {entry.server.runtimeState}. Console requires a ready server.
           </span>
         ) : null}
       </div>
@@ -263,7 +263,7 @@ export function MinecraftConsole({
           <input
             value={commandInput}
             onChange={(event) => onCommandInputChange(event.target.value)}
-            placeholder={consoleReady ? "Enter command..." : "server is not running"}
+            placeholder={consoleReady ? "Enter command..." : "server is not ready"}
             disabled={!consoleReady || busy}
             className="min-w-0 flex-1 bg-transparent text-slate-200 outline-none placeholder:text-slate-600 disabled:cursor-not-allowed"
           />

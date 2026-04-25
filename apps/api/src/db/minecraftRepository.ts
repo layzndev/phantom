@@ -133,6 +133,8 @@ export function updateMinecraftServerRecord(
     idleSince?: Date | null;
     sleepRequestedAt?: Date | null;
     sleepingAt?: Date | null;
+    wakeRequestedAt?: Date | null;
+    readyAt?: Date | null;
     hostname?: string;
     hostnameSlug?: string;
     hostnameUpdatedAt?: Date | null;
@@ -167,6 +169,10 @@ export function updateMinecraftServerRecord(
         ? { sleepRequestedAt: updates.sleepRequestedAt }
         : {}),
       ...(updates.sleepingAt !== undefined ? { sleepingAt: updates.sleepingAt } : {}),
+      ...(updates.wakeRequestedAt !== undefined
+        ? { wakeRequestedAt: updates.wakeRequestedAt }
+        : {}),
+      ...(updates.readyAt !== undefined ? { readyAt: updates.readyAt } : {}),
       ...(updates.hostname !== undefined ? { hostname: updates.hostname } : {}),
       ...(updates.hostnameSlug !== undefined ? { hostnameSlug: updates.hostnameSlug } : {}),
       ...(updates.hostnameUpdatedAt !== undefined
