@@ -111,6 +111,7 @@ export function updateMinecraftServerRecord(
     lastConsoleCommandAt?: Date | null;
     lastActivityAt?: Date | null;
     idleSince?: Date | null;
+    sleepRequestedAt?: Date | null;
     sleepingAt?: Date | null;
   }
 ) {
@@ -136,6 +137,9 @@ export function updateMinecraftServerRecord(
         ? { lastActivityAt: updates.lastActivityAt }
         : {}),
       ...(updates.idleSince !== undefined ? { idleSince: updates.idleSince } : {}),
+      ...(updates.sleepRequestedAt !== undefined
+        ? { sleepRequestedAt: updates.sleepRequestedAt }
+        : {}),
       ...(updates.sleepingAt !== undefined ? { sleepingAt: updates.sleepingAt } : {})
     }
   });

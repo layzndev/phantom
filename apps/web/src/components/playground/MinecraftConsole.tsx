@@ -57,18 +57,16 @@ export function MinecraftConsole({
   const consoleReady = entry?.workload.status === "running";
 
   const startedAtMs = useMemo(() => {
-    if (!entry || !consoleReady) return null;
-    const events = entry.workload.statusEvents ?? [];
-    for (let i = events.length - 1; i >= 0; i -= 1) {
-      const event = events[i];
-      if (event.newStatus === "running") {
-        return new Date(event.createdAt).getTime();
-      }
-    }
-    return new Date(entry.workload.updatedAt).getTime();
-  }, [entry, consoleReady]);
+    if (!entry || !entry.workload.runtimeStartedAt) return null;
+    return new Date(entry.workload.runtimeStartedAt).getTime();
+  }, [entry]);
 
-  const uptimeLabel = useUptime(startedAtMs);
+  const finishedAtMs = useMemo(() => {
+    if (!entry || !entry.workload.runtimeFinishedAt) return null;
+    return new Date(entry.workload.runtimeFinishedAt).getTime();
+  }, [entry]);
+
+  const uptimeLabel = useUptime(startedAtMs, finishedAtMs, consoleReady);
 
   const externalPort = useMemo(() => {
     if (!entry) return null;
@@ -227,10 +225,16 @@ export function MinecraftConsole({
           ) : (
             renderedLines.map((line) => (
               <p key={line.id} className="whitespace-pre-wrap">
-                <span className="text-slate-500">[{formatClock(line.timestamp)} </span>
-                <span className={sourceTone(line.kind)}>{lineSource(line.kind, operatorLabel)}</span>
-                <span className="text-slate-500">] </span>
-                <span className={lineTone(line.kind)}>{line.text}</span>
+                {line.kind === "logs" && looksLikeMinecraftRuntimeLine(line.text) ? (
+                  <span className={lineTone(line.kind)}>{line.text}</span>
+                ) : (
+                  <>
+                    <span className="text-slate-500">[{formatClock(line.timestamp)} </span>
+                    <span className={sourceTone(line.kind)}>{lineSource(line.kind, operatorLabel)}</span>
+                    <span className="text-slate-500">] </span>
+                    <span className={lineTone(line.kind)}>{line.text}</span>
+                  </>
+                )}
               </p>
             ))
           )}
@@ -346,19 +350,24 @@ function welcomeLine(entry: MinecraftServerWithWorkload): MinecraftConsoleLine {
   };
 }
 
-function useUptime(startedAtMs: number | null) {
+function useUptime(startedAtMs: number | null, finishedAtMs: number | null, running: boolean) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    if (startedAtMs === null) return;
+    if (startedAtMs === null || !running) return;
     const id = setInterval(() => setNow(Date.now()), 1_000);
     return () => clearInterval(id);
-  }, [startedAtMs]);
-  if (startedAtMs === null) return "—";
-  const total = Math.max(0, Math.floor((now - startedAtMs) / 1_000));
+  }, [running, startedAtMs]);
+  if (startedAtMs === null) return "00:00:00";
+  const endMs = running ? now : finishedAtMs ?? startedAtMs;
+  const total = Math.max(0, Math.floor((endMs - startedAtMs) / 1_000));
   const hours = Math.floor(total / 3600);
   const minutes = Math.floor((total % 3600) / 60);
   const seconds = total % 60;
   return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+}
+
+function looksLikeMinecraftRuntimeLine(value: string) {
+  return /^\[\d{2}:\d{2}:\d{2}\]\s+\[[^\]]+\]:/.test(value);
 }
 
 function pad(n: number) {

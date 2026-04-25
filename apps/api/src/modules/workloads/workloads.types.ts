@@ -41,6 +41,8 @@ export interface CompanyWorkload {
   config: Record<string, unknown>;
   containerId: string | null;
   lastHeartbeatAt: string | null;
+  runtimeStartedAt: string | null;
+  runtimeFinishedAt: string | null;
   lastExitCode: number | null;
   restartCount: number;
   deleteRequestedAt: string | null;

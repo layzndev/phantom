@@ -26,6 +26,7 @@ export interface MinecraftServer {
   lastPlayerSeenAt: string | null;
   lastPlayerSampleAt: string | null;
   lastConsoleCommandAt: string | null;
+  sleepRequestedAt: string | null;
   sleepingAt: string | null;
   serverProperties: Record<string, unknown>;
   createdAt: string;

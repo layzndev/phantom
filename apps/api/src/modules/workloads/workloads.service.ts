@@ -1,6 +1,11 @@
 import { Prisma } from "@prisma/client";
 import { AppError } from "../../lib/appError.js";
 import { env } from "../../config/env.js";
+import { createAuditLog } from "../audit/audit.repository.js";
+import {
+  findMinecraftServerRecordByWorkloadId,
+  updateMinecraftServerRecord
+} from "../../db/minecraftRepository.js";
 import { findNodeFromRegistry } from "../nodes/nodes.repository.js";
 import { authenticateRuntimeNode } from "../nodes/nodes.service.js";
 import type {
@@ -260,9 +265,17 @@ export async function acceptWorkloadHeartbeat(
   const updated = await updateWorkloadRuntimeInRegistry(workload.id, {
     status: nextRuntimeStatus,
     containerId: payload.containerId,
+    runtimeStartedAt: payload.startedAt ? new Date(payload.startedAt) : undefined,
+    runtimeFinishedAt: payload.finishedAt === undefined
+      ? undefined
+      : payload.finishedAt === null
+        ? null
+        : new Date(payload.finishedAt),
     lastExitCode: payload.exitCode,
     restartCount: payload.restartCount
   });
+
+  await syncMinecraftSleepStateFromRuntimeHeartbeat(workload.id, nextRuntimeStatus);
 
   if (workload.status !== nextRuntimeStatus) {
     await emitWorkloadStatusEvent({
@@ -502,6 +515,8 @@ function toCompanyWorkload(record: WorkloadRecord): CompanyWorkload {
     config: (record.config as Record<string, unknown>) ?? {},
     containerId: record.containerId,
     lastHeartbeatAt: record.lastHeartbeatAt?.toISOString() ?? null,
+    runtimeStartedAt: record.runtimeStartedAt?.toISOString() ?? null,
+    runtimeFinishedAt: record.runtimeFinishedAt?.toISOString() ?? null,
     lastExitCode: record.lastExitCode,
     restartCount: record.restartCount,
     deleteRequestedAt: record.deleteRequestedAt?.toISOString() ?? null,
@@ -525,6 +540,53 @@ function toCompanyWorkload(record: WorkloadRecord): CompanyWorkload {
     updatedAt: record.updatedAt.toISOString(),
     deletedAt: record.deletedAt?.toISOString() ?? null
   };
+}
+
+async function syncMinecraftSleepStateFromRuntimeHeartbeat(
+  workloadId: string,
+  nextStatus: WorkloadStatus
+) {
+  const server = await findMinecraftServerRecordByWorkloadId(workloadId);
+  if (!server || server.deletedAt !== null) {
+    return;
+  }
+
+  if (nextStatus === "running") {
+    if (server.sleepRequestedAt !== null || server.sleepingAt !== null) {
+      await updateMinecraftServerRecord(server.id, {
+        sleepRequestedAt: null,
+        sleepingAt: null
+      });
+    }
+    return;
+  }
+
+  if (nextStatus === "stopped" && server.sleepRequestedAt !== null) {
+    const confirmedAt = new Date();
+    await updateMinecraftServerRecord(server.id, {
+      sleepRequestedAt: null,
+      sleepingAt: server.sleepingAt ?? confirmedAt,
+      currentPlayerCount: 0
+    });
+    await createAuditLog({
+      action: "minecraft.server.autosleep",
+      actorEmail: "system",
+      targetType: "system",
+      targetId: server.id,
+      metadata: {
+        phase: "sleeping_confirmed",
+        workloadId,
+        confirmedAt: confirmedAt.toISOString()
+      }
+    });
+    return;
+  }
+
+  if (nextStatus === "crashed" && server.sleepRequestedAt !== null) {
+    await updateMinecraftServerRecord(server.id, {
+      sleepRequestedAt: null
+    });
+  }
 }
 
 async function shouldQueueFreeWorkloadStart(workload: WorkloadRecord) {

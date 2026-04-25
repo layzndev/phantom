@@ -48,11 +48,15 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
     if (!entry) {
       return null;
     }
-    const runningEvent = [...entry.workload.statusEvents]
-      .reverse()
-      .find((event) => event.newStatus === "running");
+    const uptimeSeconds = getRuntimeUptimeSeconds(
+      entry.workload.runtimeStartedAt,
+      entry.workload.runtimeFinishedAt,
+      entry.workload.status === "running"
+    );
     return {
-      startedAt: runningEvent?.createdAt ?? null,
+      startedAt: entry.workload.runtimeStartedAt,
+      finishedAt: entry.workload.runtimeFinishedAt,
+      uptimeSeconds,
       gamePort: entry.workload.ports.find((port) => port.internalPort === 25565)?.externalPort ?? null
     };
   }, [entry]);
@@ -146,7 +150,9 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
 
         <DetailCard title="Runtime">
           <div className="grid gap-3 text-sm">
-            <MetricRow label="Uptime source" value={formatDateTime(runtime.startedAt)} />
+            <MetricRow label="Uptime" value={formatHms(runtime.uptimeSeconds)} />
+            <MetricRow label="Started at" value={formatDateTime(runtime.startedAt)} />
+            <MetricRow label="Finished at" value={formatDateTime(runtime.finishedAt)} />
             <MetricRow label="Restart count" value={String(entry.workload.restartCount)} />
             <MetricRow label="AutoSleep" value={entry.server.autoSleepEnabled ? "Enabled" : "Disabled"} />
             <MetricRow label="Idle since" value={formatDateTime(entry.server.idleSince)} />
@@ -212,6 +218,26 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
       </DetailCard>
     </div>
   );
+}
+
+function getRuntimeUptimeSeconds(
+  startedAt: string | null,
+  finishedAt: string | null,
+  isRunning: boolean
+) {
+  if (!startedAt) {
+    return 0;
+  }
+  const startMs = new Date(startedAt).getTime();
+  const endMs = isRunning ? Date.now() : finishedAt ? new Date(finishedAt).getTime() : startMs;
+  return Math.max(0, Math.floor((endMs - startMs) / 1000));
+}
+
+function formatHms(totalSeconds: number) {
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return [hours, minutes, seconds].map((value) => String(value).padStart(2, "0")).join(":");
 }
 
 function StatePill({ label }: { label: string }) {

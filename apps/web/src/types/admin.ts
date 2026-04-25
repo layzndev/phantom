@@ -199,6 +199,8 @@ export interface CompanyWorkload {
   config: Record<string, unknown>;
   containerId: string | null;
   lastHeartbeatAt: string | null;
+  runtimeStartedAt: string | null;
+  runtimeFinishedAt: string | null;
   lastExitCode: number | null;
   restartCount: number;
   deleteRequestedAt: string | null;
@@ -298,6 +300,7 @@ export interface MinecraftServer {
   lastPlayerSeenAt: string | null;
   lastPlayerSampleAt: string | null;
   lastConsoleCommandAt: string | null;
+  sleepRequestedAt: string | null;
   sleepingAt: string | null;
   serverProperties: Record<string, unknown>;
   createdAt: string;

@@ -198,6 +198,7 @@ export async function startMinecraftServer(id: string) {
   const record = await ensureMinecraftServerRecord(id);
   const updatedServer = await updateMinecraftServerRecord(record.id, {
     sleepingAt: null,
+    sleepRequestedAt: null,
     idleSince: null,
     lastActivityAt: new Date()
   });
@@ -208,15 +209,20 @@ export async function startMinecraftServer(id: string) {
 
 export async function stopMinecraftServer(id: string) {
   const record = await ensureMinecraftServerRecord(id);
+  const updatedServer = await updateMinecraftServerRecord(record.id, {
+    sleepRequestedAt: null,
+    sleepingAt: null
+  });
   const workload = await stopWorkload(record.workloadId);
   minecraftConsoleGateway.publishStatus(record.id, workload.status);
-  return { server: toMinecraftServer(record), workload };
+  return { server: toMinecraftServer(updatedServer), workload };
 }
 
 export async function restartMinecraftServer(id: string) {
   const record = await ensureMinecraftServerRecord(id);
   const updatedServer = await updateMinecraftServerRecord(record.id, {
     sleepingAt: null,
+    sleepRequestedAt: null,
     idleSince: null,
     lastActivityAt: new Date()
   });
@@ -268,6 +274,7 @@ export async function enqueueMinecraftOperation(
       lastConsoleCommandAt: new Date(),
       lastActivityAt: new Date(),
       idleSince: null,
+      sleepRequestedAt: null,
       sleepingAt: null
     });
   }
@@ -441,6 +448,10 @@ export async function runMinecraftAutoSleepTick() {
       continue;
     }
 
+    if (record.sleepRequestedAt !== null || record.sleepingAt !== null) {
+      continue;
+    }
+
     const activeSave = await findActiveMinecraftOperationByWorkloadAndKind(record.workloadId, "save");
     const activeStop = await findActiveMinecraftOperationByWorkloadAndKind(record.workloadId, "stop");
     if (activeSave || activeStop) {
@@ -452,15 +463,38 @@ export async function runMinecraftAutoSleepTick() {
       continue;
     }
 
+    await createAuditLog({
+      action: "minecraft.server.autosleep",
+      actorEmail: "system",
+      targetType: "system",
+      targetId: record.id,
+      metadata: {
+        phase: "requested",
+        workloadId: record.workloadId,
+        idleSince: record.idleSince.toISOString(),
+        idleMinutes: Math.floor(idleMs / 60_000),
+        planTier: record.planTier
+      }
+    });
+
+    if (!activeSave) {
+      await createMinecraftOperation({
+        workloadId: record.workloadId,
+        kind: "save",
+        payload: { source: "autosleep" } as Prisma.InputJsonValue,
+        actorEmail: "system"
+      });
+    }
+
     await createMinecraftOperation({
       workloadId: record.workloadId,
-      kind: "save",
+      kind: "stop",
       payload: { source: "autosleep" } as Prisma.InputJsonValue,
       actorEmail: "system"
     });
 
     await updateMinecraftServerRecord(record.id, {
-      sleepingAt: new Date()
+      sleepRequestedAt: new Date()
     });
     await stopWorkload(record.workloadId);
     await createAuditLog({
@@ -469,10 +503,8 @@ export async function runMinecraftAutoSleepTick() {
       targetType: "system",
       targetId: record.id,
       metadata: {
+        phase: "stop_requested",
         workloadId: record.workloadId,
-        idleSince: record.idleSince.toISOString(),
-        idleMinutes: Math.floor(idleMs / 60_000),
-        planTier: record.planTier,
         source: "autosleep"
       }
     });
@@ -495,7 +527,7 @@ export async function publishRuntimeMinecraftConsoleLogs(
   }
 
   const lines = payload.lines
-    .map((line) => line.trimEnd())
+    .map((line) => sanitizeConsoleLogLine(line.trimEnd()))
     .filter((line) => line.length > 0)
     .slice(0, 200);
 
@@ -672,6 +704,7 @@ function toMinecraftServer(record: MinecraftServerRecord): MinecraftServer {
     lastPlayerSeenAt: record.lastPlayerSeenAt?.toISOString() ?? null,
     lastPlayerSampleAt: record.lastPlayerSampleAt?.toISOString() ?? null,
     lastConsoleCommandAt: record.lastConsoleCommandAt?.toISOString() ?? null,
+    sleepRequestedAt: record.sleepRequestedAt?.toISOString() ?? null,
     sleepingAt: record.sleepingAt?.toISOString() ?? null,
     serverProperties: (record.serverProperties as Record<string, unknown>) ?? {},
     createdAt: record.createdAt.toISOString(),
@@ -744,16 +777,34 @@ async function processMinecraftOperationSideEffects(
         sample.currentPlayers > 0
           ? null
           : server.idleSince ?? server.lastActivityAt ?? server.lastConsoleCommandAt ?? now,
+      sleepRequestedAt: sample.currentPlayers > 0 ? null : undefined,
       sleepingAt: sample.currentPlayers > 0 ? null : undefined
     });
     return;
   }
 
   if (op.kind === "stop" && op.actorEmail === "system") {
-    await updateMinecraftServerRecord(server.id, {
-      sleepingAt: server.sleepingAt ?? new Date()
-    });
+    const payload = (op.payload as Record<string, unknown> | null) ?? null;
+    if (payload?.source === "autosleep") {
+      await createAuditLog({
+        action: "minecraft.server.autosleep",
+        actorEmail: "system",
+        targetType: "system",
+        targetId: server.id,
+        metadata: {
+          phase: "stop_sent",
+          workloadId: server.workloadId
+        }
+      });
+    }
   }
+}
+
+function sanitizeConsoleLogLine(line: string) {
+  return line.replace(
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})\s+/,
+    ""
+  );
 }
 
 function parsePlayerSample(result: Record<string, unknown> | null, maxPlayers: number) {
