@@ -33,6 +33,11 @@ export const env = {
   nodeHeartbeatTimeoutMs: Number(process.env.NODE_HEARTBEAT_TIMEOUT_MS ?? 45_000),
   nodeMonitorTickMs: Number(process.env.NODE_MONITOR_TICK_MS ?? 10_000),
   nodeMonitorEnabled: (process.env.NODE_MONITOR_ENABLED ?? "true").toLowerCase() !== "false",
+  freeTierMaxRamPercent: Number(process.env.FREE_TIER_MAX_RAM_PERCENT ?? 85),
+  freeTierMaxCpuPercent: Number(process.env.FREE_TIER_MAX_CPU_PERCENT ?? 85),
+  queuedStartMonitorTickMs: Number(process.env.QUEUED_START_MONITOR_TICK_MS ?? 10_000),
+  queuedStartMonitorEnabled:
+    (process.env.QUEUED_START_MONITOR_ENABLED ?? "true").toLowerCase() !== "false",
   workloadDeleteTimeoutMs: Number(process.env.WORKLOAD_DELETE_TIMEOUT_MS ?? 120_000),
   workloadDeleteMonitorTickMs: Number(process.env.WORKLOAD_DELETE_MONITOR_TICK_MS ?? 10_000),
   workloadDeleteMonitorEnabled:
@@ -51,10 +56,18 @@ export function assertRuntimeConfig() {
   if (
     !Number.isFinite(env.nodeHeartbeatTimeoutMs) ||
     !Number.isFinite(env.nodeMonitorTickMs) ||
+    !Number.isFinite(env.freeTierMaxRamPercent) ||
+    !Number.isFinite(env.freeTierMaxCpuPercent) ||
+    !Number.isFinite(env.queuedStartMonitorTickMs) ||
     !Number.isFinite(env.workloadDeleteTimeoutMs) ||
     !Number.isFinite(env.workloadDeleteMonitorTickMs) ||
     env.nodeHeartbeatTimeoutMs <= 0 ||
     env.nodeMonitorTickMs <= 0 ||
+    env.freeTierMaxRamPercent <= 0 ||
+    env.freeTierMaxRamPercent > 100 ||
+    env.freeTierMaxCpuPercent <= 0 ||
+    env.freeTierMaxCpuPercent > 100 ||
+    env.queuedStartMonitorTickMs <= 0 ||
     env.workloadDeleteTimeoutMs <= 0 ||
     env.workloadDeleteMonitorTickMs <= 0
   ) {

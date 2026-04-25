@@ -13,6 +13,10 @@ import {
   startWorkloadDeleteMonitor,
   type WorkloadDeleteMonitorHandle
 } from "./modules/workloads/workloads.delete.monitor.js";
+import {
+  startWorkloadQueuedStartMonitor,
+  type WorkloadQueuedStartMonitorHandle
+} from "./modules/workloads/workloads.queued-start.monitor.js";
 import { adminSession } from "./middleware/security.js";
 import { acceptWebSocket } from "./lib/websocket.js";
 
@@ -42,6 +46,8 @@ const monitor: NodeRuntimeMonitorHandle | null = env.nodeMonitorEnabled
 const workloadDeleteMonitor: WorkloadDeleteMonitorHandle | null = env.workloadDeleteMonitorEnabled
   ? startWorkloadDeleteMonitor()
   : null;
+const workloadQueuedStartMonitor: WorkloadQueuedStartMonitorHandle | null =
+  env.queuedStartMonitorEnabled ? startWorkloadQueuedStartMonitor() : null;
 
 let shuttingDown = false;
 
@@ -65,6 +71,12 @@ async function shutdown(signal: string, exitCode = 0) {
     if (workloadDeleteMonitor) await workloadDeleteMonitor.stop();
   } catch (err) {
     console.error("[server] error while stopping workload delete monitor", err);
+  }
+
+  try {
+    if (workloadQueuedStartMonitor) await workloadQueuedStartMonitor.stop();
+  } catch (err) {
+    console.error("[server] error while stopping workload queued-start monitor", err);
   }
 
   try {

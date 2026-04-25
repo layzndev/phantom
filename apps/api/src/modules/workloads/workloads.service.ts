@@ -1,5 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { AppError } from "../../lib/appError.js";
+import { env } from "../../config/env.js";
+import { findNodeFromRegistry } from "../nodes/nodes.repository.js";
 import { authenticateRuntimeNode } from "../nodes/nodes.service.js";
 import type {
   CompanyWorkload,
@@ -132,6 +134,20 @@ export async function restartWorkload(id: string) {
   const existing = await ensureWorkload(id);
   if (existing.deletedAt !== null || existing.status === "deleting") {
     throw new AppError(409, "Workload is being deleted.", "WORKLOAD_DELETING");
+  }
+  const queueDecision = await shouldQueueFreeWorkloadStart(existing);
+  if (queueDecision.shouldQueue) {
+    const updated = await updateWorkloadRuntimeInRegistry(id, {
+      status: "queued_start",
+      desiredStatus: "running"
+    });
+    await emitWorkloadStatusEvent({
+      workloadId: id,
+      previousStatus: existing.status,
+      newStatus: "queued_start",
+      reason: `[restart] ${queueDecision.reason}`
+    });
+    return toCompanyWorkload(updated);
   }
   await emitWorkloadStatusEvent({
     workloadId: id,
@@ -391,6 +407,24 @@ async function transitionDesired(
   if (existing.desiredStatus === desired) {
     return toCompanyWorkload(existing);
   }
+
+  if (desired === "running") {
+    const queueDecision = await shouldQueueFreeWorkloadStart(existing);
+    if (queueDecision.shouldQueue) {
+      const updated = await updateWorkloadRuntimeInRegistry(id, {
+        status: "queued_start",
+        desiredStatus: "running"
+      });
+      await emitWorkloadStatusEvent({
+        workloadId: id,
+        previousStatus: existing.status,
+        newStatus: "queued_start",
+        reason: queueDecision.reason
+      });
+      return toCompanyWorkload(updated);
+    }
+  }
+
   const updated = await setWorkloadDesiredStatusInRegistry(id, desired, reason);
   return toCompanyWorkload(updated);
 }
@@ -490,5 +524,34 @@ function toCompanyWorkload(record: WorkloadRecord): CompanyWorkload {
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
     deletedAt: record.deletedAt?.toISOString() ?? null
+  };
+}
+
+async function shouldQueueFreeWorkloadStart(workload: WorkloadRecord) {
+  if (!workload.nodeId) {
+    return { shouldQueue: false as const };
+  }
+
+  const node = await findNodeFromRegistry(workload.nodeId);
+  if (!node || node.pool !== "free") {
+    return { shouldQueue: false as const };
+  }
+
+  const cpuPercent =
+    node.totalCpu && node.totalCpu > 0 ? ((node.usedCpu ?? 0) / node.totalCpu) * 100 : 100;
+  const ramPercent =
+    node.totalRamMb && node.totalRamMb > 0
+      ? ((node.usedRamMb ?? 0) / node.totalRamMb) * 100
+      : 100;
+
+  if (cpuPercent < env.freeTierMaxCpuPercent && ramPercent < env.freeTierMaxRamPercent) {
+    return { shouldQueue: false as const };
+  }
+
+  return {
+    shouldQueue: true as const,
+    reason: `[queued-start] live usage too high on node ${node.id} (cpu=${cpuPercent.toFixed(
+      1
+    )}% ram=${ramPercent.toFixed(1)}% thresholds cpu<${env.freeTierMaxCpuPercent}% ram<${env.freeTierMaxRamPercent}%)`
   };
 }

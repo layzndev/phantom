@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { db } from "../../db/client.js";
+import { env } from "../../config/env.js";
 import type { NodePool } from "../nodes/nodes.types.js";
 import type { WorkloadPortSpec } from "./workloads.schema.js";
 
@@ -50,10 +51,13 @@ interface CandidateNode {
   pool: NodePool;
   totalCpu: number;
   totalRamMb: number;
+  usedCpu: number;
+  usedRamMb: number;
   portRangeStart: number | null;
   portRangeEnd: number | null;
   availableCpu: number;
   availableRamMb: number;
+  queueStart: boolean;
 }
 
 export async function placeWorkload(request: PlacementRequest): Promise<PlacementResult> {
@@ -68,6 +72,8 @@ export async function placeWorkload(request: PlacementRequest): Promise<Placemen
         maintenanceMode: true,
         totalCpu: true,
         totalRamMb: true,
+        usedCpu: true,
+        usedRamMb: true,
         portRangeStart: true,
         portRangeEnd: true
       }
@@ -144,12 +150,22 @@ export async function placeWorkload(request: PlacementRequest): Promise<Placemen
     }
 
     const candidates: CandidateNode[] = [];
+    const isFreePoolRequest = request.requiredPool === "free";
     for (const node of eligible) {
       const used = usageByNode.get(node.id) ?? { cpu: 0, ramMb: 0 };
       const availableCpu = (node.totalCpu as number) - used.cpu;
       const availableRamMb = (node.totalRamMb as number) - used.ramMb;
+      const liveWithinFreeTierThresholds = isNodeWithinFreeTierThresholds(
+        node.usedCpu ?? 0,
+        node.totalCpu as number,
+        node.usedRamMb ?? 0,
+        node.totalRamMb as number
+      );
 
-      if (availableCpu < request.requestedCpu || availableRamMb < request.requestedRamMb) {
+      if (
+        !isFreePoolRequest &&
+        (availableCpu < request.requestedCpu || availableRamMb < request.requestedRamMb)
+      ) {
         const entry = considered.find((c) => c.id === node.id);
         if (entry) entry.rejectedReason = "insufficient cpu/ram headroom";
         continue;
@@ -160,10 +176,13 @@ export async function placeWorkload(request: PlacementRequest): Promise<Placemen
         pool: node.pool as NodePool,
         totalCpu: node.totalCpu as number,
         totalRamMb: node.totalRamMb as number,
+        usedCpu: node.usedCpu ?? 0,
+        usedRamMb: node.usedRamMb ?? 0,
         portRangeStart: node.portRangeStart,
         portRangeEnd: node.portRangeEnd,
         availableCpu,
-        availableRamMb
+        availableRamMb,
+        queueStart: isFreePoolRequest ? !liveWithinFreeTierThresholds : false
       });
     }
 
@@ -178,8 +197,11 @@ export async function placeWorkload(request: PlacementRequest): Promise<Placemen
     }
 
     candidates.sort((a, b) => {
-      const scoreA = a.availableCpu / a.totalCpu + a.availableRamMb / a.totalRamMb;
-      const scoreB = b.availableCpu / b.totalCpu + b.availableRamMb / b.totalRamMb;
+      if (a.queueStart !== b.queueStart) {
+        return a.queueStart ? 1 : -1;
+      }
+      const scoreA = placementScore(a, isFreePoolRequest);
+      const scoreB = placementScore(b, isFreePoolRequest);
       return scoreB - scoreA;
     });
 
@@ -191,13 +213,14 @@ export async function placeWorkload(request: PlacementRequest): Promise<Placemen
         continue;
       }
 
+      const initialStatus = candidate.queueStart ? "queued_start" : "creating";
       const workload = await tx.workload.create({
         data: {
           name: request.name,
           type: request.type,
           image: request.image,
           nodeId: candidate.id,
-          status: "creating",
+          status: initialStatus,
           requestedCpu: request.requestedCpu,
           requestedRamMb: request.requestedRamMb,
           requestedDiskGb: request.requestedDiskGb,
@@ -218,8 +241,10 @@ export async function placeWorkload(request: PlacementRequest): Promise<Placemen
           statusEvents: {
             create: {
               previousStatus: null,
-              newStatus: "creating",
-              reason: `placed on node ${candidate.id} (pool=${candidate.pool})`
+              newStatus: initialStatus,
+              reason: candidate.queueStart
+                ? `placed on node ${candidate.id} (pool=${candidate.pool}) with queued_start due to live cpu/ram thresholds`
+                : `placed on node ${candidate.id} (pool=${candidate.pool})`
             }
           }
         },
@@ -239,6 +264,27 @@ export async function placeWorkload(request: PlacementRequest): Promise<Placemen
       diagnostics: { ...baseDiagnostics, selectedNodeId: null }
     };
   });
+}
+
+function isNodeWithinFreeTierThresholds(
+  usedCpu: number,
+  totalCpu: number,
+  usedRamMb: number,
+  totalRamMb: number
+) {
+  const cpuPercent = totalCpu > 0 ? (usedCpu / totalCpu) * 100 : 100;
+  const ramPercent = totalRamMb > 0 ? (usedRamMb / totalRamMb) * 100 : 100;
+  return cpuPercent < env.freeTierMaxCpuPercent && ramPercent < env.freeTierMaxRamPercent;
+}
+
+function placementScore(node: CandidateNode, isFreePoolRequest: boolean) {
+  if (isFreePoolRequest) {
+    const cpuHeadroom = Math.max(0, 1 - node.usedCpu / node.totalCpu);
+    const ramHeadroom = Math.max(0, 1 - node.usedRamMb / node.totalRamMb);
+    return cpuHeadroom + ramHeadroom;
+  }
+
+  return node.availableCpu / node.totalCpu + node.availableRamMb / node.totalRamMb;
 }
 
 async function allocatePortsForNode(

@@ -94,7 +94,7 @@ export async function getNodeSummary() {
   const runningWorkloads = workloads.filter((workload) => workload.status === "running").length;
   const deletingWorkloads = workloads.filter((workload) => workload.status === "deleting").length;
   const stoppedWorkloads = workloads.filter((workload) =>
-    ["stopped", "crashed", "pending", "creating"].includes(workload.status)
+    ["stopped", "crashed", "pending", "queued_start", "creating"].includes(workload.status)
   ).length;
 
   return {

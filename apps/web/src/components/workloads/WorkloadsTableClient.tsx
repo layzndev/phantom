@@ -140,6 +140,7 @@ export function WorkloadsTableClient() {
           >
             <option value="all">All status</option>
             <option value="pending">Pending</option>
+            <option value="queued_start">Queued start</option>
             <option value="creating">Creating</option>
             <option value="running">Running</option>
             <option value="stopped">Stopped</option>

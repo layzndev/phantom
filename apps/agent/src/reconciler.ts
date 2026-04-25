@@ -77,6 +77,11 @@ export class WorkloadReconciler {
       return;
     }
 
+    if (workload.status === "queued_start") {
+      await this.ensureStopped(workload, container);
+      return;
+    }
+
     if (workload.desiredStatus === "running") {
       await this.ensureRunning(workload, container);
       return;

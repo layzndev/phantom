@@ -39,7 +39,7 @@ export const updateWorkloadSchema = z
 export const workloadListQuerySchema = z.object({
   nodeId: z.string().optional(),
   status: z
-    .enum(["pending", "creating", "running", "stopped", "crashed", "deleting", "deleted"])
+    .enum(["pending", "queued_start", "creating", "running", "stopped", "crashed", "deleting", "deleted"])
     .optional(),
   type: workloadTypeEnum.optional()
 });

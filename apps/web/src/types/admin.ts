@@ -159,6 +159,7 @@ export interface AuditLogEntry {
 export type WorkloadType = "minecraft" | "discord-bot" | "proxy" | "container";
 export type WorkloadStatus =
   | "pending"
+  | "queued_start"
   | "creating"
   | "running"
   | "stopped"
