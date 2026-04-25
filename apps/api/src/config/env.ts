@@ -38,6 +38,9 @@ export const env = {
   queuedStartMonitorTickMs: Number(process.env.QUEUED_START_MONITOR_TICK_MS ?? 10_000),
   queuedStartMonitorEnabled:
     (process.env.QUEUED_START_MONITOR_ENABLED ?? "true").toLowerCase() !== "false",
+  autoSleepEnabled: (process.env.AUTO_SLEEP_ENABLED ?? "true").toLowerCase() !== "false",
+  autoSleepIdleMinutes: Number(process.env.AUTO_SLEEP_IDLE_MINUTES ?? 10),
+  autoSleepMonitorTickMs: Number(process.env.AUTO_SLEEP_MONITOR_TICK_MS ?? 30_000),
   workloadDeleteTimeoutMs: Number(process.env.WORKLOAD_DELETE_TIMEOUT_MS ?? 120_000),
   workloadDeleteMonitorTickMs: Number(process.env.WORKLOAD_DELETE_MONITOR_TICK_MS ?? 10_000),
   workloadDeleteMonitorEnabled:
@@ -59,6 +62,8 @@ export function assertRuntimeConfig() {
     !Number.isFinite(env.freeTierMaxRamPercent) ||
     !Number.isFinite(env.freeTierMaxCpuPercent) ||
     !Number.isFinite(env.queuedStartMonitorTickMs) ||
+    !Number.isFinite(env.autoSleepIdleMinutes) ||
+    !Number.isFinite(env.autoSleepMonitorTickMs) ||
     !Number.isFinite(env.workloadDeleteTimeoutMs) ||
     !Number.isFinite(env.workloadDeleteMonitorTickMs) ||
     env.nodeHeartbeatTimeoutMs <= 0 ||
@@ -68,6 +73,8 @@ export function assertRuntimeConfig() {
     env.freeTierMaxCpuPercent <= 0 ||
     env.freeTierMaxCpuPercent > 100 ||
     env.queuedStartMonitorTickMs <= 0 ||
+    env.autoSleepIdleMinutes <= 0 ||
+    env.autoSleepMonitorTickMs <= 0 ||
     env.workloadDeleteTimeoutMs <= 0 ||
     env.workloadDeleteMonitorTickMs <= 0
   ) {

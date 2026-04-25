@@ -154,7 +154,8 @@ export function MinecraftServicesClient() {
               {
                 key: "status",
                 header: "Status",
-                cell: ({ workload }) => <WorkloadStatusBadge status={workload.status} />
+                cell: ({ server, workload }) =>
+                  server.sleeping ? <StatusChip label="Sleeping" /> : <WorkloadStatusBadge status={workload.status} />
               },
               {
                 key: "port",
@@ -191,5 +192,13 @@ export function MinecraftServicesClient() {
         )}
       </div>
     </div>
+  );
+}
+
+function StatusChip({ label }: { label: string }) {
+  return (
+    <span className="inline-flex rounded-full border border-indigo-300/30 bg-indigo-400/[0.09] px-2.5 py-1 text-[11px] font-semibold leading-none text-indigo-100">
+      {label}
+    </span>
   );
 }

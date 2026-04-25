@@ -6,6 +6,10 @@ import { createAuditLog } from "./modules/audit/audit.repository.js";
 import { getMinecraftConsoleSession, enqueueMinecraftOperation } from "./modules/minecraft/minecraft.service.js";
 import { minecraftConsoleGateway } from "./modules/minecraft/minecraft.console.gateway.js";
 import {
+  startMinecraftAutoSleepMonitor,
+  type MinecraftAutoSleepMonitorHandle
+} from "./modules/minecraft/minecraft.autosleep.monitor.js";
+import {
   startNodeRuntimeMonitor,
   type NodeRuntimeMonitorHandle
 } from "./modules/nodes/nodes.runtime.monitor.js";
@@ -48,6 +52,9 @@ const workloadDeleteMonitor: WorkloadDeleteMonitorHandle | null = env.workloadDe
   : null;
 const workloadQueuedStartMonitor: WorkloadQueuedStartMonitorHandle | null =
   env.queuedStartMonitorEnabled ? startWorkloadQueuedStartMonitor() : null;
+const minecraftAutoSleepMonitor: MinecraftAutoSleepMonitorHandle | null = env.autoSleepEnabled
+  ? startMinecraftAutoSleepMonitor()
+  : null;
 
 let shuttingDown = false;
 
@@ -77,6 +84,12 @@ async function shutdown(signal: string, exitCode = 0) {
     if (workloadQueuedStartMonitor) await workloadQueuedStartMonitor.stop();
   } catch (err) {
     console.error("[server] error while stopping workload queued-start monitor", err);
+  }
+
+  try {
+    if (minecraftAutoSleepMonitor) await minecraftAutoSleepMonitor.stop();
+  } catch (err) {
+    console.error("[server] error while stopping minecraft autosleep monitor", err);
   }
 
   try {

@@ -30,6 +30,7 @@ export type AuditAction =
   | "minecraft.server.stop"
   | "minecraft.server.restart"
   | "minecraft.server.delete"
+  | "minecraft.server.autosleep"
   | "minecraft.server.command"
   | "minecraft.server.save"
   | "minecraft.server.logs"

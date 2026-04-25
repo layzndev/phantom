@@ -105,6 +105,9 @@ export class MinecraftOperationsProcessor {
       case "stop": {
         return this.transport.stopGracefully(target);
       }
+      case "players": {
+        return this.transport.sendCommand(target, "list");
+      }
       default:
         throw new Error(`unsupported operation kind: ${kind}`);
     }

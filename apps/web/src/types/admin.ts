@@ -291,6 +291,14 @@ export interface MinecraftServer {
   maxPlayers: number;
   eula: boolean;
   planTier: PlanTier;
+  autoSleepEnabled: boolean;
+  sleeping: boolean;
+  currentPlayerCount: number;
+  idleSince: string | null;
+  lastPlayerSeenAt: string | null;
+  lastPlayerSampleAt: string | null;
+  lastConsoleCommandAt: string | null;
+  sleepingAt: string | null;
   serverProperties: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
@@ -341,7 +349,7 @@ export interface DeleteMinecraftServerResult {
   finalized: boolean;
 }
 
-export type MinecraftOperationKind = "command" | "save" | "logs" | "stop";
+export type MinecraftOperationKind = "command" | "save" | "logs" | "stop" | "players";
 export type MinecraftOperationStatus =
   | "pending"
   | "in_progress"

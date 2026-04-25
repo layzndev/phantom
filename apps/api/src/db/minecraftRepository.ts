@@ -15,6 +15,7 @@ export interface CreateMinecraftServerRecordInput {
   planTier: string;
   serverProperties: Prisma.InputJsonValue;
   rconPassword: string;
+  autoSleepEnabled?: boolean;
 }
 
 export interface MinecraftServerFilter {
@@ -36,6 +37,7 @@ export function createMinecraftServerRecord(input: CreateMinecraftServerRecordIn
       maxPlayers: input.maxPlayers,
       eula: input.eula,
       planTier: input.planTier,
+      autoSleepEnabled: input.autoSleepEnabled ?? true,
       serverProperties: input.serverProperties,
       rconPassword: input.rconPassword
     }
@@ -96,5 +98,70 @@ export function listMinecraftServerNodeAssignments() {
   return db.minecraftServer.findMany({
     where: { deletedAt: null, workload: { deletedAt: null, nodeId: { not: null } } },
     select: { workload: { select: { nodeId: true } } }
+  });
+}
+
+export function updateMinecraftServerRecord(
+  id: string,
+  updates: {
+    autoSleepEnabled?: boolean;
+    currentPlayerCount?: number;
+    lastPlayerSampleAt?: Date | null;
+    lastPlayerSeenAt?: Date | null;
+    lastConsoleCommandAt?: Date | null;
+    lastActivityAt?: Date | null;
+    idleSince?: Date | null;
+    sleepingAt?: Date | null;
+  }
+) {
+  return db.minecraftServer.update({
+    where: { id },
+    data: {
+      ...(updates.autoSleepEnabled !== undefined
+        ? { autoSleepEnabled: updates.autoSleepEnabled }
+        : {}),
+      ...(updates.currentPlayerCount !== undefined
+        ? { currentPlayerCount: updates.currentPlayerCount }
+        : {}),
+      ...(updates.lastPlayerSampleAt !== undefined
+        ? { lastPlayerSampleAt: updates.lastPlayerSampleAt }
+        : {}),
+      ...(updates.lastPlayerSeenAt !== undefined
+        ? { lastPlayerSeenAt: updates.lastPlayerSeenAt }
+        : {}),
+      ...(updates.lastConsoleCommandAt !== undefined
+        ? { lastConsoleCommandAt: updates.lastConsoleCommandAt }
+        : {}),
+      ...(updates.lastActivityAt !== undefined
+        ? { lastActivityAt: updates.lastActivityAt }
+        : {}),
+      ...(updates.idleSince !== undefined ? { idleSince: updates.idleSince } : {}),
+      ...(updates.sleepingAt !== undefined ? { sleepingAt: updates.sleepingAt } : {})
+    }
+  });
+}
+
+export function listAutoSleepCandidateServers() {
+  return db.minecraftServer.findMany({
+    where: {
+      deletedAt: null,
+      planTier: "free",
+      autoSleepEnabled: true,
+      workload: {
+        deletedAt: null,
+        status: "running",
+        desiredStatus: "running",
+        nodeId: { not: null },
+        node: {
+          pool: "free",
+          maintenanceMode: false,
+          status: "healthy"
+        }
+      }
+    },
+    include: {
+      workload: true
+    },
+    orderBy: { createdAt: "asc" }
   });
 }

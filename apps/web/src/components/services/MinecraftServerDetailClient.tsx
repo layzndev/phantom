@@ -8,7 +8,13 @@ import { DetailCard } from "@/components/ui/DetailCard";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { SkeletonBlock } from "@/components/ui/SkeletonBlock";
 import { WorkloadStatusBadge } from "@/components/workloads/WorkloadStatusBadge";
-import { formatCpu, formatDateTime, formatDisk, formatRam } from "@/lib/utils/format";
+import {
+  formatCpu,
+  formatDateTime,
+  formatDisk,
+  formatRam,
+  formatRelativeDurationSince
+} from "@/lib/utils/format";
 import { MinecraftServiceConsole } from "./MinecraftServiceConsole";
 import type { MinecraftServerWithWorkload } from "@/types/admin";
 
@@ -92,12 +98,15 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
               description="Dedicated admin view on top of the Phantom workload runtime."
             />
             <div className="mt-4 flex flex-wrap items-center gap-2">
-              <WorkloadStatusBadge status={entry.workload.status} />
+              {entry.server.sleeping ? <StatePill label="Sleeping" /> : <WorkloadStatusBadge status={entry.workload.status} />}
               <span className="rounded-full border border-white/10 bg-white/[0.035] px-3 py-1 font-mono text-[11px] text-slate-300">
                 {entry.server.templateId}
               </span>
               <span className="rounded-full border border-white/10 bg-white/[0.035] px-3 py-1 font-mono text-[11px] text-slate-300">
                 v{entry.server.minecraftVersion}
+              </span>
+              <span className="rounded-full border border-white/10 bg-white/[0.035] px-3 py-1 text-[11px] text-slate-300">
+                {entry.server.planTier}
               </span>
             </div>
 
@@ -114,7 +123,11 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <ActionButton label="Start" busy={busy === "start"} onClick={() => void runAction("start")} />
+            <ActionButton
+              label={entry.server.sleeping ? "Wake" : "Start"}
+              busy={busy === "start"}
+              onClick={() => void runAction("start")}
+            />
             <ActionButton label="Stop" busy={busy === "stop"} onClick={() => void runAction("stop")} />
             <ActionButton label="Restart" busy={busy === "restart"} onClick={() => void runAction("restart")} />
             <ActionButton label="Delete" busy={busy === "delete"} destructive onClick={() => void runAction("delete")} />
@@ -135,6 +148,10 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
           <div className="grid gap-3 text-sm">
             <MetricRow label="Uptime source" value={formatDateTime(runtime.startedAt)} />
             <MetricRow label="Restart count" value={String(entry.workload.restartCount)} />
+            <MetricRow label="AutoSleep" value={entry.server.autoSleepEnabled ? "Enabled" : "Disabled"} />
+            <MetricRow label="Idle since" value={formatDateTime(entry.server.idleSince)} />
+            <MetricRow label="Last player seen" value={formatDateTime(entry.server.lastPlayerSeenAt)} />
+            <MetricRow label="Idle duration" value={formatRelativeDurationSince(entry.server.idleSince)} />
             <MetricRow label="Workload ID" value={entry.workload.id} mono />
             <MetricRow label="Container ID" value={entry.workload.containerId ?? "Pending"} mono />
           </div>
@@ -183,6 +200,8 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
         <div className="grid gap-3 text-sm md:grid-cols-2">
           <MetricRow label="Created" value={formatDateTime(entry.server.createdAt)} />
           <MetricRow label="Updated" value={formatDateTime(entry.server.updatedAt)} />
+          <MetricRow label="Last player sample" value={formatDateTime(entry.server.lastPlayerSampleAt)} />
+          <MetricRow label="Last console command" value={formatDateTime(entry.server.lastConsoleCommandAt)} />
           <MetricRow label="MOTD" value={entry.server.motd ?? "None"} />
           <MetricRow
             label="Workload detail"
@@ -192,6 +211,14 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
         </div>
       </DetailCard>
     </div>
+  );
+}
+
+function StatePill({ label }: { label: string }) {
+  return (
+    <span className="inline-flex rounded-full border border-indigo-300/30 bg-indigo-400/[0.09] px-2.5 py-1 text-[11px] font-semibold leading-none text-indigo-100">
+      {label}
+    </span>
   );
 }
 

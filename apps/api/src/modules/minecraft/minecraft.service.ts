@@ -1,16 +1,21 @@
 import { randomBytes } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 import { AppError } from "../../lib/appError.js";
+import { env } from "../../config/env.js";
+import { createAuditLog } from "../audit/audit.repository.js";
 import {
   createMinecraftServerRecord,
   findMinecraftServerRecordById,
   findMinecraftServerRecordBySlug,
   findMinecraftServerRecordByWorkloadId,
-  listMinecraftServerRecords
+  listAutoSleepCandidateServers,
+  listMinecraftServerRecords,
+  updateMinecraftServerRecord
 } from "../../db/minecraftRepository.js";
 import {
   completeMinecraftOperation,
   createMinecraftOperation,
+  findActiveMinecraftOperationByWorkloadAndKind,
   findMinecraftOperationById,
   listPendingMinecraftOperationsForNode,
   markMinecraftOperationInProgress,
@@ -171,6 +176,7 @@ export async function createMinecraftServer(
       maxPlayers,
       eula: true,
       planTier,
+      autoSleepEnabled: planTier === "free",
       serverProperties: {} as Prisma.InputJsonValue,
       rconPassword
     });
@@ -190,9 +196,14 @@ export async function createMinecraftServer(
 
 export async function startMinecraftServer(id: string) {
   const record = await ensureMinecraftServerRecord(id);
+  const updatedServer = await updateMinecraftServerRecord(record.id, {
+    sleepingAt: null,
+    idleSince: null,
+    lastActivityAt: new Date()
+  });
   const workload = await startWorkload(record.workloadId);
   minecraftConsoleGateway.publishStatus(record.id, workload.status);
-  return { server: toMinecraftServer(record), workload };
+  return { server: toMinecraftServer(updatedServer), workload };
 }
 
 export async function stopMinecraftServer(id: string) {
@@ -204,9 +215,14 @@ export async function stopMinecraftServer(id: string) {
 
 export async function restartMinecraftServer(id: string) {
   const record = await ensureMinecraftServerRecord(id);
+  const updatedServer = await updateMinecraftServerRecord(record.id, {
+    sleepingAt: null,
+    idleSince: null,
+    lastActivityAt: new Date()
+  });
   const workload = await restartWorkload(record.workloadId);
   minecraftConsoleGateway.publishStatus(record.id, workload.status);
-  return { server: toMinecraftServer(record), workload };
+  return { server: toMinecraftServer(updatedServer), workload };
 }
 
 export async function deleteMinecraftServer(
@@ -246,6 +262,15 @@ export async function enqueueMinecraftOperation(
     actorId: actor.id,
     actorEmail: actor.email
   });
+
+  if (kind === "command") {
+    await updateMinecraftServerRecord(record.id, {
+      lastConsoleCommandAt: new Date(),
+      lastActivityAt: new Date(),
+      idleSince: null,
+      sleepingAt: null
+    });
+  }
 
   const finalRecord = await waitForMinecraftOperation(operation.id);
   const isPending = isOperationPending(finalRecord);
@@ -373,6 +398,7 @@ export async function completeRuntimeMinecraftOperation(
   if (payload.status === "failed") {
     minecraftConsoleGateway.publishError(op.workloadId, payload.error ?? "operation failed");
   } else {
+    await processMinecraftOperationSideEffects(op, completed);
     const output = formatMinecraftOperationOutput(
       (completed.result as Record<string, unknown> | null) ?? payload.result ?? null
     );
@@ -387,6 +413,73 @@ export async function completeRuntimeMinecraftOperation(
     });
   }
   return { ok: true };
+}
+
+export async function runMinecraftAutoSleepTick() {
+  if (!env.autoSleepEnabled) {
+    return 0;
+  }
+
+  const candidates = await listAutoSleepCandidateServers();
+  let slept = 0;
+
+  for (const record of candidates) {
+    const activeProbe = await findActiveMinecraftOperationByWorkloadAndKind(
+      record.workloadId,
+      "players"
+    );
+    if (!activeProbe) {
+      await createMinecraftOperation({
+        workloadId: record.workloadId,
+        kind: "players",
+        payload: { source: "autosleep" } as Prisma.InputJsonValue,
+        actorEmail: "system"
+      });
+    }
+
+    if (record.currentPlayerCount > 0 || record.idleSince === null) {
+      continue;
+    }
+
+    const activeSave = await findActiveMinecraftOperationByWorkloadAndKind(record.workloadId, "save");
+    const activeStop = await findActiveMinecraftOperationByWorkloadAndKind(record.workloadId, "stop");
+    if (activeSave || activeStop) {
+      continue;
+    }
+
+    const idleMs = Date.now() - record.idleSince.getTime();
+    if (idleMs < env.autoSleepIdleMinutes * 60_000) {
+      continue;
+    }
+
+    await createMinecraftOperation({
+      workloadId: record.workloadId,
+      kind: "save",
+      payload: { source: "autosleep" } as Prisma.InputJsonValue,
+      actorEmail: "system"
+    });
+
+    await updateMinecraftServerRecord(record.id, {
+      sleepingAt: new Date()
+    });
+    await stopWorkload(record.workloadId);
+    await createAuditLog({
+      action: "minecraft.server.autosleep",
+      actorEmail: "system",
+      targetType: "system",
+      targetId: record.id,
+      metadata: {
+        workloadId: record.workloadId,
+        idleSince: record.idleSince.toISOString(),
+        idleMinutes: Math.floor(idleMs / 60_000),
+        planTier: record.planTier,
+        source: "autosleep"
+      }
+    });
+    slept += 1;
+  }
+
+  return slept;
 }
 
 export async function publishRuntimeMinecraftConsoleLogs(
@@ -572,6 +665,14 @@ function toMinecraftServer(record: MinecraftServerRecord): MinecraftServer {
     maxPlayers: record.maxPlayers,
     eula: record.eula,
     planTier: record.planTier as PlanTier,
+    autoSleepEnabled: record.autoSleepEnabled,
+    sleeping: record.sleepingAt !== null,
+    currentPlayerCount: record.currentPlayerCount,
+    idleSince: record.idleSince?.toISOString() ?? null,
+    lastPlayerSeenAt: record.lastPlayerSeenAt?.toISOString() ?? null,
+    lastPlayerSampleAt: record.lastPlayerSampleAt?.toISOString() ?? null,
+    lastConsoleCommandAt: record.lastConsoleCommandAt?.toISOString() ?? null,
+    sleepingAt: record.sleepingAt?.toISOString() ?? null,
     serverProperties: (record.serverProperties as Record<string, unknown>) ?? {},
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
@@ -617,4 +718,52 @@ function formatMinecraftOperationOutput(result: Record<string, unknown> | null) 
   }
 
   return JSON.stringify(result);
+}
+
+async function processMinecraftOperationSideEffects(
+  op: MinecraftOperationRecord,
+  completed: MinecraftOperationRecord
+) {
+  const server = await findMinecraftServerRecordByWorkloadId(op.workloadId);
+  if (!server || server.deletedAt !== null) {
+    return;
+  }
+
+  if (op.kind === "players") {
+    const sample = parsePlayerSample(
+      (completed.result as Record<string, unknown> | null) ?? null,
+      server.maxPlayers
+    );
+    const now = new Date();
+    await updateMinecraftServerRecord(server.id, {
+      currentPlayerCount: sample.currentPlayers,
+      lastPlayerSampleAt: now,
+      lastPlayerSeenAt: sample.currentPlayers > 0 ? now : undefined,
+      lastActivityAt: sample.currentPlayers > 0 ? now : undefined,
+      idleSince:
+        sample.currentPlayers > 0
+          ? null
+          : server.idleSince ?? server.lastActivityAt ?? server.lastConsoleCommandAt ?? now,
+      sleepingAt: sample.currentPlayers > 0 ? null : undefined
+    });
+    return;
+  }
+
+  if (op.kind === "stop" && op.actorEmail === "system") {
+    await updateMinecraftServerRecord(server.id, {
+      sleepingAt: server.sleepingAt ?? new Date()
+    });
+  }
+}
+
+function parsePlayerSample(result: Record<string, unknown> | null, maxPlayers: number) {
+  const output = typeof result?.output === "string" ? result.output : "";
+  const match = output.match(/There are\s+(\d+)\s+of a max(?:imum)?\s+(\d+)\s+players online/i);
+  if (!match) {
+    return { currentPlayers: 0, maxPlayers };
+  }
+  return {
+    currentPlayers: Number.parseInt(match[1] ?? "0", 10) || 0,
+    maxPlayers: Number.parseInt(match[2] ?? String(maxPlayers), 10) || maxPlayers
+  };
 }

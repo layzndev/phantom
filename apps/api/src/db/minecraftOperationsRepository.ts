@@ -1,7 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { db } from "./client.js";
 
-export type MinecraftOperationKind = "command" | "save" | "logs" | "stop";
+export type MinecraftOperationKind = "command" | "save" | "logs" | "stop" | "players";
 export type MinecraftOperationStatus =
   | "pending"
   | "in_progress"
@@ -69,5 +69,19 @@ export function completeMinecraftOperation(id: string, input: CompleteMinecraftO
       error: input.error ?? null,
       completedAt: new Date()
     }
+  });
+}
+
+export function findActiveMinecraftOperationByWorkloadAndKind(
+  workloadId: string,
+  kind: MinecraftOperationKind
+) {
+  return db.minecraftOperation.findFirst({
+    where: {
+      workloadId,
+      kind,
+      status: { in: ["pending", "in_progress"] }
+    },
+    orderBy: { createdAt: "desc" }
   });
 }
