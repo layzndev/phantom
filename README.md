@@ -146,13 +146,3 @@ npm run node:register --workspace @phantom/api
 ```
 
 Le token node est affiche une seule fois et stocke uniquement sous forme hashee.
-
-## Note Prisma
-
-La V1 est volontairement verrouillee sur Prisma `6.17.1` pour accelerer la livraison Aurora PostgreSQL et eviter la complexite de configuration Prisma 7. L'upgrade vers Prisma 7 est preparee:
-
-- Le schema reste isole dans `apps/api/prisma/schema.prisma`.
-- La generation et les migrations passent par les scripts `db:*`.
-- Le client Prisma est centralise dans `apps/api/src/db/client.ts`.
-- Les modules applicatifs passent par des repositories `apps/api/src/db/*Repository.ts`.
-- Les imports `@prisma/client` sont limites au dossier `src/db`.
