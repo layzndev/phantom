@@ -260,6 +260,7 @@ export async function acceptWorkloadHeartbeat(
   const workload = await ensureAssignedRuntimeWorkload(workloadId, rawToken, {
     allowDeleting: true
   });
+  const previousStatus = workload.status as WorkloadStatus;
   const nextRuntimeStatus: WorkloadStatus =
     workload.status === "deleting" ? "deleting" : payload.status;
 
@@ -276,12 +277,12 @@ export async function acceptWorkloadHeartbeat(
     restartCount: payload.restartCount
   });
 
-  await syncMinecraftSleepStateFromRuntimeHeartbeat(workload.id, nextRuntimeStatus);
+  await syncMinecraftSleepStateFromRuntimeHeartbeat(workload.id, previousStatus, nextRuntimeStatus);
 
-  if (workload.status !== nextRuntimeStatus) {
+  if (previousStatus !== nextRuntimeStatus) {
     await emitWorkloadStatusEvent({
       workloadId: workload.id,
-      previousStatus: workload.status,
+      previousStatus,
       newStatus: nextRuntimeStatus,
       reason: buildRuntimeReason("heartbeat", payload.reason, {
         exitCode: payload.exitCode,
@@ -545,6 +546,7 @@ function toCompanyWorkload(record: WorkloadRecord): CompanyWorkload {
 
 async function syncMinecraftSleepStateFromRuntimeHeartbeat(
   workloadId: string,
+  previousStatus: WorkloadStatus,
   nextStatus: WorkloadStatus
 ) {
   const server = await findMinecraftServerRecordByWorkloadId(workloadId);
@@ -559,7 +561,9 @@ async function syncMinecraftSleepStateFromRuntimeHeartbeat(
         sleepingAt: null
       });
     }
-    minecraftConsoleGateway.publishLogs(server.id, ["__PHANTOM__ Server marked as running"]);
+    if (previousStatus !== "running") {
+      minecraftConsoleGateway.publishLogs(server.id, ["__PHANTOM__ Server marked as running"]);
+    }
     return;
   }
 
@@ -570,7 +574,9 @@ async function syncMinecraftSleepStateFromRuntimeHeartbeat(
       sleepingAt: server.sleepingAt ?? confirmedAt,
       currentPlayerCount: 0
     });
-    minecraftConsoleGateway.publishLogs(server.id, ["__PHANTOM__ Server marked as sleeping"]);
+    if (previousStatus !== "stopped") {
+      minecraftConsoleGateway.publishLogs(server.id, ["__PHANTOM__ Server marked as sleeping"]);
+    }
     await createAuditLog({
       action: "minecraft.server.autosleep",
       actorEmail: "system",

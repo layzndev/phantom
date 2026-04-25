@@ -9,6 +9,8 @@ type ConnectionEntry = {
 class MinecraftConsoleGateway {
   private readonly byServerId = new Map<string, Set<ConnectionEntry>>();
   private readonly byWorkloadId = new Map<string, Set<ConnectionEntry>>();
+  private readonly lifecycleDedup = new Map<string, number>();
+  private static readonly LIFECYCLE_DEDUP_MS = 30_000;
 
   attach(connection: WebSocketConnection, serverId: string, workloadId: string) {
     const entry: ConnectionEntry = { connection, serverId, workloadId };
@@ -30,6 +32,15 @@ class MinecraftConsoleGateway {
 
   publishLogs(serverId: string, lines: string[]) {
     for (const line of lines) {
+      if (line.startsWith("__PHANTOM__ ")) {
+        const key = `${serverId}:${line}`;
+        const now = Date.now();
+        const lastSentAt = this.lifecycleDedup.get(key) ?? 0;
+        if (now - lastSentAt < MinecraftConsoleGateway.LIFECYCLE_DEDUP_MS) {
+          continue;
+        }
+        this.lifecycleDedup.set(key, now);
+      }
       this.publishByServer(serverId, { type: "log", line });
     }
   }
