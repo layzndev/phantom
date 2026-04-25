@@ -10,6 +10,7 @@ import type {
   CompanyNode,
   HostedServer,
   NodeHealth,
+  NodePool,
   NodeStatus,
   RuntimeMode
 } from "./nodes.types.js";
@@ -370,6 +371,7 @@ function toCompanyNode(
     status: node.status as NodeStatus,
     health: node.health as NodeHealth,
     runtimeMode: node.runtimeMode as RuntimeMode,
+    pool: node.pool as NodePool,
     heartbeat: node.lastHeartbeatAt?.toISOString() ?? null,
     totalRamMb: node.totalRamMb ?? 0,
     usedRamMb: node.usedRamMb ?? 0,

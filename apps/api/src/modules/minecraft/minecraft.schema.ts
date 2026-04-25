@@ -15,6 +15,7 @@ export const createMinecraftServerSchema = z.object({
   eula: z.literal(true, {
     errorMap: () => ({ message: "You must accept the Minecraft EULA (eula=true)." })
   }),
+  planTier: z.enum(["free", "premium"]).default("free"),
   cpu: z.coerce.number().positive().max(32).optional(),
   ramMb: z.coerce.number().int().positive().max(65_536).optional(),
   diskGb: z.coerce.number().int().positive().max(512).optional()

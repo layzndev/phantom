@@ -21,6 +21,7 @@ export const createWorkloadSchema = z.object({
   requestedCpu: z.coerce.number().positive().max(4096),
   requestedRamMb: z.coerce.number().int().positive().max(2_097_152),
   requestedDiskGb: z.coerce.number().int().positive().max(65_536),
+  requiredPool: z.enum(["free", "premium", "internal"]).default("free"),
   ports: z.array(portSpecShape).max(64).optional(),
   config: z.record(z.unknown()).optional()
 });

@@ -1,6 +1,9 @@
 export type NodeStatus = "offline" | "healthy" | "maintenance";
 export type NodeHealth = "unknown" | "healthy" | "degraded" | "unreachable";
 export type RuntimeMode = "local" | "remote";
+export type NodePool = "free" | "premium" | "internal";
+
+export const NODE_POOLS: readonly NodePool[] = ["free", "premium", "internal"] as const;
 
 export interface NodeStatusEvent {
   id: string;
@@ -57,6 +60,7 @@ export interface CompanyNode {
   status: NodeStatus;
   health: NodeHealth;
   runtimeMode: RuntimeMode;
+  pool: NodePool;
   heartbeat: string | null;
   totalRamMb: number;
   usedRamMb: number;

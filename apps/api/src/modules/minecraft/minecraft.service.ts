@@ -48,8 +48,10 @@ import type {
   MinecraftOperationResponse,
   MinecraftOperationStatus,
   MinecraftServer,
-  MinecraftServerWithWorkload
+  MinecraftServerWithWorkload,
+  PlanTier
 } from "./minecraft.types.js";
+import type { NodePool } from "../nodes/nodes.types.js";
 
 type MinecraftServerRecord = NonNullable<
   Awaited<ReturnType<typeof findMinecraftServerRecordById>>
@@ -108,6 +110,8 @@ export async function createMinecraftServer(
   const gameMode: MinecraftGameMode = input.gameMode ?? "survival";
   const maxPlayers = input.maxPlayers ?? 20;
   const motd = input.motd ?? null;
+  const planTier: PlanTier = input.planTier;
+  const requiredPool: NodePool = planTier === "premium" ? "premium" : "free";
 
   const slug = await allocateUniqueSlug(input.name);
   const rconPassword = generateRconPassword();
@@ -149,6 +153,7 @@ export async function createMinecraftServer(
     requestedCpu: cpu,
     requestedRamMb: ramMb,
     requestedDiskGb: diskGb,
+    requiredPool,
     ports: [{ internalPort: DEFAULT_GAME_PORT, protocol: "tcp" }],
     config
   });
@@ -165,6 +170,7 @@ export async function createMinecraftServer(
       gameMode,
       maxPlayers,
       eula: true,
+      planTier,
       serverProperties: {} as Prisma.InputJsonValue,
       rconPassword
     });
@@ -173,7 +179,8 @@ export async function createMinecraftServer(
       server: toMinecraftServer(record),
       workload: placement.workload,
       placed: placement.placed,
-      reason: placement.reason
+      reason: placement.reason,
+      diagnostics: placement.diagnostics
     };
   } catch (error) {
     await safeDeleteWorkload(placement.workload.id);
@@ -564,6 +571,7 @@ function toMinecraftServer(record: MinecraftServerRecord): MinecraftServer {
     gameMode: record.gameMode as MinecraftGameMode,
     maxPlayers: record.maxPlayers,
     eula: record.eula,
+    planTier: record.planTier as PlanTier,
     serverProperties: (record.serverProperties as Record<string, unknown>) ?? {},
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),

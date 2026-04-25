@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { adminApi } from "@/lib/api/admin-api";
 import { formatRam, percent } from "@/lib/utils/format";
-import type { AdminRole, CompanyNode, NodeHealth, NodeStatus } from "@/types/admin";
+import type { AdminRole, CompanyNode, NodeHealth, NodePool, NodeStatus } from "@/types/admin";
 import { HeartbeatHeart } from "./HeartbeatHeart";
 import { NodeActions } from "./NodeActions";
 import { DataTable } from "@/components/ui/DataTable";
@@ -24,6 +24,7 @@ export function NodesTableClient() {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<NodeStatus | "all">("all");
   const [health, setHealth] = useState<NodeHealth | "all">("all");
+  const [pool, setPool] = useState<NodePool | "all">("all");
   const [adminRole, setAdminRole] = useState<AdminRole | null>(null);
 
   useEffect(() => {
@@ -82,7 +83,8 @@ export function NodesTableClient() {
     return (
       search.includes(query.toLowerCase()) &&
       (status === "all" || node.status === status) &&
-      (health === "all" || node.health === health)
+      (health === "all" || node.health === health) &&
+      (pool === "all" || node.pool === pool)
     );
   });
 
@@ -94,7 +96,7 @@ export function NodesTableClient() {
           title="Nodes"
         />
 
-        <div className="mt-6 grid gap-3 lg:grid-cols-[1fr_180px_180px]">
+        <div className="mt-6 grid gap-3 lg:grid-cols-[1fr_160px_160px_160px]">
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
@@ -123,6 +125,17 @@ export function NodesTableClient() {
             <option value="degraded">Degraded</option>
             <option value="unreachable">Unreachable</option>
             <option value="unknown">Unknown</option>
+          </select>
+
+          <select
+            value={pool}
+            onChange={(event) => setPool(event.target.value as NodePool | "all")}
+            className="rounded-2xl border border-white/10 bg-obsidian px-4 py-3 text-sm text-slate-200 outline-none focus:border-accent/40"
+          >
+            <option value="all">All pools</option>
+            <option value="free">Free</option>
+            <option value="premium">Premium</option>
+            <option value="internal">Internal</option>
           </select>
         </div>
       </section>
@@ -170,6 +183,11 @@ export function NodesTableClient() {
                 key: "provider",
                 header: "Provider",
                 cell: (node) => <span className="text-slate-300">{node.provider}</span>
+              },
+              {
+                key: "pool",
+                header: "Pool",
+                cell: (node) => <PoolBadge pool={node.pool} />
               },
               {
                 key: "hosts",
@@ -233,5 +251,20 @@ export function NodesTableClient() {
         )}
       </div>
     </div>
+  );
+}
+
+function PoolBadge({ pool }: { pool: NodePool }) {
+  const styles: Record<NodePool, string> = {
+    free: "border-white/15 bg-white/[0.04] text-slate-200",
+    premium: "border-amber/30 bg-amber/[0.10] text-amber",
+    internal: "border-accent/30 bg-accent/[0.10] text-accent"
+  };
+  return (
+    <span
+      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] ${styles[pool]}`}
+    >
+      {pool}
+    </span>
   );
 }

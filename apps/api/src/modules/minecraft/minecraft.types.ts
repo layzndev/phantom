@@ -2,6 +2,9 @@ import type { CompanyWorkload } from "../workloads/workloads.types.js";
 
 export type MinecraftDifficulty = "peaceful" | "easy" | "normal" | "hard";
 export type MinecraftGameMode = "survival" | "creative" | "adventure" | "spectator";
+export type PlanTier = "free" | "premium";
+
+export const PLAN_TIERS: readonly PlanTier[] = ["free", "premium"] as const;
 
 export interface MinecraftServer {
   id: string;
@@ -15,6 +18,7 @@ export interface MinecraftServer {
   gameMode: MinecraftGameMode;
   maxPlayers: number;
   eula: boolean;
+  planTier: PlanTier;
   serverProperties: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
@@ -38,6 +42,7 @@ export interface CreateMinecraftServerResult {
   workload: CompanyWorkload;
   placed: boolean;
   reason?: string;
+  diagnostics?: import("../workloads/workloads.scheduler.js").SchedulerDiagnostics;
 }
 
 export interface DeleteMinecraftServerResult {

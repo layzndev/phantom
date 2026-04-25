@@ -2,7 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { adminApi } from "@/lib/api/admin-api";
-import type { CompanyNode, CreateNodePayload } from "@/types/admin";
+import type { CompanyNode, CreateNodePayload, NodePool } from "@/types/admin";
 import { ActionButton } from "@/components/ui/ActionButton";
 
 const initialForm: CreateNodePayload = {
@@ -12,7 +12,8 @@ const initialForm: CreateNodePayload = {
   region: "",
   internalHost: "",
   publicHost: "",
-  runtimeMode: "remote"
+  runtimeMode: "remote",
+  pool: "free"
 };
 
 export function CreateNodePanel({ onCreated }: { onCreated: (node: CompanyNode) => void }) {
@@ -78,6 +79,18 @@ export function CreateNodePanel({ onCreated }: { onCreated: (node: CompanyNode) 
             >
               <option value="remote">Remote</option>
               <option value="local">Local</option>
+            </select>
+          </label>
+          <label className="block text-sm text-slate-400">
+            Pool
+            <select
+              value={form.pool ?? "free"}
+              onChange={(event) => setForm((current) => ({ ...current, pool: event.target.value as NodePool }))}
+              className="mt-2 w-full rounded-2xl border border-white/10 bg-obsidian px-4 py-3 text-sm text-white outline-none focus:border-accent/40"
+            >
+              <option value="free">Free</option>
+              <option value="premium">Premium</option>
+              <option value="internal">Internal</option>
             </select>
           </label>
           <p className="md:col-span-2 xl:col-span-4 rounded-2xl border border-white/5 bg-white/[0.025] px-4 py-3 text-xs text-slate-400">

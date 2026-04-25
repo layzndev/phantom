@@ -76,7 +76,10 @@ minecraftController.post(
         version: result.server.minecraftVersion,
         placed: result.placed,
         nodeId: result.workload.nodeId,
-        reason: result.reason
+        reason: result.reason,
+        planTier: result.server.planTier,
+        requiredPool: result.diagnostics?.requiredPool,
+        candidates: result.diagnostics?.candidates
       }
     });
     res.status(201).json(result);

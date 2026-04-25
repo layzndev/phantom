@@ -34,6 +34,8 @@ const portRangeShape = z
     path: ["end"]
   });
 
+const poolField = z.enum(["free", "premium", "internal"]);
+
 export const createNodeSchema = z
   .object({
     id: z.string().min(3).max(128).regex(/^[a-zA-Z0-9._:-]+$/),
@@ -43,6 +45,7 @@ export const createNodeSchema = z
     internalHost: z.string().min(2).max(255),
     publicHost: z.string().min(2).max(255),
     runtimeMode: z.enum(["local", "remote"]).default("remote"),
+    pool: poolField.default("free"),
     totalRamMb: totalRamField.optional(),
     totalCpu: totalCpuField.optional(),
     portRangeStart: portField.optional(),
@@ -75,6 +78,7 @@ export const updateNodeSchema = z
     internalHost: z.string().min(2).max(255).optional(),
     publicHost: z.string().min(2).max(255).optional(),
     runtimeMode: z.enum(["local", "remote"]).optional(),
+    pool: poolField.optional(),
     totalRamMb: totalRamField.optional(),
     totalCpu: totalCpuField.optional(),
     portRangeStart: portField.optional(),

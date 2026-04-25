@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { db } from "../../db/client.js";
+import type { NodePool } from "../nodes/nodes.types.js";
 import type { WorkloadPortSpec } from "./workloads.schema.js";
 
 export interface PlacementRequest {
@@ -9,24 +10,44 @@ export interface PlacementRequest {
   requestedCpu: number;
   requestedRamMb: number;
   requestedDiskGb: number;
+  requiredPool: NodePool;
   ports: WorkloadPortSpec[];
   config: Prisma.InputJsonValue;
+}
+
+export interface SchedulerDiagnostics {
+  requiredPool: NodePool;
+  totalNodes: number;
+  poolMatches: number;
+  withCapacity: number;
+  candidates: number;
+  selectedNodeId: string | null;
+  considered: Array<{
+    id: string;
+    pool: NodePool;
+    status: string;
+    maintenance: boolean;
+    rejectedReason: string | null;
+  }>;
 }
 
 export interface PlacementSuccess {
   placed: true;
   workloadId: string;
+  diagnostics: SchedulerDiagnostics;
 }
 
 export interface PlacementFailure {
   placed: false;
   reason: string;
+  diagnostics: SchedulerDiagnostics;
 }
 
 export type PlacementResult = PlacementSuccess | PlacementFailure;
 
 interface CandidateNode {
   id: string;
+  pool: NodePool;
   totalCpu: number;
   totalRamMb: number;
   portRangeStart: number | null;
@@ -39,10 +60,12 @@ export async function placeWorkload(request: PlacementRequest): Promise<Placemen
   return db.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('workload:placement'))`;
 
-    const nodes = await tx.node.findMany({
-      where: { status: "healthy", maintenanceMode: false },
+    const allNodes = await tx.node.findMany({
       select: {
         id: true,
+        pool: true,
+        status: true,
+        maintenanceMode: true,
         totalCpu: true,
         totalRamMb: true,
         portRangeStart: true,
@@ -50,20 +73,64 @@ export async function placeWorkload(request: PlacementRequest): Promise<Placemen
       }
     });
 
-    if (nodes.length === 0) {
-      return { placed: false, reason: "no healthy nodes available" };
+    const considered: SchedulerDiagnostics["considered"] = [];
+    const baseDiagnostics: Omit<SchedulerDiagnostics, "selectedNodeId"> = {
+      requiredPool: request.requiredPool,
+      totalNodes: allNodes.length,
+      poolMatches: 0,
+      withCapacity: 0,
+      candidates: 0,
+      considered
+    };
+
+    const eligible: typeof allNodes = [];
+    for (const node of allNodes) {
+      const pool = node.pool as NodePool;
+      const entry = {
+        id: node.id,
+        pool,
+        status: node.status,
+        maintenance: node.maintenanceMode,
+        rejectedReason: null as string | null
+      };
+      if (pool !== request.requiredPool) {
+        entry.rejectedReason = `pool mismatch (got ${pool}, need ${request.requiredPool})`;
+      } else if (node.status !== "healthy") {
+        entry.rejectedReason = `status=${node.status}`;
+      } else if (node.maintenanceMode) {
+        entry.rejectedReason = "maintenance";
+      } else if (node.totalCpu === null || node.totalRamMb === null) {
+        entry.rejectedReason = "no reported capacity";
+      } else {
+        eligible.push(node);
+      }
+      considered.push(entry);
     }
 
-    const withCapacity = nodes.filter(
-      (node) => node.totalCpu !== null && node.totalRamMb !== null
-    );
-    if (withCapacity.length === 0) {
-      return { placed: false, reason: "no nodes with reported capacity" };
+    baseDiagnostics.poolMatches = considered.filter(
+      (entry) => entry.pool === request.requiredPool
+    ).length;
+    baseDiagnostics.withCapacity = eligible.length;
+
+    if (baseDiagnostics.poolMatches === 0) {
+      return {
+        placed: false,
+        reason: `no nodes in pool=${request.requiredPool}`,
+        diagnostics: { ...baseDiagnostics, selectedNodeId: null }
+      };
+    }
+
+    if (eligible.length === 0) {
+      return {
+        placed: false,
+        reason: `no healthy nodes with capacity in pool=${request.requiredPool}`,
+        diagnostics: { ...baseDiagnostics, selectedNodeId: null }
+      };
     }
 
     const commitments = await tx.workload.groupBy({
       by: ["nodeId"],
-      where: { nodeId: { in: withCapacity.map((n) => n.id) }, deletedAt: null },
+      where: { nodeId: { in: eligible.map((n) => n.id) }, deletedAt: null },
       _sum: { requestedCpu: true, requestedRamMb: true }
     });
 
@@ -77,16 +144,20 @@ export async function placeWorkload(request: PlacementRequest): Promise<Placemen
     }
 
     const candidates: CandidateNode[] = [];
-    for (const node of withCapacity) {
+    for (const node of eligible) {
       const used = usageByNode.get(node.id) ?? { cpu: 0, ramMb: 0 };
       const availableCpu = (node.totalCpu as number) - used.cpu;
       const availableRamMb = (node.totalRamMb as number) - used.ramMb;
 
-      if (availableCpu < request.requestedCpu) continue;
-      if (availableRamMb < request.requestedRamMb) continue;
+      if (availableCpu < request.requestedCpu || availableRamMb < request.requestedRamMb) {
+        const entry = considered.find((c) => c.id === node.id);
+        if (entry) entry.rejectedReason = "insufficient cpu/ram headroom";
+        continue;
+      }
 
       candidates.push({
         id: node.id,
+        pool: node.pool as NodePool,
         totalCpu: node.totalCpu as number,
         totalRamMb: node.totalRamMb as number,
         portRangeStart: node.portRangeStart,
@@ -96,8 +167,14 @@ export async function placeWorkload(request: PlacementRequest): Promise<Placemen
       });
     }
 
+    baseDiagnostics.candidates = candidates.length;
+
     if (candidates.length === 0) {
-      return { placed: false, reason: "no node has enough cpu/ram headroom" };
+      return {
+        placed: false,
+        reason: `no node has enough cpu/ram headroom in pool=${request.requiredPool}`,
+        diagnostics: { ...baseDiagnostics, selectedNodeId: null }
+      };
     }
 
     candidates.sort((a, b) => {
@@ -108,7 +185,11 @@ export async function placeWorkload(request: PlacementRequest): Promise<Placemen
 
     for (const candidate of candidates) {
       const allocation = await allocatePortsForNode(tx, candidate, request.ports);
-      if (allocation === null) continue;
+      if (allocation === null) {
+        const entry = considered.find((c) => c.id === candidate.id);
+        if (entry) entry.rejectedReason = "no free ports in range";
+        continue;
+      }
 
       const workload = await tx.workload.create({
         data: {
@@ -138,17 +219,25 @@ export async function placeWorkload(request: PlacementRequest): Promise<Placemen
             create: {
               previousStatus: null,
               newStatus: "creating",
-              reason: `placed on node ${candidate.id}`
+              reason: `placed on node ${candidate.id} (pool=${candidate.pool})`
             }
           }
         },
         select: { id: true }
       });
 
-      return { placed: true, workloadId: workload.id };
+      return {
+        placed: true,
+        workloadId: workload.id,
+        diagnostics: { ...baseDiagnostics, selectedNodeId: candidate.id }
+      };
     }
 
-    return { placed: false, reason: "no node has enough free ports in range" };
+    return {
+      placed: false,
+      reason: `no node has enough free ports in range in pool=${request.requiredPool}`,
+      diagnostics: { ...baseDiagnostics, selectedNodeId: null }
+    };
   });
 }
 

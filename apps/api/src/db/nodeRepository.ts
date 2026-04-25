@@ -25,6 +25,7 @@ export interface CreateNodeRecordInput {
   internalHost: string;
   publicHost: string;
   runtimeMode: string;
+  pool?: string;
   totalRamMb?: number;
   totalCpu?: number;
   portRangeStart?: number;
@@ -208,6 +209,7 @@ export interface UpdateNodeRecordInput {
   internalHost?: string;
   publicHost?: string;
   runtimeMode?: string;
+  pool?: string;
   totalRamMb?: number;
   totalCpu?: number;
   portRangeStart?: number;
@@ -224,6 +226,7 @@ export function updateNodeRecord(nodeId: string, updates: UpdateNodeRecordInput)
       ...(updates.internalHost !== undefined ? { internalHost: updates.internalHost } : {}),
       ...(updates.publicHost !== undefined ? { publicHost: updates.publicHost } : {}),
       ...(updates.runtimeMode !== undefined ? { runtimeMode: updates.runtimeMode } : {}),
+      ...(updates.pool !== undefined ? { pool: updates.pool } : {}),
       ...(updates.totalRamMb !== undefined ? { totalRamMb: updates.totalRamMb } : {}),
       ...(updates.totalCpu !== undefined ? { totalCpu: updates.totalCpu } : {}),
       ...(updates.portRangeStart !== undefined ? { portRangeStart: updates.portRangeStart } : {}),

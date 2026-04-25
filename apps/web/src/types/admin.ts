@@ -2,6 +2,9 @@ export type AdminRole = "superadmin" | "ops";
 export type NodeStatus = "offline" | "healthy" | "maintenance";
 export type NodeHealth = "unknown" | "healthy" | "degraded" | "unreachable";
 export type RuntimeMode = "local" | "remote";
+export type NodePool = "free" | "premium" | "internal";
+
+export const NODE_POOLS: readonly NodePool[] = ["free", "premium", "internal"] as const;
 
 export interface AdminUser {
   id: string;
@@ -65,6 +68,7 @@ export interface CompanyNode {
   status: NodeStatus;
   health: NodeHealth;
   runtimeMode: RuntimeMode;
+  pool: NodePool;
   heartbeat: string | null;
   totalRamMb: number;
   usedRamMb: number;
@@ -106,6 +110,7 @@ export interface CreateNodePayload {
   internalHost: string;
   publicHost: string;
   runtimeMode: RuntimeMode;
+  pool?: NodePool;
   totalRamMb?: number;
   totalCpu?: number;
   portRangeStart?: number;
@@ -119,6 +124,7 @@ export interface UpdateNodePayload {
   internalHost?: string;
   publicHost?: string;
   runtimeMode?: RuntimeMode;
+  pool?: NodePool;
   totalRamMb?: number;
   totalCpu?: number;
   portRangeStart?: number;
@@ -249,6 +255,9 @@ export type MinecraftTemplateFamily =
 
 export type MinecraftDifficulty = "peaceful" | "easy" | "normal" | "hard";
 export type MinecraftGameMode = "survival" | "creative" | "adventure" | "spectator";
+export type PlanTier = "free" | "premium";
+
+export const PLAN_TIERS: readonly PlanTier[] = ["free", "premium"] as const;
 
 export interface MinecraftTemplateDefaults {
   cpu: number;
@@ -280,6 +289,7 @@ export interface MinecraftServer {
   gameMode: MinecraftGameMode;
   maxPlayers: number;
   eula: boolean;
+  planTier: PlanTier;
   serverProperties: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
@@ -302,6 +312,7 @@ export interface CreateMinecraftServerPayload {
   name: string;
   templateId: string;
   eula: true;
+  planTier?: PlanTier;
   version?: string;
   motd?: string;
   difficulty?: MinecraftDifficulty;

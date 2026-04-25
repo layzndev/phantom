@@ -12,6 +12,7 @@ export interface CreateMinecraftServerRecordInput {
   gameMode: string;
   maxPlayers: number;
   eula: boolean;
+  planTier: string;
   serverProperties: Prisma.InputJsonValue;
   rconPassword: string;
 }
@@ -34,6 +35,7 @@ export function createMinecraftServerRecord(input: CreateMinecraftServerRecordIn
       gameMode: input.gameMode,
       maxPlayers: input.maxPlayers,
       eula: input.eula,
+      planTier: input.planTier,
       serverProperties: input.serverProperties,
       rconPassword: input.rconPassword
     }

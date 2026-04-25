@@ -67,6 +67,7 @@ export async function createWorkload(input: CreateWorkloadInput): Promise<Create
     requestedCpu: input.requestedCpu,
     requestedRamMb: input.requestedRamMb,
     requestedDiskGb: input.requestedDiskGb,
+    requiredPool: input.requiredPool,
     ports,
     config: configJson
   });
@@ -76,7 +77,11 @@ export async function createWorkload(input: CreateWorkloadInput): Promise<Create
     if (!record) {
       throw new AppError(500, "Workload disappeared after placement.", "WORKLOAD_MISSING");
     }
-    return { workload: toCompanyWorkload(record), placed: true };
+    return {
+      workload: toCompanyWorkload(record),
+      placed: true,
+      diagnostics: placement.diagnostics
+    };
   }
 
   const record = await createWorkloadInRegistry({
@@ -92,7 +97,12 @@ export async function createWorkload(input: CreateWorkloadInput): Promise<Create
     ports: []
   });
 
-  return { workload: toCompanyWorkload(record), placed: false, reason: placement.reason };
+  return {
+    workload: toCompanyWorkload(record),
+    placed: false,
+    reason: placement.reason,
+    diagnostics: placement.diagnostics
+  };
 }
 
 export async function updateWorkload(id: string, input: UpdateWorkloadInput) {

@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { adminApi } from "@/lib/api/admin-api";
-import type { CompanyNode, RuntimeMode, UpdateNodePayload } from "@/types/admin";
+import type { CompanyNode, NodePool, RuntimeMode, UpdateNodePayload } from "@/types/admin";
 import { ActionButton } from "@/components/ui/ActionButton";
 
 type FormState = {
@@ -12,6 +12,7 @@ type FormState = {
   internalHost: string;
   publicHost: string;
   runtimeMode: RuntimeMode;
+  pool: NodePool;
   totalRamMb: string;
   totalCpu: string;
   portRangeStart: string;
@@ -26,6 +27,7 @@ function toForm(node: CompanyNode): FormState {
     internalHost: node.internalHost,
     publicHost: node.publicHost,
     runtimeMode: node.runtimeMode,
+    pool: node.pool,
     totalRamMb: node.totalRamMb ? String(node.totalRamMb) : "",
     totalCpu: node.totalCpu ? String(node.totalCpu) : "",
     portRangeStart: node.portRangeStart !== null ? String(node.portRangeStart) : "",
@@ -49,6 +51,9 @@ function diffPayload(initial: FormState, current: FormState): UpdateNodePayload 
   }
   if (initial.runtimeMode !== current.runtimeMode) {
     payload.runtimeMode = current.runtimeMode;
+  }
+  if (initial.pool !== current.pool) {
+    payload.pool = current.pool;
   }
   const numberKeys: Array<keyof Pick<FormState, "totalRamMb" | "totalCpu" | "portRangeStart" | "portRangeEnd">> = [
     "totalRamMb",
@@ -177,6 +182,20 @@ export function EditNodeModal({
             >
               <option value="remote">Remote</option>
               <option value="local">Local</option>
+            </select>
+          </label>
+
+          <label className="block text-sm text-slate-400">
+            Pool
+            <select
+              value={form.pool}
+              onChange={(event) => set("pool", event.target.value as NodePool)}
+              disabled={busy}
+              className="mt-2 w-full rounded-2xl border border-white/10 bg-obsidian px-4 py-3 text-sm text-white outline-none focus:border-accent/40 disabled:opacity-60"
+            >
+              <option value="free">Free</option>
+              <option value="premium">Premium</option>
+              <option value="internal">Internal</option>
             </select>
           </label>
 

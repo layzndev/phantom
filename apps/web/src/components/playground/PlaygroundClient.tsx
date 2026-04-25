@@ -11,7 +11,8 @@ import type {
   MinecraftGameMode,
   MinecraftOperationResponse,
   MinecraftServerWithWorkload,
-  MinecraftTemplate
+  MinecraftTemplate,
+  PlanTier
 } from "@/types/admin";
 
 type HttpMethod = "GET" | "POST" | "DELETE";
@@ -40,6 +41,7 @@ interface CreateFormState {
   ramMb: string;
   diskGb: string;
   eula: boolean;
+  planTier: PlanTier;
 }
 
 const REFRESH_MS = 10_000;
@@ -189,6 +191,7 @@ export function PlaygroundClient() {
       if (form.cpu) payload.cpu = Number(form.cpu);
       if (form.ramMb) payload.ramMb = Number(form.ramMb);
       if (form.diskGb) payload.diskGb = Number(form.diskGb);
+      payload.planTier = form.planTier;
 
       const result = await callApi<CreateMinecraftServerResult>(
         "POST",
@@ -512,6 +515,18 @@ export function PlaygroundClient() {
               />
             </div>
 
+            <SelectField
+              label="Plan tier"
+              value={form.planTier}
+              onChange={(value) =>
+                setForm((prev) => ({ ...prev, planTier: (value || "free") as PlanTier }))
+              }
+              options={[
+                { value: "free", label: "Free (pool=free)" },
+                { value: "premium", label: "Premium (pool=premium)" }
+              ]}
+            />
+
             <div className="grid grid-cols-2 gap-3">
               <TextField
                 label="Max players"
@@ -784,7 +799,8 @@ function emptyForm(templateId = ""): CreateFormState {
     cpu: "",
     ramMb: "",
     diskGb: "",
-    eula: false
+    eula: false,
+    planTier: "free"
   };
 }
 

@@ -114,6 +114,7 @@ model Node {
   cpuCores             Int?         @map("cpu_cores")
   totalDiskGb          Int?         @map("total_disk_gb")
   maintenanceMode      Boolean      @default(false) @map("maintenance_mode")
+  pool                 String       @default("free")
   createdAt       DateTime          @default(now()) @map("created_at")
   updatedAt       DateTime          @updatedAt @map("updated_at")
   tokens          NodeToken[]
@@ -123,6 +124,7 @@ model Node {
   @@index([status])
   @@index([health])
   @@index([region])
+  @@index([pool])
   @@index([lastHeartbeatAt])
   @@map("nodes")
 }
@@ -237,6 +239,7 @@ model MinecraftServer {
   gameMode         String    @default("survival") @map("game_mode")
   maxPlayers       Int       @default(20) @map("max_players")
   eula             Boolean   @default(false)
+  planTier         String    @default("free") @map("plan_tier")
   serverProperties Json      @default("{}") @map("server_properties")
   rconPassword     String?   @map("rcon_password")
   createdAt        DateTime  @default(now()) @map("created_at")
@@ -245,6 +248,7 @@ model MinecraftServer {
 
   @@index([templateId])
   @@index([deletedAt])
+  @@index([planTier])
   @@map("minecraft_servers")
 }
 

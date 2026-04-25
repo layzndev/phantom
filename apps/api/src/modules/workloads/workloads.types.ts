@@ -56,6 +56,7 @@ export interface CreateWorkloadResult {
   workload: CompanyWorkload;
   placed: boolean;
   reason?: string;
+  diagnostics?: import("./workloads.scheduler.js").SchedulerDiagnostics;
 }
 
 export interface DeleteWorkloadResult {

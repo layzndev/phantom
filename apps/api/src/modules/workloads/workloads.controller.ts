@@ -63,7 +63,9 @@ workloadsController.post(
         type: result.workload.type,
         nodeId: result.workload.nodeId,
         placed: result.placed,
-        reason: result.reason
+        reason: result.reason,
+        requiredPool: result.diagnostics?.requiredPool,
+        candidates: result.diagnostics?.candidates
       }
     });
     if (!result.placed) {
@@ -73,7 +75,12 @@ workloadsController.post(
         actorEmail: actor.email,
         targetType: "system",
         targetId: result.workload.id,
-        metadata: { reason: result.reason }
+        metadata: {
+          reason: result.reason,
+          requiredPool: result.diagnostics?.requiredPool,
+          poolMatches: result.diagnostics?.poolMatches,
+          withCapacity: result.diagnostics?.withCapacity
+        }
       });
     }
     res.status(201).json(result);
