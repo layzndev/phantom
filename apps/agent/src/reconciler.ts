@@ -313,7 +313,7 @@ export class WorkloadReconciler {
 function buildHeartbeatPayload(
   container: DockerContainerSummary | null,
   reason: string,
-  stats: { cpuPercent?: number; memoryMb?: number },
+  stats: { cpuPercent?: number; memoryMb?: number; diskGb?: number },
   overrideStatus?: WorkloadRuntimeStatus
 ): WorkloadHeartbeatPayload {
   if (!container) {
