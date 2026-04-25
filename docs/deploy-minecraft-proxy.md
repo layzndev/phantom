@@ -43,3 +43,10 @@ CNAME  *      -> nptnz.co.uk       (DNS only)
 ```
 
 All Minecraft hostnames like `anthony.nptnz.co.uk` and `skyblock.nptnz.co.uk` should resolve to the proxy. Phantom then extracts the requested subdomain and routes traffic to the correct backend workload.
+
+Debug hostnames to verify in logs:
+
+- `anthony2.nptnz.co.uk`
+- `anthony2.nptnz.co.uk.`
+- `ANTHONY2.NPTNZ.CO.UK`
+- `anthony2.nptnz.co.uk:25565`

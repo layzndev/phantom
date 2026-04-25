@@ -16,31 +16,48 @@ type CacheEntry = {
   value: RoutingRecord | null;
 };
 
+const NEGATIVE_CACHE_TTL_MS = 1_000;
+
 export class PhantomRoutingClient {
   private readonly cache = new Map<string, CacheEntry>();
 
   constructor(private readonly config: ProxyConfig) {}
 
   async resolve(hostname: string): Promise<RoutingRecord | null> {
-    const key = hostname.trim().toLowerCase();
+    const key = normalizeRoutingHostname(hostname);
     const now = Date.now();
     const cached = this.cache.get(key);
     if (cached && cached.expiresAt > now) {
+      console.info("[minecraft-proxy] routing cache hit", {
+        hostname,
+        normalizedHostname: key,
+        cachedStatus: cached.value?.status ?? "miss"
+      });
       return cached.value;
     }
 
-    const response = await fetch(
-      `${this.config.apiUrl}/runtime/minecraft/routing?hostname=${encodeURIComponent(key)}`,
-      {
-        headers: {
-          authorization: `Bearer ${this.config.nodeToken}`
-        }
+    const url = `${this.config.apiUrl}/runtime/minecraft/routing?hostname=${encodeURIComponent(key)}`;
+    console.info("[minecraft-proxy] routing lookup", {
+      hostname,
+      normalizedHostname: key,
+      url
+    });
+
+    const response = await fetch(url, {
+      headers: {
+        authorization: `Bearer ${this.config.nodeToken}`
       }
-    );
+    });
+
+    console.info("[minecraft-proxy] routing response", {
+      hostname,
+      normalizedHostname: key,
+      status: response.status
+    });
 
     if (response.status === 404) {
       this.cache.set(key, {
-        expiresAt: now + this.config.routingCacheTtlMs,
+        expiresAt: now + NEGATIVE_CACHE_TTL_MS,
         value: null
       });
       return null;
@@ -60,4 +77,13 @@ export class PhantomRoutingClient {
     });
     return value;
   }
+}
+
+function normalizeRoutingHostname(value: string) {
+  const withoutNullBytes = value.replace(/\0.*$/s, "");
+  const withoutWeirdWhitespace = withoutNullBytes.trim().toLowerCase();
+  const withoutTrailingDot = withoutWeirdWhitespace.replace(/\.+$/, "");
+  const withoutPort = withoutTrailingDot.replace(/:\d+$/, "");
+  const sanitized = withoutPort.replace(/[^\x20-\x7e]/g, "");
+  return sanitized;
 }

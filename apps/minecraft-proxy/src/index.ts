@@ -31,10 +31,23 @@ const server = net.createServer((socket) => {
     handled = true;
 
     try {
+      console.info("[minecraft-proxy] handshake", {
+        rawHostname: handshake.rawHostname,
+        hostname: handshake.hostname,
+        port: handshake.port,
+        nextState: handshake.nextState
+      });
       const route = await routing.resolve(handshake.hostname);
       if (!route) {
         return replyUnavailable(socket, handshake.nextState, "Unknown Phantom server.", buffer);
       }
+
+      console.info("[minecraft-proxy] route accepted", {
+        hostname: handshake.hostname,
+        backendHost: route.host,
+        backendPort: route.port,
+        status: route.status
+      });
 
       if (route.status === "sleeping") {
         return replyUnavailable(socket, handshake.nextState, "Server is sleeping. Start it from your panel.", buffer);
@@ -79,12 +92,18 @@ function proxyToBackend(
   });
 
   backend.once("connect", () => {
+    console.info("[minecraft-proxy] proxy connected", { host, port });
     backend.write(initialData);
     client.pipe(backend);
     backend.pipe(client);
   });
 
-  backend.once("error", () => {
+  backend.once("error", (error) => {
+    console.warn("[minecraft-proxy] backend connect failed", {
+      host,
+      port,
+      error: error instanceof Error ? error.message : "unknown"
+    });
     if (!client.destroyed) {
       replyUnavailable(client, nextState, "Server temporarily unavailable.", initialData);
     }

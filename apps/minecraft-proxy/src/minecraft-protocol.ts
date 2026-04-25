@@ -1,5 +1,6 @@
 export interface MinecraftHandshake {
   protocolVersion: number;
+  rawHostname: string;
   hostname: string;
   port: number;
   nextState: 1 | 2;
@@ -39,6 +40,7 @@ export function tryParseHandshake(buffer: Buffer): MinecraftHandshake | null {
 
     return {
       protocolVersion: protocolVersion.value,
+      rawHostname: hostname.value,
       hostname: hostname.value.toLowerCase(),
       port,
       nextState: nextState.value
