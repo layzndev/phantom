@@ -5,6 +5,8 @@ import { ADMIN_API_BASE_URL, adminApi } from "@/lib/api/admin-api";
 import { MinecraftConsole, type MinecraftConsoleLine } from "@/components/playground/MinecraftConsole";
 import type { MinecraftServerWithWorkload } from "@/types/admin";
 
+const RECONNECT_DELAY_MS = 2_000;
+
 export function MinecraftServiceConsole({
   entry,
   onRefresh
@@ -15,8 +17,13 @@ export function MinecraftServiceConsole({
   const [lines, setLines] = useState<MinecraftConsoleLine[]>([]);
   const [commandInput, setCommandInput] = useState("");
   const [busy, setBusy] = useState(false);
-  const [reconnectToken, setReconnectToken] = useState(0);
+  const [connectionState, setConnectionState] = useState<
+    "connecting" | "connected" | "disconnected" | "reconnecting"
+  >("connecting");
   const socketRef = useRef<WebSocket | null>(null);
+  const reconnectTimerRef = useRef<number | null>(null);
+  const shouldReconnectRef = useRef(true);
+  const manuallyClosedRef = useRef(false);
 
   const appendLines = useCallback(
     (
@@ -41,75 +48,126 @@ export function MinecraftServiceConsole({
   }, [entry.server.id]);
 
   useEffect(() => {
-    const socket = new WebSocket(wsUrl);
-    socketRef.current = socket;
+    shouldReconnectRef.current = true;
+    manuallyClosedRef.current = false;
 
-    socket.addEventListener("message", (event) => {
-      try {
-        const payload = JSON.parse(String(event.data)) as
-          | { type: "log"; line: string }
-          | { type: "status"; status: string }
-          | { type: "command_result"; id: string; output: string }
-          | { type: "error"; message: string };
+    const clearReconnectTimer = () => {
+      if (reconnectTimerRef.current !== null) {
+        window.clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
+    };
 
-        const timestamp = new Date().toISOString();
-        if (payload.type === "log") {
-          appendLines(payload.line.split(/\r?\n/).filter(Boolean).map((text) => ({
-            timestamp,
-            kind: "logs" as const,
-            text
-          })));
-        } else if (payload.type === "status") {
-          appendLines([{ timestamp, kind: "info", text: `status: ${payload.status}` }]);
-          void onRefresh();
-        } else if (payload.type === "command_result") {
-          const output = payload.output.trim().length > 0 ? payload.output : "(no output)";
-          appendLines(output.split(/\r?\n/).map((text) => ({
-            timestamp,
-            kind: "response" as const,
-            text
-          })));
-          void onRefresh();
-        } else if (payload.type === "error") {
-          appendLines([{ timestamp, kind: "error", text: payload.message }]);
-          void onRefresh();
+    const connect = () => {
+      setConnectionState((current) =>
+        current === "connected" ? "connected" : current === "disconnected" ? "reconnecting" : "connecting"
+      );
+
+      const socket = new WebSocket(wsUrl);
+      socketRef.current = socket;
+
+      socket.addEventListener("message", (event) => {
+        try {
+          const payload = JSON.parse(String(event.data)) as
+            | { type: "log"; line: string }
+            | { type: "status"; status: string }
+            | { type: "command_result"; id: string; output: string }
+            | { type: "error"; message: string };
+
+          const timestamp = new Date().toISOString();
+          if (payload.type === "log") {
+            appendLines(payload.line.split(/\r?\n/).filter(Boolean).map((text) => ({
+              timestamp,
+              kind: "logs" as const,
+              text
+            })));
+          } else if (payload.type === "status") {
+            appendLines([{ timestamp, kind: "info", text: `status: ${payload.status}` }]);
+            void onRefresh();
+          } else if (payload.type === "command_result") {
+            const output = payload.output.trim().length > 0 ? payload.output : "(no output)";
+            appendLines(output.split(/\r?\n/).map((text) => ({
+              timestamp,
+              kind: "response" as const,
+              text
+            })));
+            void onRefresh();
+          } else if (payload.type === "error") {
+            appendLines([{ timestamp, kind: "error", text: payload.message }]);
+            void onRefresh();
+          }
+        } catch {
+          appendLines([
+            {
+              timestamp: new Date().toISOString(),
+              kind: "error",
+              text: "Invalid console payload received."
+            }
+          ]);
         }
-      } catch {
+      });
+
+      socket.addEventListener("open", () => {
+        clearReconnectTimer();
+        setConnectionState("connected");
+        appendLines([
+          {
+            timestamp: new Date().toISOString(),
+            kind: "info",
+            text: `console websocket connected to ${entry.server.name}`
+          }
+        ]);
+      });
+
+      socket.addEventListener("close", () => {
+        socketRef.current = null;
+        if (!shouldReconnectRef.current || manuallyClosedRef.current) {
+          setConnectionState("disconnected");
+          appendLines([
+            {
+              timestamp: new Date().toISOString(),
+              kind: "info",
+              text: "console disconnected"
+            }
+          ]);
+          return;
+        }
+
+        setConnectionState("reconnecting");
+        appendLines([
+          {
+            timestamp: new Date().toISOString(),
+            kind: "info",
+            text: `console disconnected, retrying in ${RECONNECT_DELAY_MS / 1000}s`
+          }
+        ]);
+        clearReconnectTimer();
+        reconnectTimerRef.current = window.setTimeout(() => {
+          connect();
+        }, RECONNECT_DELAY_MS);
+      });
+
+      socket.addEventListener("error", () => {
         appendLines([
           {
             timestamp: new Date().toISOString(),
             kind: "error",
-            text: "Invalid console payload received."
+            text: "console websocket error"
           }
         ]);
-      }
-    });
+      });
+    };
 
-    socket.addEventListener("open", () => {
-      appendLines([
-        {
-          timestamp: new Date().toISOString(),
-          kind: "info",
-          text: `console attached to ${entry.server.name}`
-        }
-      ]);
-    });
-
-    socket.addEventListener("close", () => {
-      appendLines([
-        {
-          timestamp: new Date().toISOString(),
-          kind: "info",
-          text: "console disconnected"
-        }
-      ]);
-    });
+    connect();
 
     return () => {
-      socket.close();
+      shouldReconnectRef.current = false;
+      manuallyClosedRef.current = true;
+      clearReconnectTimer();
+      socketRef.current?.close();
       socketRef.current = null;
     };
-  }, [appendLines, entry.server.id, entry.server.name, onRefresh, reconnectToken, wsUrl]);
+  }, [appendLines, entry.server.id, entry.server.name, onRefresh, wsUrl]);
 
   const sendMessage = (payload: Record<string, unknown>) => {
     const socket = socketRef.current;
@@ -170,8 +228,12 @@ export function MinecraftServiceConsole({
   };
 
   const handleReconnectLogs = () => {
-    setReconnectToken((current) => current + 1);
+    manuallyClosedRef.current = false;
+    shouldReconnectRef.current = true;
+    socketRef.current?.close();
   };
+
+  const derivedBusy = busy || connectionState === "connecting" || connectionState === "reconnecting";
 
   return (
     <MinecraftConsole
@@ -188,7 +250,7 @@ export function MinecraftServiceConsole({
       onRestart={() => void handleRestart()}
       onStop={() => void handleStop()}
       onClear={() => setLines([])}
-      busy={busy}
+      busy={derivedBusy}
       operatorLabel="admin"
     />
   );
