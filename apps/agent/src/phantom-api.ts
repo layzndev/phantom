@@ -4,6 +4,7 @@ import type {
   MinecraftOperationCompletePayload,
   MinecraftRuntimeOperationsResponse,
   NodeHeartbeatPayload,
+  RuntimeMinecraftConsoleStreamsResponse,
   WorkloadAckActionPayload,
   WorkloadAckDeletePayload,
   WorkloadEventPayload,
@@ -55,6 +56,19 @@ export class PhantomApiClient {
   async listMinecraftOperations() {
     return this.request<MinecraftRuntimeOperationsResponse>(
       "/runtime/minecraft/operations/pending"
+    );
+  }
+
+  async listMinecraftConsoleStreams() {
+    return this.request<RuntimeMinecraftConsoleStreamsResponse>(
+      "/runtime/minecraft/consoles/active"
+    );
+  }
+
+  async publishMinecraftConsoleLogs(serverId: string, payload: { lines: string[] }) {
+    return this.request<{ ok: true }>(
+      `/runtime/minecraft/servers/${encodeURIComponent(serverId)}/console/logs`,
+      { method: "POST", body: JSON.stringify(payload) }
     );
   }
 

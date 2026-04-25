@@ -3,6 +3,7 @@ import { DockerRuntime } from "./docker.js";
 import { PhantomAgent } from "./agent.js";
 import { RuntimeCleanupService } from "./cleanup.js";
 import { Logger } from "./logger.js";
+import { MinecraftConsoleStreamManager } from "./minecraft-console.js";
 import { MinecraftOperationsProcessor } from "./minecraft.js";
 import { PhantomApiClient } from "./phantom-api.js";
 import { WorkloadReconciler } from "./reconciler.js";
@@ -25,12 +26,15 @@ async function main() {
   const reconciler = new WorkloadReconciler(config, api, docker, logger);
   const cleanup = new RuntimeCleanupService(config, api, docker, logger);
   const minecraftOps = new MinecraftOperationsProcessor(api, docker, logger);
+  const minecraftConsole = new MinecraftConsoleStreamManager(api, docker, logger);
   const agent = new PhantomAgent(
     reconciler,
     cleanup,
     minecraftOps,
+    minecraftConsole,
     api,
     docker,
+    config.nodeId,
     config.dataDir,
     logger,
     config.pollIntervalMs

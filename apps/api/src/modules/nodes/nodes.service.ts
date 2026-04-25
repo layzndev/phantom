@@ -183,6 +183,14 @@ export async function acceptNodeHeartbeat(
       address: string;
       category: "phantom-range" | "system";
     }>;
+    dockerPublishedPorts?: Array<{
+      containerId: string;
+      containerName: string;
+      workloadId: string | null;
+      protocol: "tcp" | "udp";
+      publishedPort: number;
+      targetPort: number;
+    }>;
     portRanges?: Array<{ start: number; end: number }>;
   }
 ) {
@@ -233,6 +241,7 @@ export async function acceptNodeHeartbeat(
     cpuCores: payload.cpuCores,
     openPorts: payload.openPorts,
     openPortDetails: payload.openPortDetails,
+    dockerPublishedPorts: payload.dockerPublishedPorts,
     suggestedPortRanges: payload.portRanges
   });
 
@@ -335,12 +344,21 @@ function toCompanyNode(
   node: NonNullNodeRecord,
   options: ToCompanyNodeOptions = {}
 ): CompanyNode {
+  const nodeWithDiagnostics = node as NonNullNodeRecord & {
+    openPortDetails?: unknown;
+    dockerPublishedPorts?: unknown;
+  };
   const hasRange = node.portRangeStart !== null && node.portRangeEnd !== null;
   const portRange = hasRange ? `${node.portRangeStart}-${node.portRangeEnd}` : null;
   const totalPorts = hasRange ? (node.portRangeEnd as number) - (node.portRangeStart as number) + 1 : 0;
   const suggestedPortRanges = Array.isArray(node.suggestedPortRanges)
     ? (node.suggestedPortRanges as Array<{ start: number; end: number }>)
     : null;
+  const reservedPorts = new Set(
+    (options.hostedServersList ?? [])
+      .map((server) => server.port)
+      .filter((port): port is number => typeof port === "number")
+  ).size;
 
   return {
     id: node.id,
@@ -358,18 +376,28 @@ function toCompanyNode(
     totalCpu: node.totalCpu ?? 0,
     usedCpu: node.usedCpu ?? 0,
     hostedServers: options.hostedServersCount ?? 0,
-    availablePorts: totalPorts,
-    reservedPorts: 0,
+    availablePorts: Math.max(0, totalPorts - reservedPorts),
+    reservedPorts,
     portRange,
     portRangeStart: node.portRangeStart,
     portRangeEnd: node.portRangeEnd,
     openPorts: node.openPorts ?? [],
-    openPortDetails: Array.isArray(node.openPortDetails)
-      ? (node.openPortDetails as Array<{
+    openPortDetails: Array.isArray(nodeWithDiagnostics.openPortDetails)
+      ? (nodeWithDiagnostics.openPortDetails as Array<{
           port: number;
           protocol: "tcp" | "udp";
           address: string;
           category: "phantom-range" | "system";
+        }>)
+      : [],
+    dockerPublishedPorts: Array.isArray(nodeWithDiagnostics.dockerPublishedPorts)
+      ? (nodeWithDiagnostics.dockerPublishedPorts as Array<{
+          containerId: string;
+          containerName: string;
+          workloadId: string | null;
+          protocol: "tcp" | "udp";
+          publishedPort: number;
+          targetPort: number;
         }>)
       : [],
     suggestedPortRanges,

@@ -107,6 +107,33 @@ export const adminApi = {
     ),
   minecraftServers: () =>
     apiRequest<{ servers: MinecraftServerWithWorkload[] }>("/minecraft/servers"),
+  minecraftServer: (id: string) =>
+    apiRequest<MinecraftServerWithWorkload>(`/minecraft/servers/${encodeURIComponent(id)}`),
+  startMinecraftServer: (id: string) =>
+    apiRequest<{ server: MinecraftServerWithWorkload["server"]; workload: CompanyWorkload }>(
+      `/minecraft/servers/${encodeURIComponent(id)}/start`,
+      { method: "POST" }
+    ),
+  stopMinecraftServer: (id: string) =>
+    apiRequest<{ server: MinecraftServerWithWorkload["server"]; workload: CompanyWorkload }>(
+      `/minecraft/servers/${encodeURIComponent(id)}/stop`,
+      { method: "POST" }
+    ),
+  restartMinecraftServer: (id: string) =>
+    apiRequest<{ server: MinecraftServerWithWorkload["server"]; workload: CompanyWorkload }>(
+      `/minecraft/servers/${encodeURIComponent(id)}/restart`,
+      { method: "POST" }
+    ),
+  commandMinecraftServer: (id: string, command: string) =>
+    apiRequest<{ operation: unknown; pending: boolean }>(
+      `/minecraft/servers/${encodeURIComponent(id)}/command`,
+      { method: "POST", body: JSON.stringify({ command }) }
+    ),
+  saveMinecraftServer: (id: string) =>
+    apiRequest<{ operation: unknown; pending: boolean }>(
+      `/minecraft/servers/${encodeURIComponent(id)}/save`,
+      { method: "POST" }
+    ),
   deleteMinecraftServer: (id: string, options: DeleteMinecraftServerOptions = {}) =>
     apiRequest<DeleteMinecraftServerResult>(
       `/minecraft/servers/${encodeURIComponent(id)}?hardDeleteData=${options.hardDeleteData === true}`,

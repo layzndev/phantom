@@ -1,5 +1,9 @@
 import { DockerRuntime } from "./docker.js";
 import { Logger } from "./logger.js";
+import {
+  DockerMinecraftManagementTransport,
+  type MinecraftManagementTransport
+} from "./minecraft-management.js";
 import { PhantomApiClient } from "./phantom-api.js";
 import type {
   MinecraftOperationCompletePayload,
@@ -9,6 +13,7 @@ import type {
 
 export class MinecraftOperationsProcessor {
   private readonly logger: Logger;
+  private readonly transport: MinecraftManagementTransport;
   private running = false;
 
   constructor(
@@ -17,6 +22,7 @@ export class MinecraftOperationsProcessor {
     logger: Logger
   ) {
     this.logger = logger.child("minecraft-ops");
+    this.transport = new DockerMinecraftManagementTransport(this.docker, logger);
   }
 
   async processOnce() {
@@ -59,7 +65,7 @@ export class MinecraftOperationsProcessor {
     }
 
     try {
-      const result = await this.execute(op.kind, op.containerId, op.payload);
+      const result = await this.execute(op.kind, op.workloadId, op.containerId, op.payload);
       await this.complete(op.id, { status: "succeeded", result });
     } catch (error) {
       const message = error instanceof Error ? error.message : "unknown";
@@ -74,34 +80,30 @@ export class MinecraftOperationsProcessor {
 
   private async execute(
     kind: MinecraftOperationKind,
+    workloadId: string,
     containerId: string,
     payload: Record<string, unknown>
   ): Promise<Record<string, unknown>> {
+    const target = { workloadId, containerId };
     switch (kind) {
       case "command": {
         const command = typeof payload.command === "string" ? payload.command.trim() : "";
         if (!command) {
           throw new Error("missing command");
         }
-        const { stdout, stderr } = await this.docker.execInContainer(containerId, [
-          "rcon-cli",
-          command
-        ]);
-        return { output: stdout, stderr };
+        return this.transport.sendCommand(target, command);
       }
       case "save": {
-        const { stdout, stderr } = await this.docker.execInContainer(containerId, [
-          "rcon-cli",
-          "save-all",
-          "flush"
-        ]);
-        return { output: stdout, stderr };
+        return this.transport.saveAll(target);
       }
       case "logs": {
         const tail = typeof payload.tail === "number" ? payload.tail : 200;
         const output = await this.docker.getContainerLogs(containerId, { tail });
         const lines = output.split(/\r?\n/);
         return { lines, tail };
+      }
+      case "stop": {
+        return this.transport.stopGracefully(target);
       }
       default:
         throw new Error(`unsupported operation kind: ${kind}`);

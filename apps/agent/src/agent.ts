@@ -1,6 +1,7 @@
 import { RuntimeCleanupService } from "./cleanup.js";
 import { DockerRuntime } from "./docker.js";
 import { Logger } from "./logger.js";
+import { MinecraftConsoleStreamManager } from "./minecraft-console.js";
 import { MinecraftOperationsProcessor } from "./minecraft.js";
 import { PhantomApiClient } from "./phantom-api.js";
 import { WorkloadReconciler } from "./reconciler.js";
@@ -21,20 +22,23 @@ export class PhantomAgent {
   private lastFullGcAt = 0;
   private lastSystemInfoAt = 0;
   private cachedSystemInfo: NodeSystemInfo | null = null;
-  private readonly liveMetrics = new NodeLiveMetricsCollector();
+  private readonly liveMetrics: NodeLiveMetricsCollector;
 
   constructor(
     private readonly reconciler: WorkloadReconciler,
     private readonly cleanup: RuntimeCleanupService,
     private readonly minecraftOps: MinecraftOperationsProcessor,
+    private readonly minecraftConsole: MinecraftConsoleStreamManager,
     private readonly api: PhantomApiClient,
     private readonly docker: DockerRuntime,
+    private readonly nodeId: string,
     private readonly dataDir: string,
     logger: Logger,
     private readonly pollIntervalMs: number,
     private readonly fullGcIntervalMs: number = DEFAULT_FULL_GC_INTERVAL_MS
   ) {
     this.logger = logger.child("runner");
+    this.liveMetrics = new NodeLiveMetricsCollector(this.docker, this.nodeId);
   }
 
   async start() {
@@ -52,6 +56,7 @@ export class PhantomAgent {
       clearTimeout(this.timer);
       this.timer = null;
     }
+    await this.minecraftConsole.stopAll();
     this.logger.info("agent stopped");
   }
 
@@ -89,6 +94,9 @@ export class PhantomAgent {
           ...(liveMetrics.openPorts !== undefined ? { openPorts: liveMetrics.openPorts } : {}),
           ...(liveMetrics.openPortDetails !== undefined
             ? { openPortDetails: liveMetrics.openPortDetails }
+            : {}),
+          ...(liveMetrics.dockerPublishedPorts !== undefined
+            ? { dockerPublishedPorts: liveMetrics.dockerPublishedPorts }
             : {})
         });
       } catch (error) {
@@ -99,6 +107,7 @@ export class PhantomAgent {
 
       await this.reconciler.reconcileOnce();
       await this.minecraftOps.processOnce();
+      await this.minecraftConsole.reconcileOnce();
 
       try {
         await this.cleanup.purgeOrphanedManaged();

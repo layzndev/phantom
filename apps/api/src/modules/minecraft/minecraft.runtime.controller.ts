@@ -6,12 +6,15 @@ import { validateBody, validateParams } from "../../lib/validate.js";
 import {
   claimRuntimeMinecraftOperation,
   completeRuntimeMinecraftOperation,
-  listRuntimeMinecraftOperations
+  listRuntimeMinecraftConsoleStreams,
+  listRuntimeMinecraftOperations,
+  publishRuntimeMinecraftConsoleLogs
 } from "./minecraft.service.js";
 
 export const minecraftRuntimeController = Router();
 
 const runtimeOpParamsSchema = z.object({ opId: z.string().uuid() });
+const runtimeConsoleParamsSchema = z.object({ id: z.string().uuid() });
 
 const runtimeCompleteSchema = z.object({
   status: z.enum(["succeeded", "failed"]),
@@ -19,11 +22,24 @@ const runtimeCompleteSchema = z.object({
   error: z.string().max(2000).nullish()
 });
 
+const runtimeConsoleLogsSchema = z.object({
+  lines: z.array(z.string().min(1).max(4000)).max(200)
+});
+
 minecraftRuntimeController.get(
   "/operations/pending",
   asyncHandler(async (req, res) => {
     const token = extractBearerToken(req.headers.authorization);
     const result = await listRuntimeMinecraftOperations(token);
+    res.json(result);
+  })
+);
+
+minecraftRuntimeController.get(
+  "/consoles/active",
+  asyncHandler(async (req, res) => {
+    const token = extractBearerToken(req.headers.authorization);
+    const result = await listRuntimeMinecraftConsoleStreams(token);
     res.json(result);
   })
 );
@@ -48,6 +64,19 @@ minecraftRuntimeController.post(
       status: req.body.status,
       result: (req.body.result ?? null) as Record<string, unknown> | null,
       error: req.body.error ?? null
+    });
+    res.json(result);
+  })
+);
+
+minecraftRuntimeController.post(
+  "/servers/:id/console/logs",
+  validateParams(runtimeConsoleParamsSchema),
+  validateBody(runtimeConsoleLogsSchema),
+  asyncHandler(async (req, res) => {
+    const token = extractBearerToken(req.headers.authorization);
+    const result = await publishRuntimeMinecraftConsoleLogs(token, req.params.id, {
+      lines: req.body.lines
     });
     res.json(result);
   })

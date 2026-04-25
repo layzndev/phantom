@@ -32,6 +32,11 @@ export function NodePortsCard({
   const reservedPercent = percent(node.reservedPorts, totalPorts);
   const rangeDefined = node.portRange !== null;
   const canApply = adminRole !== null && APPLY_ROLES.includes(adminRole);
+  const serverByWorkloadId = new Map(
+    (node.hostedServersList ?? [])
+      .filter((server) => server.workloadId)
+      .map((server) => [server.workloadId as string, server])
+  );
   const reservedPorts = Array.from(
     new Set(
       (node.hostedServersList ?? [])
@@ -62,6 +67,16 @@ export function NodePortsCard({
     (port) => !reservedPorts.includes(port)
   );
   const systemListening = listeningDetails.filter((entry) => entry.category === "system");
+  const activeListening = listeningDetails.filter(
+    (entry, index, all) =>
+      all.findIndex(
+        (candidate) =>
+          candidate.port === entry.port && candidate.protocol === entry.protocol
+      ) === index
+  );
+  const dockerPublished = [...node.dockerPublishedPorts].sort(
+    (left, right) => left.publishedPort - right.publishedPort
+  );
 
   const suggestions = [...(node.suggestedPortRanges ?? [])]
     .filter((range) => range.end >= range.start)
@@ -107,56 +122,76 @@ export function NodePortsCard({
           <p className="mt-1 font-semibold text-white">{rangeDefined ? `${reservedPercent}%` : "-"}</p>
         </div>
         <div className="col-span-2 rounded-2xl bg-white/[0.04] p-4">
-          <p className="text-slate-400">Open ports detected</p>
+          <p className="text-slate-400">Port diagnostics</p>
           <p className="mt-1 font-semibold text-white">
-            {listeningDetails.length > 0 ? `${listeningDetails.length} listening` : "None reported"}
+            {activeListening.length > 0
+              ? `${activeListening.length} active listeners`
+              : "No active listeners reported"}
           </p>
-          {listeningDetails.length > 0 ? (
-            <div className="mt-2 space-y-2">
-              <p className="break-all font-mono text-xs text-slate-500">
-                {listeningDetails
-                  .slice(0, 12)
-                  .map((entry) => `${entry.port}/${entry.protocol}`)
-                  .join(", ")}
-                {listeningDetails.length > 12 ? ` +${listeningDetails.length - 12} more` : ""}
+          <div className="mt-3 space-y-3 text-xs">
+            <PortSection
+              label="Active Listening Ports"
+              items={activeListening.map((entry) => {
+                const owner = dockerPublished.find(
+                  (binding) =>
+                    binding.publishedPort === entry.port && binding.protocol === entry.protocol
+                );
+                const server = owner?.workloadId ? serverByWorkloadId.get(owner.workloadId) : null;
+                const ownerLabel = server?.name
+                  ? server.name
+                  : SYSTEM_PORT_LABELS[entry.port] ?? owner?.containerName ?? null;
+                return `${entry.port}/${entry.protocol}${ownerLabel ? ` ${ownerLabel}` : ""}`;
+              })}
+              empty="None reported"
+            />
+
+            <PortSection
+              label="Docker Published Ports"
+              items={dockerPublished.map((binding) => {
+                const server = binding.workloadId
+                  ? serverByWorkloadId.get(binding.workloadId)
+                  : null;
+                const ownerLabel = server?.name ?? binding.containerName;
+                return `${binding.publishedPort}/${binding.protocol} -> ${binding.targetPort} ${ownerLabel}`;
+              })}
+              empty="No Phantom container port published"
+            />
+
+            <PortSection
+              label="Phantom Reserved Ports"
+              items={reservedPorts.map((port) => String(port))}
+              empty="No reserved ports"
+            />
+
+            {reservedButNotListening.length > 0 ? (
+              <p className="text-slate-400">
+                Reserved but not listening:{" "}
+                <span className="font-mono text-slate-300">
+                  {reservedButNotListening.join(", ")}
+                </span>
               </p>
-              <div className="space-y-1 text-xs text-slate-400">
-                {reservedButNotListening.length > 0 ? (
-                  <p>
-                    Reserved but not listening:{" "}
-                    <span className="font-mono text-slate-300">
-                      {reservedButNotListening.join(", ")}
-                    </span>
-                  </p>
-                ) : null}
-                {listeningButNotReserved.length > 0 ? (
-                  <p>
-                    Listening but not reserved:{" "}
-                    <span className="font-mono text-slate-300">
-                      {listeningButNotReserved.join(", ")}
-                    </span>
-                  </p>
-                ) : null}
-                {systemListening.length > 0 ? (
-                  <p>
-                    System ports:{" "}
-                    <span className="font-mono text-slate-300">
-                      {systemListening
-                        .slice(0, 8)
-                        .map((entry) =>
-                          `${entry.port}/${entry.protocol}${
-                            SYSTEM_PORT_LABELS[entry.port]
-                              ? ` (${SYSTEM_PORT_LABELS[entry.port]})`
-                              : ""
-                          }`
-                        )
-                        .join(", ")}
-                    </span>
-                  </p>
-                ) : null}
-              </div>
-            </div>
-          ) : null}
+            ) : null}
+
+            {listeningButNotReserved.length > 0 ? (
+              <p className="text-slate-400">
+                Listening but not reserved:{" "}
+                <span className="font-mono text-slate-300">
+                  {listeningButNotReserved.join(", ")}
+                </span>
+              </p>
+            ) : null}
+
+            {systemListening.length > 0 ? (
+              <p className="text-slate-400">
+                System listeners:{" "}
+                <span className="font-mono text-slate-300">
+                  {systemListening
+                    .map((entry) => `${entry.port}/${entry.protocol}`)
+                    .join(", ")}
+                </span>
+              </p>
+            ) : null}
+          </div>
         </div>
       </div>
 
@@ -193,5 +228,24 @@ export function NodePortsCard({
         </div>
       ) : null}
     </DetailCard>
+  );
+}
+
+function PortSection({
+  label,
+  items,
+  empty
+}: {
+  label: string;
+  items: string[];
+  empty: string;
+}) {
+  return (
+    <div>
+      <p className="text-slate-400">{label}</p>
+      <p className="mt-1 break-all font-mono text-xs text-slate-300">
+        {items.length > 0 ? items.join(", ") : empty}
+      </p>
+    </div>
   );
 }

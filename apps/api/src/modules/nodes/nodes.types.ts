@@ -38,6 +38,15 @@ export interface OpenPortDetail {
   category: "phantom-range" | "system";
 }
 
+export interface DockerPublishedPort {
+  containerId: string;
+  containerName: string;
+  workloadId: string | null;
+  protocol: "tcp" | "udp";
+  publishedPort: number;
+  targetPort: number;
+}
+
 export interface CompanyNode {
   id: string;
   name: string;
@@ -61,6 +70,7 @@ export interface CompanyNode {
   portRangeEnd: number | null;
   openPorts: number[];
   openPortDetails: OpenPortDetail[];
+  dockerPublishedPorts: DockerPublishedPort[];
   suggestedPortRanges: SuggestedPortRange[] | null;
   agentVersion: string | null;
   runtimeVersion: string | null;

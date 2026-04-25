@@ -9,6 +9,7 @@ export type WorkloadEventType =
   | "crashed";
 export type WorkloadPortProtocol = "tcp" | "udp";
 export type OpenPortCategory = "phantom-range" | "system";
+export type MinecraftConsoleAction = "save-all" | "stop" | "logs.refresh";
 
 export interface AssignedWorkloadPort {
   internalPort: number;
@@ -100,6 +101,14 @@ export interface NodeHeartbeatPayload {
     address: string;
     category: OpenPortCategory;
   }>;
+  dockerPublishedPorts?: Array<{
+    containerId: string;
+    containerName: string;
+    workloadId: string | null;
+    protocol: WorkloadPortProtocol;
+    publishedPort: number;
+    targetPort: number;
+  }>;
   portRanges?: Array<{ start: number; end: number }>;
 }
 
@@ -140,7 +149,7 @@ export interface DockerCreateOptions {
   nodeId: string;
 }
 
-export type MinecraftOperationKind = "command" | "save" | "logs";
+export type MinecraftOperationKind = "command" | "save" | "logs" | "stop";
 
 export interface MinecraftRuntimeOperation {
   id: string;
@@ -155,6 +164,17 @@ export interface MinecraftRuntimeOperation {
 export interface MinecraftRuntimeOperationsResponse {
   nodeId: string;
   operations: MinecraftRuntimeOperation[];
+}
+
+export interface RuntimeMinecraftConsoleStream {
+  serverId: string;
+  workloadId: string;
+  containerId: string | null;
+}
+
+export interface RuntimeMinecraftConsoleStreamsResponse {
+  nodeId: string;
+  streams: RuntimeMinecraftConsoleStream[];
 }
 
 export interface MinecraftOperationCompletePayload {

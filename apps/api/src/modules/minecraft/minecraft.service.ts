@@ -5,6 +5,7 @@ import {
   createMinecraftServerRecord,
   findMinecraftServerRecordById,
   findMinecraftServerRecordBySlug,
+  findMinecraftServerRecordByWorkloadId,
   listMinecraftServerRecords
 } from "../../db/minecraftRepository.js";
 import {
@@ -16,6 +17,7 @@ import {
   type MinecraftOperationKind as RepoOperationKind
 } from "../../db/minecraftOperationsRepository.js";
 import { authenticateRuntimeNode } from "../nodes/nodes.service.js";
+import { findNodeFromRegistry } from "../nodes/nodes.repository.js";
 import { findWorkloadFromRegistry } from "../workloads/workloads.repository.js";
 import {
   createWorkload,
@@ -35,6 +37,7 @@ import {
   listMinecraftTemplates,
   type MinecraftTemplate
 } from "./minecraft.templates.js";
+import { minecraftConsoleGateway } from "./minecraft.console.gateway.js";
 import type {
   CreateMinecraftServerResult,
   DeleteMinecraftServerResult,
@@ -74,7 +77,7 @@ export async function listMinecraftServers(): Promise<MinecraftServerWithWorkloa
   const servers = await Promise.all(
     records.map(async (record) => {
       const workload = await getWorkload(record.workloadId);
-      return { server: toMinecraftServer(record), workload };
+      return toMinecraftServerWithRuntime(record, workload);
     })
   );
   return servers;
@@ -86,7 +89,7 @@ export async function getMinecraftServer(id: string): Promise<MinecraftServerWit
     throw new AppError(404, "Minecraft server not found.", "MINECRAFT_SERVER_NOT_FOUND");
   }
   const workload = await getWorkload(record.workloadId);
-  return { server: toMinecraftServer(record), workload };
+  return toMinecraftServerWithRuntime(record, workload);
 }
 
 export async function createMinecraftServer(
@@ -181,18 +184,21 @@ export async function createMinecraftServer(
 export async function startMinecraftServer(id: string) {
   const record = await ensureMinecraftServerRecord(id);
   const workload = await startWorkload(record.workloadId);
+  minecraftConsoleGateway.publishStatus(record.id, workload.status);
   return { server: toMinecraftServer(record), workload };
 }
 
 export async function stopMinecraftServer(id: string) {
   const record = await ensureMinecraftServerRecord(id);
   const workload = await stopWorkload(record.workloadId);
+  minecraftConsoleGateway.publishStatus(record.id, workload.status);
   return { server: toMinecraftServer(record), workload };
 }
 
 export async function restartMinecraftServer(id: string) {
   const record = await ensureMinecraftServerRecord(id);
   const workload = await restartWorkload(record.workloadId);
+  minecraftConsoleGateway.publishStatus(record.id, workload.status);
   return { server: toMinecraftServer(record), workload };
 }
 
@@ -202,6 +208,7 @@ export async function deleteMinecraftServer(
 ): Promise<DeleteMinecraftServerResult> {
   const record = await ensureMinecraftServerRecord(id);
   const result = await requestWorkloadDeletion(record.workloadId, options);
+  minecraftConsoleGateway.publishStatus(record.id, result.workload?.status ?? "deleted");
   return {
     server: result.finalized ? null : toMinecraftServer(record),
     workload: result.workload,
@@ -270,6 +277,12 @@ export interface RuntimeMinecraftOperation {
   createdAt: string;
 }
 
+export interface RuntimeMinecraftConsoleStream {
+  serverId: string;
+  workloadId: string;
+  containerId: string | null;
+}
+
 export async function listRuntimeMinecraftOperations(rawToken: string) {
   const node = await authenticateRuntimeNode(rawToken);
   const records = await listPendingMinecraftOperationsForNode(node.id);
@@ -290,6 +303,27 @@ export async function listRuntimeMinecraftOperations(rawToken: string) {
     });
   }
   return { nodeId: node.id, operations };
+}
+
+export async function listRuntimeMinecraftConsoleStreams(rawToken: string) {
+  const node = await authenticateRuntimeNode(rawToken);
+  const active = minecraftConsoleGateway.listActiveWorkloads();
+  const streams: RuntimeMinecraftConsoleStream[] = [];
+
+  for (const entry of active) {
+    const workload = await findWorkloadFromRegistry(entry.workloadId);
+    if (!workload || workload.nodeId !== node.id || workload.type !== "minecraft") {
+      continue;
+    }
+
+    streams.push({
+      serverId: entry.serverId,
+      workloadId: workload.id,
+      containerId: workload.containerId
+    });
+  }
+
+  return { nodeId: node.id, streams };
 }
 
 export async function claimRuntimeMinecraftOperation(rawToken: string, opId: string) {
@@ -323,12 +357,61 @@ export async function completeRuntimeMinecraftOperation(
   if (!workload || workload.nodeId !== node.id) {
     throw new AppError(404, "Operation not found.", "MINECRAFT_OPERATION_NOT_FOUND");
   }
-  await completeMinecraftOperation(opId, {
+  const completed = await completeMinecraftOperation(opId, {
     status: payload.status,
     result: (payload.result ?? null) as Prisma.InputJsonValue | null,
     error: payload.error ?? null
   });
+
+  if (payload.status === "failed") {
+    minecraftConsoleGateway.publishError(op.workloadId, payload.error ?? "operation failed");
+  } else {
+    const output = formatMinecraftOperationOutput(
+      (completed.result as Record<string, unknown> | null) ?? payload.result ?? null
+    );
+    const payloadRecord = (op.payload as Record<string, unknown> | null) ?? null;
+    const commandResultId =
+      payloadRecord && typeof payloadRecord.clientRequestId === "string"
+        ? payloadRecord.clientRequestId
+        : op.id;
+    minecraftConsoleGateway.publishCommandResult(op.workloadId, {
+      id: commandResultId,
+      output
+    });
+  }
   return { ok: true };
+}
+
+export async function publishRuntimeMinecraftConsoleLogs(
+  rawToken: string,
+  serverId: string,
+  payload: { lines: string[] }
+) {
+  const node = await authenticateRuntimeNode(rawToken);
+  const record = await ensureMinecraftServerRecord(serverId);
+  const workload = await findWorkloadFromRegistry(record.workloadId);
+  if (!workload || workload.nodeId !== node.id || workload.type !== "minecraft") {
+    throw new AppError(404, "Minecraft server not found.", "MINECRAFT_SERVER_NOT_FOUND");
+  }
+
+  const lines = payload.lines
+    .map((line) => line.trimEnd())
+    .filter((line) => line.length > 0)
+    .slice(0, 200);
+
+  if (lines.length > 0) {
+    minecraftConsoleGateway.publishLogs(serverId, lines);
+  }
+
+  return { ok: true };
+}
+
+export async function getMinecraftConsoleSession(id: string) {
+  const detail = await getMinecraftServer(id);
+  if (detail.workload.type !== "minecraft") {
+    throw new AppError(400, "Workload is not a Minecraft server.", "MINECRAFT_WORKLOAD_INVALID");
+  }
+  return detail;
 }
 
 async function waitForMinecraftOperation(operationId: string) {
@@ -486,4 +569,44 @@ function toMinecraftServer(record: MinecraftServerRecord): MinecraftServer {
     updatedAt: record.updatedAt.toISOString(),
     deletedAt: record.deletedAt?.toISOString() ?? null
   };
+}
+
+async function toMinecraftServerWithRuntime(
+  record: MinecraftServerRecord,
+  workload: CompanyWorkload
+): Promise<MinecraftServerWithWorkload> {
+  const node = workload.nodeId ? await findNodeFromRegistry(workload.nodeId) : null;
+  return {
+    server: toMinecraftServer(record),
+    workload,
+    node: node
+      ? {
+          id: node.id,
+          name: node.name,
+          publicHost: node.publicHost,
+          internalHost: node.internalHost
+        }
+      : null,
+    hostname: node?.publicHost ?? null
+  };
+}
+
+function formatMinecraftOperationOutput(result: Record<string, unknown> | null) {
+  if (!result) {
+    return "";
+  }
+
+  if (typeof result.output === "string" && result.output.trim().length > 0) {
+    return result.output;
+  }
+
+  if (Array.isArray(result.lines)) {
+    return result.lines.filter((line): line is string => typeof line === "string").join("\n");
+  }
+
+  if (typeof result.stderr === "string" && result.stderr.trim().length > 0) {
+    return result.stderr;
+  }
+
+  return JSON.stringify(result);
 }

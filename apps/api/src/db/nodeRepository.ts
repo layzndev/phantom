@@ -8,6 +8,14 @@ export type OpenPortDetailRecord = {
   address: string;
   category: "phantom-range" | "system";
 };
+export type DockerPublishedPortRecord = {
+  containerId: string;
+  containerName: string;
+  workloadId: string | null;
+  protocol: "tcp" | "udp";
+  publishedPort: number;
+  targetPort: number;
+};
 
 export interface CreateNodeRecordInput {
   id: string;
@@ -142,6 +150,7 @@ export interface UpdateNodeHeartbeatRecordInput {
   cpuCores?: number;
   openPorts?: number[];
   openPortDetails?: OpenPortDetailRecord[];
+  dockerPublishedPorts?: DockerPublishedPortRecord[];
   suggestedPortRanges?: PortRange[];
 }
 
@@ -173,6 +182,12 @@ export function updateNodeHeartbeatRecord(
       ...(updates.openPorts !== undefined ? { openPorts: { set: updates.openPorts } } : {}),
       ...(updates.openPortDetails !== undefined
         ? { openPortDetails: updates.openPortDetails as unknown as Prisma.InputJsonValue }
+        : {}),
+      ...(updates.dockerPublishedPorts !== undefined
+        ? {
+            dockerPublishedPorts:
+              updates.dockerPublishedPorts as unknown as Prisma.InputJsonValue
+          }
         : {}),
       ...(updates.suggestedPortRanges !== undefined
         ? { suggestedPortRanges: updates.suggestedPortRanges as unknown as Prisma.InputJsonValue }

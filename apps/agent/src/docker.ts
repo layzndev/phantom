@@ -29,6 +29,15 @@ type DockerInspectContainer = {
     StartedAt?: string;
     FinishedAt?: string;
   };
+  NetworkSettings?: {
+    Ports?: Record<
+      string,
+      Array<{
+        HostIp?: string;
+        HostPort?: string;
+      }> | null
+    >;
+  };
 };
 
 interface WorkloadVolumeSpec {
@@ -49,6 +58,15 @@ type WorkloadRuntimeConfig = {
 
 export interface DockerRuntimeOptions {
   dataDir: string;
+}
+
+export interface DockerPublishedPortBinding {
+  containerId: string;
+  containerName: string;
+  workloadId: string | null;
+  protocol: "tcp" | "udp";
+  publishedPort: number;
+  targetPort: number;
 }
 
 export class DockerRuntime {
@@ -315,6 +333,16 @@ export class DockerRuntime {
     return container ? toContainerSummary(container) : null;
   }
 
+  async listManagedContainerPortBindings(nodeId: string) {
+    const containers = await this.listManagedContainers(nodeId);
+    if (containers.length === 0) {
+      return [] as DockerPublishedPortBinding[];
+    }
+
+    const inspected = await this.inspectMany(containers.map((container) => container.id));
+    return inspected.flatMap((container) => toPublishedPortBindings(container, nodeId));
+  }
+
   async getContainerStats(containerId: string): Promise<DockerContainerStats> {
     try {
       const { stdout } = await this.runDocker([
@@ -441,6 +469,50 @@ function toContainerSummaryUnfiltered(
     finishedAt: normalizeDate(container.State?.FinishedAt),
     createdAt: normalizeDate(container.Created)
   };
+}
+
+function toPublishedPortBindings(
+  container: DockerInspectContainer,
+  nodeId: string
+): DockerPublishedPortBinding[] {
+  const labels = container.Config?.Labels ?? {};
+  if (labels["phantom.managed"] !== "true" || labels["phantom.node.id"] !== nodeId) {
+    return [];
+  }
+
+  const portMap = container.NetworkSettings?.Ports ?? {};
+  const entries: DockerPublishedPortBinding[] = [];
+
+  for (const [targetSpec, bindings] of Object.entries(portMap)) {
+    if (!Array.isArray(bindings) || bindings.length === 0) {
+      continue;
+    }
+
+    const [targetPortRaw, protocolRaw] = targetSpec.split("/");
+    const targetPort = Number.parseInt(targetPortRaw ?? "", 10);
+    const protocol = protocolRaw === "tcp" || protocolRaw === "udp" ? protocolRaw : null;
+    if (!Number.isInteger(targetPort) || !protocol) {
+      continue;
+    }
+
+    for (const binding of bindings) {
+      const publishedPort = Number.parseInt(binding.HostPort ?? "", 10);
+      if (!Number.isInteger(publishedPort) || publishedPort < 1 || publishedPort > 65_535) {
+        continue;
+      }
+
+      entries.push({
+        containerId: container.Id,
+        containerName: container.Name.replace(/^\//, ""),
+        workloadId: labels["phantom.workload.id"] ?? null,
+        protocol,
+        publishedPort,
+        targetPort
+      });
+    }
+  }
+
+  return entries;
 }
 
 function isNoSuchContainerError(error: unknown) {

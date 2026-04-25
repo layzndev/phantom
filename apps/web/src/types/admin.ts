@@ -46,6 +46,15 @@ export interface OpenPortDetail {
   category: "phantom-range" | "system";
 }
 
+export interface DockerPublishedPort {
+  containerId: string;
+  containerName: string;
+  workloadId: string | null;
+  protocol: "tcp" | "udp";
+  publishedPort: number;
+  targetPort: number;
+}
+
 export interface CompanyNode {
   id: string;
   name: string;
@@ -69,6 +78,7 @@ export interface CompanyNode {
   portRangeEnd: number | null;
   openPorts: number[];
   openPortDetails: OpenPortDetail[];
+  dockerPublishedPorts: DockerPublishedPort[];
   suggestedPortRanges: SuggestedPortRange[] | null;
   agentVersion: string | null;
   runtimeVersion: string | null;
@@ -279,6 +289,13 @@ export interface MinecraftServer {
 export interface MinecraftServerWithWorkload {
   server: MinecraftServer;
   workload: CompanyWorkload;
+  node?: {
+    id: string;
+    name: string;
+    publicHost: string;
+    internalHost: string;
+  } | null;
+  hostname?: string | null;
 }
 
 export interface CreateMinecraftServerPayload {
@@ -312,7 +329,7 @@ export interface DeleteMinecraftServerResult {
   finalized: boolean;
 }
 
-export type MinecraftOperationKind = "command" | "save" | "logs";
+export type MinecraftOperationKind = "command" | "save" | "logs" | "stop";
 export type MinecraftOperationStatus =
   | "pending"
   | "in_progress"

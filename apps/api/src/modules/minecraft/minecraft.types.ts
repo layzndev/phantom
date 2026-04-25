@@ -24,6 +24,13 @@ export interface MinecraftServer {
 export interface MinecraftServerWithWorkload {
   server: MinecraftServer;
   workload: CompanyWorkload;
+  node?: {
+    id: string;
+    name: string;
+    publicHost: string;
+    internalHost: string;
+  } | null;
+  hostname?: string | null;
 }
 
 export interface CreateMinecraftServerResult {
@@ -39,7 +46,7 @@ export interface DeleteMinecraftServerResult {
   finalized: boolean;
 }
 
-export type MinecraftOperationKind = "command" | "save" | "logs";
+export type MinecraftOperationKind = "command" | "save" | "logs" | "stop";
 export type MinecraftOperationStatus =
   | "pending"
   | "in_progress"

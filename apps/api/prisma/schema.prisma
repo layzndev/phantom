@@ -99,6 +99,7 @@ model Node {
   portRangeEnd         Int?         @map("port_range_end")
   openPorts            Int[]        @default([]) @map("open_ports")
   openPortDetails      Json?        @map("open_port_details")
+  dockerPublishedPorts Json?        @map("docker_published_ports")
   suggestedPortRanges  Json?        @map("suggested_port_ranges")
   agentVersion         String?      @map("agent_version")
   runtimeVersion       String?      @map("runtime_version")

@@ -15,6 +15,14 @@ const openPortDetailShape = z.object({
   address: z.string().min(1).max(255),
   category: z.enum(["phantom-range", "system"])
 });
+const dockerPublishedPortShape = z.object({
+  containerId: z.string().min(1).max(128),
+  containerName: z.string().min(1).max(255),
+  workloadId: z.string().min(1).max(128).nullable(),
+  protocol: z.enum(["tcp", "udp"]),
+  publishedPort: portField,
+  targetPort: portField
+});
 
 const portRangeShape = z
   .object({
@@ -114,5 +122,6 @@ export const nodeHeartbeatSchema = z.object({
   cpuCores: z.coerce.number().int().positive().max(4096).optional(),
   openPorts: z.array(portField).max(10_000).optional(),
   openPortDetails: z.array(openPortDetailShape).max(10_000).optional(),
+  dockerPublishedPorts: z.array(dockerPublishedPortShape).max(10_000).optional(),
   portRanges: z.array(portRangeShape).max(100).optional()
 });

@@ -57,18 +57,35 @@ export interface NodeLiveMetrics {
   loadAverage1m?: number;
   openPorts?: number[];
   openPortDetails?: OpenPortDetail[];
+  dockerPublishedPorts?: Array<{
+    containerId: string;
+    containerName: string;
+    workloadId: string | null;
+    protocol: WorkloadPortProtocol;
+    publishedPort: number;
+    targetPort: number;
+  }>;
 }
 
 export class NodeLiveMetricsCollector {
   private previousProcStat: ProcStatSnapshot | null = null;
 
+  constructor(
+    private readonly docker: DockerRuntime,
+    private readonly nodeId: string
+  ) {}
+
   async collect(): Promise<NodeLiveMetrics> {
-    const openPorts = await collectOpenPorts();
+    const [openPorts, dockerPublishedPorts] = await Promise.all([
+      collectOpenPorts(),
+      this.readDockerPublishedPorts()
+    ]);
     return {
       usedCpu: this.readUsedCpu(),
       usedRamMb: this.readUsedRamMb(),
       loadAverage1m: readLoadAverage1m(),
-      ...(openPorts ? { openPorts: openPorts.ports, openPortDetails: openPorts.details } : {})
+      ...(openPorts ? { openPorts: openPorts.ports, openPortDetails: openPorts.details } : {}),
+      ...(dockerPublishedPorts ? { dockerPublishedPorts } : {})
     };
   }
 
@@ -110,6 +127,15 @@ export class NodeLiveMetricsCollector {
       }
       const usedKb = Math.max(0, totalKb - availableKb);
       return Math.round(usedKb / 1024);
+    } catch {
+      return undefined;
+    }
+  }
+
+  private async readDockerPublishedPorts() {
+    try {
+      const bindings = await this.docker.listManagedContainerPortBindings(this.nodeId);
+      return bindings.length > 0 ? bindings : [];
     } catch {
       return undefined;
     }
