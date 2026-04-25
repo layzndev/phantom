@@ -23,7 +23,13 @@ export interface RoutingRecord {
   planTier: string;
 }
 
+export interface ResolveOptions {
+  forceRefreshIfSleeping?: boolean;
+  forceRefresh?: boolean;
+}
+
 interface CacheEntry {
+  cachedAt: number;
   expiresAt: number;
   value: RoutingRecord | null;
 }
@@ -45,28 +51,45 @@ export class PhantomRoutingClient {
   }
 
   invalidate(hostname: string) {
-    this.cache.delete(hostname);
+    if (this.cache.delete(hostname)) {
+      log.info("cache.invalidated", { hostname });
+    }
   }
 
-  markWaking(hostname: string, record: RoutingRecord) {
-    const updated: RoutingRecord = { ...record, status: "waking" };
-    this.cache.set(hostname, {
-      expiresAt: Date.now() + this.config.cacheTransientTtlMs,
-      value: updated
-    });
-  }
-
-  async resolve(hostname: string): Promise<RoutingRecord | null> {
+  async resolve(
+    hostname: string,
+    options?: ResolveOptions
+  ): Promise<RoutingRecord | null> {
     const now = Date.now();
     const cached = this.cache.get(hostname);
-    if (cached && cached.expiresAt > now) {
+
+    const bypassForSleeping =
+      options?.forceRefreshIfSleeping &&
+      cached?.value?.status === "sleeping";
+    const bypass = options?.forceRefresh || bypassForSleeping;
+
+    if (!bypass && cached && cached.expiresAt > now) {
       metrics.cacheHits += 1;
+      log.info("cache.hit", {
+        hostname,
+        status: cached.value?.status ?? "miss",
+        ageMs: now - cached.cachedAt
+      });
       return cached.value;
     }
+
+    if (bypassForSleeping) {
+      log.info("cache.bypass", {
+        hostname,
+        reason: "sleeping-on-login",
+        ageMs: cached ? now - cached.cachedAt : 0
+      });
+    }
+
     metrics.cacheMisses += 1;
 
     const existing = this.inflight.get(hostname);
-    if (existing) return existing.promise;
+    if (existing && !bypass) return existing.promise;
 
     const promise = this.fetchRoute(hostname).finally(() => {
       this.inflight.delete(hostname);
@@ -75,7 +98,7 @@ export class PhantomRoutingClient {
     return promise;
   }
 
-  async wake(serverId: string): Promise<boolean> {
+  async wake(serverId: string, hostname?: string): Promise<boolean> {
     const url = `${this.config.apiUrl}/runtime/minecraft/wake/${encodeURIComponent(serverId)}`;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.config.routingTimeoutMs);
@@ -85,14 +108,21 @@ export class PhantomRoutingClient {
         headers: { authorization: `Bearer ${this.config.nodeToken}` },
         signal: controller.signal
       });
-      if (!response.ok) {
+      const ok = response.ok;
+      if (!ok) {
         log.warn("wake.failed", { serverId, status: response.status });
-        return false;
+      } else {
+        metrics.wakesTriggered += 1;
+        log.info("wake.triggered", { serverId, hostname: hostname ?? null });
       }
-      metrics.wakesTriggered += 1;
-      log.info("wake.triggered", { serverId });
-      return true;
+      if (hostname) {
+        this.cache.delete(hostname);
+      }
+      return ok;
     } catch (error) {
+      if (hostname) {
+        this.cache.delete(hostname);
+      }
       log.warn("wake.error", {
         serverId,
         error: error instanceof Error ? error.message : "unknown"
@@ -118,26 +148,33 @@ export class PhantomRoutingClient {
       metrics.recordRouteLatency(latency);
 
       if (response.status === 404) {
+        const now = Date.now();
         this.cache.set(hostname, {
-          expiresAt: Date.now() + this.config.cacheMissTtlMs,
+          cachedAt: now,
+          expiresAt: now + this.config.cacheMissTtlMs,
           value: null
         });
         return null;
       }
 
       if (!response.ok) {
-        log.warn("routing.unhealthy", {
-          hostname,
-          status: response.status
-        });
+        log.warn("routing.unhealthy", { hostname, status: response.status });
         return null;
       }
 
       const value = (await response.json()) as RoutingRecord;
+      const now = Date.now();
       const ttl = this.ttlForStatus(value.status);
       this.cache.set(hostname, {
-        expiresAt: Date.now() + ttl,
+        cachedAt: now,
+        expiresAt: now + ttl,
         value
+      });
+      log.info("routing.fetched", {
+        hostname,
+        status: value.status,
+        ttlMs: ttl,
+        latencyMs: latency
       });
       return value;
     } catch (error) {
@@ -153,6 +190,8 @@ export class PhantomRoutingClient {
     switch (status) {
       case "running":
         return this.config.cacheRunningTtlMs;
+      case "sleeping":
+        return this.config.cacheSleepingTtlMs;
       case "waking":
       case "starting":
       case "stopping":

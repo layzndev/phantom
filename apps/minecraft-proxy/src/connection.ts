@@ -110,7 +110,9 @@ export function handleConnection(socket: net.Socket, deps: HandlerDeps) {
 
     let route: RoutingRecord | null;
     try {
-      route = await routing.resolve(normalized.hostname);
+      route = await routing.resolve(normalized.hostname, {
+        forceRefreshIfSleeping: hs.nextState === 2
+      });
     } catch (error) {
       log.warn("routing.exception", {
         hostname: normalized.hostname,
@@ -149,11 +151,8 @@ export function handleConnection(socket: net.Socket, deps: HandlerDeps) {
 
       case "sleeping":
         if (hs.nextState === 2) {
-          void routing.wake(route.serverId).then((ok) => {
-            if (ok) {
-              routing.markWaking(hostname, route);
-            }
-          });
+          routing.invalidate(hostname);
+          void routing.wake(route.serverId, hostname);
           respondLoginDisconnect(DISCONNECT_WAKING);
         } else {
           respondStatusOnly(MOTD_SLEEPING, route);
