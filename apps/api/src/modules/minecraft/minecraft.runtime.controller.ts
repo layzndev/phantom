@@ -10,13 +10,15 @@ import {
   getRuntimeMinecraftRouting,
   listRuntimeMinecraftConsoleStreams,
   listRuntimeMinecraftOperations,
-  publishRuntimeMinecraftConsoleLogs
+  publishRuntimeMinecraftConsoleLogs,
+  wakeRuntimeMinecraftServer
 } from "./minecraft.service.js";
 
 export const minecraftRuntimeController = Router();
 
 const runtimeOpParamsSchema = z.object({ opId: z.string().uuid() });
 const runtimeConsoleParamsSchema = z.object({ id: z.string().uuid() });
+const runtimeServerParamsSchema = z.object({ serverId: z.string().uuid() });
 const runtimeRoutingQuerySchema = z.object({ hostname: z.string().min(1).max(255) });
 
 const runtimeCompleteSchema = z.object({
@@ -52,6 +54,16 @@ minecraftRuntimeController.get(
       code: "WEBSOCKET_UPGRADE_REQUIRED",
       endpoint: `/runtime/minecraft/servers/${req.params.id}/console`
     });
+  })
+);
+
+minecraftRuntimeController.post(
+  "/wake/:serverId",
+  validateParams(runtimeServerParamsSchema),
+  asyncHandler(async (req, res) => {
+    const token = extractBearerToken(req.headers.authorization);
+    const result = await wakeRuntimeMinecraftServer(token, req.params.serverId);
+    res.json(result);
   })
 );
 

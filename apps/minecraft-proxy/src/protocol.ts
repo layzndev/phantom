@@ -4,16 +4,35 @@ export interface MinecraftHandshake {
   hostname: string;
   port: number;
   nextState: 1 | 2;
+  bytesConsumed: number;
+}
+
+export interface ParsedPacket {
+  packet: Buffer;
+  bytes: number;
+}
+
+export interface StatusResponseInput {
+  description: string;
+  protocol: number;
+  versionLabel: string;
+  online?: number;
+  max?: number;
+  favicon?: string;
 }
 
 export function tryParseHandshake(buffer: Buffer): MinecraftHandshake | null {
   try {
     let offset = 0;
-    const packetLength = readVarInt(buffer, offset);
-    offset += packetLength.size;
-    if (buffer.length < offset + packetLength.value) {
+    const length = readVarInt(buffer, offset);
+    offset += length.size;
+    if (length.value <= 0 || length.value > 4_096) {
       return null;
     }
+    if (buffer.length < offset + length.value) {
+      return null;
+    }
+    const packetEnd = offset + length.value;
 
     const packetId = readVarInt(buffer, offset);
     offset += packetId.size;
@@ -24,7 +43,7 @@ export function tryParseHandshake(buffer: Buffer): MinecraftHandshake | null {
     const protocolVersion = readVarInt(buffer, offset);
     offset += protocolVersion.size;
 
-    const hostname = readString(buffer, offset);
+    const hostname = readString(buffer, offset, 255);
     offset += hostname.size;
 
     if (buffer.length < offset + 2) {
@@ -34,7 +53,11 @@ export function tryParseHandshake(buffer: Buffer): MinecraftHandshake | null {
     offset += 2;
 
     const nextState = readVarInt(buffer, offset);
+    offset += nextState.size;
     if (nextState.value !== 1 && nextState.value !== 2) {
+      return null;
+    }
+    if (offset > packetEnd) {
       return null;
     }
 
@@ -43,7 +66,28 @@ export function tryParseHandshake(buffer: Buffer): MinecraftHandshake | null {
       rawHostname: hostname.value,
       hostname: hostname.value.toLowerCase(),
       port,
-      nextState: nextState.value
+      nextState: nextState.value,
+      bytesConsumed: packetEnd
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function readNextPacket(buffer: Buffer): ParsedPacket | null {
+  try {
+    let offset = 0;
+    const length = readVarInt(buffer, offset);
+    offset += length.size;
+    if (length.value < 0 || length.value > 32_768) {
+      return null;
+    }
+    if (buffer.length < offset + length.value) {
+      return null;
+    }
+    return {
+      packet: buffer.subarray(offset, offset + length.value),
+      bytes: offset + length.value
     };
   } catch {
     return null;
@@ -56,11 +100,16 @@ export function encodeLoginDisconnect(message: string) {
   return Buffer.concat([encodeVarInt(payload.length), payload]);
 }
 
-export function encodeStatusResponse(message: string, version = "Phantom Proxy") {
+export function encodeStatusResponse(input: StatusResponseInput) {
   const json = JSON.stringify({
-    version: { name: version, protocol: 767 },
-    players: { max: 0, online: 0, sample: [] },
-    description: { text: message }
+    version: { name: input.versionLabel, protocol: input.protocol },
+    players: {
+      max: input.max ?? 20,
+      online: input.online ?? 0,
+      sample: []
+    },
+    description: { text: input.description },
+    ...(input.favicon ? { favicon: input.favicon } : {})
   });
   const payload = Buffer.concat([encodeVarInt(0), encodeString(json)]);
   return Buffer.concat([encodeVarInt(payload.length), payload]);
@@ -69,19 +118,6 @@ export function encodeStatusResponse(message: string, version = "Phantom Proxy")
 export function encodeStatusPong(payload: Buffer) {
   const packet = Buffer.concat([encodeVarInt(1), payload]);
   return Buffer.concat([encodeVarInt(packet.length), packet]);
-}
-
-export function readNextPacket(buffer: Buffer) {
-  let offset = 0;
-  const length = readVarInt(buffer, offset);
-  offset += length.size;
-  if (buffer.length < offset + length.value) {
-    return null;
-  }
-  return {
-    packet: buffer.subarray(offset, offset + length.value),
-    bytes: offset + length.value
-  };
 }
 
 export function readVarInt(buffer: Buffer, offset: number) {
@@ -108,8 +144,11 @@ export function readVarInt(buffer: Buffer, offset: number) {
   return { value: num, size };
 }
 
-function readString(buffer: Buffer, offset: number) {
+function readString(buffer: Buffer, offset: number, maxLength: number) {
   const length = readVarInt(buffer, offset);
+  if (length.value < 0 || length.value > maxLength * 4) {
+    throw new Error("string too long");
+  }
   const start = offset + length.size;
   const end = start + length.value;
   if (buffer.length < end) {

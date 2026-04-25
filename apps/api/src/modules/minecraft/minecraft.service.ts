@@ -59,6 +59,7 @@ import type {
   MinecraftOperationKind,
   MinecraftOperationResponse,
   MinecraftOperationStatus,
+  MinecraftRuntimeState,
   MinecraftServer,
   MinecraftServerWithWorkload,
   PlanTier
@@ -462,6 +463,40 @@ export async function getRuntimeMinecraftRouting(rawToken: string, hostname: str
     version: record.minecraftVersion,
     planTier: record.planTier as PlanTier
   } satisfies RuntimeMinecraftRoutingResult;
+}
+
+export interface RuntimeMinecraftWakeResult {
+  ok: true;
+  serverId: string;
+  status: MinecraftRuntimeState;
+  triggered: boolean;
+}
+
+export async function wakeRuntimeMinecraftServer(
+  rawToken: string,
+  serverId: string
+): Promise<RuntimeMinecraftWakeResult> {
+  await authenticateRuntimeNode(rawToken);
+
+  const record = await findMinecraftServerRecordById(serverId);
+  if (!record || record.deletedAt !== null) {
+    throw new AppError(404, "Minecraft server not found.", "MINECRAFT_SERVER_NOT_FOUND");
+  }
+
+  const workload = await getWorkload(record.workloadId);
+  const status = deriveMinecraftRuntimeState(record, workload);
+
+  if (status === "running" || status === "starting" || status === "waking") {
+    return { ok: true, serverId: record.id, status, triggered: false };
+  }
+
+  const result = await startMinecraftServer(record.id);
+  return {
+    ok: true,
+    serverId: record.id,
+    status: result.server.runtimeState,
+    triggered: true
+  };
 }
 
 export async function claimRuntimeMinecraftOperation(rawToken: string, opId: string) {
