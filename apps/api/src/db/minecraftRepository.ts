@@ -62,3 +62,33 @@ export function listMinecraftServerRecords(filter: MinecraftServerFilter = {}) {
     orderBy: { createdAt: "desc" }
   });
 }
+
+export function listMinecraftServerRecordsForNode(nodeId: string) {
+  return db.minecraftServer.findMany({
+    where: {
+      deletedAt: null,
+      workload: { nodeId, deletedAt: null }
+    },
+    include: {
+      workload: { include: { ports: true } }
+    },
+    orderBy: { createdAt: "asc" }
+  });
+}
+
+export function countMinecraftServersByNode() {
+  return db.minecraftServer.groupBy({
+    by: ["workloadId"],
+    where: {
+      deletedAt: null,
+      workload: { deletedAt: null, nodeId: { not: null } }
+    }
+  });
+}
+
+export function listMinecraftServerNodeAssignments() {
+  return db.minecraftServer.findMany({
+    where: { deletedAt: null, workload: { deletedAt: null, nodeId: { not: null } } },
+    select: { workload: { select: { nodeId: true } } }
+  });
+}

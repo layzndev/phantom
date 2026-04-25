@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { ADMIN_API_BASE_URL } from "@/lib/api/admin-api";
+import { MinecraftConsole, type MinecraftConsoleLine } from "@/components/playground/MinecraftConsole";
 import type {
   CreateMinecraftServerPayload,
   CreateMinecraftServerResult,
@@ -26,13 +28,6 @@ interface Operation {
   durationMs: number;
 }
 
-interface ConsoleLine {
-  id: string;
-  timestamp: string;
-  kind: "command" | "response" | "logs" | "info" | "error";
-  text: string;
-}
-
 interface CreateFormState {
   name: string;
   templateId: string;
@@ -54,6 +49,9 @@ const DIFFICULTIES: MinecraftDifficulty[] = ["peaceful", "easy", "normal", "hard
 const GAME_MODES: MinecraftGameMode[] = ["survival", "creative", "adventure", "spectator"];
 
 export function PlaygroundClient() {
+  const searchParams = useSearchParams();
+  const initialServerId = searchParams.get("server");
+
   const [templates, setTemplates] = useState<MinecraftTemplate[]>([]);
   const [servers, setServers] = useState<MinecraftServerWithWorkload[]>([]);
   const [operations, setOperations] = useState<Operation[]>([]);
@@ -61,9 +59,9 @@ export function PlaygroundClient() {
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState<CreateFormState>(emptyForm());
   const [actionPending, setActionPending] = useState<Record<string, boolean>>({});
-  const [consoleServerId, setConsoleServerId] = useState<string | null>(null);
+  const [consoleServerId, setConsoleServerId] = useState<string | null>(initialServerId);
   const [commandInput, setCommandInput] = useState("");
-  const [consoleOutput, setConsoleOutput] = useState<ConsoleLine[]>([]);
+  const [consoleOutput, setConsoleOutput] = useState<MinecraftConsoleLine[]>([]);
   const [consoleBusy, setConsoleBusy] = useState(false);
   const latestOpId = useRef<string | null>(null);
 
@@ -239,7 +237,7 @@ export function PlaygroundClient() {
   const consoleReady = consoleServer?.workload.status === "running";
 
   const appendConsoleLines = useCallback(
-    (lines: Array<Omit<ConsoleLine, "id" | "timestamp">>) => {
+    (lines: Array<Omit<MinecraftConsoleLine, "id" | "timestamp">>) => {
       const ts = new Date().toISOString();
       setConsoleOutput((current) => {
         const next = [
@@ -363,7 +361,7 @@ export function PlaygroundClient() {
     }
     const output = (op.result?.output as string | undefined) ?? "";
     const stderr = (op.result?.stderr as string | undefined) ?? "";
-    const lines: Array<{ kind: ConsoleLine["kind"]; text: string }> = [];
+    const lines: Array<{ kind: MinecraftConsoleLine["kind"]; text: string }> = [];
     if (output.trim()) {
       for (const line of output.split(/\r?\n/)) {
         if (line.length > 0) lines.push({ kind: "response", text: line });
@@ -670,109 +668,30 @@ export function PlaygroundClient() {
         )}
       </section>
 
-      <section className="rounded-2xl border border-line bg-panel/78 p-5 shadow-soft">
-        <header className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="text-sm font-semibold text-white">Console</h2>
-            <p className="mt-0.5 text-xs text-slate-500">
-              Send RCON commands, save the world, or fetch the last log lines. Routes to the
-              agent over a private channel — no port exposed.
-            </p>
-          </div>
-          <select
-            value={consoleServerId ?? ""}
-            onChange={(event) => {
-              setConsoleServerId(event.target.value || null);
-              setConsoleOutput([]);
-            }}
-            className="rounded-lg border border-white/10 bg-obsidian px-3 py-2 text-xs text-slate-200 outline-none focus:border-accent/40"
-          >
-            <option value="">Select a server…</option>
-            {servers.map(({ server, workload }) => (
-              <option key={server.id} value={server.id}>
-                {server.name} ({workload.status})
-              </option>
-            ))}
-          </select>
-        </header>
-
-        {consoleServer ? (
-          <div className="mt-4 space-y-3">
-            <div className="flex flex-wrap gap-2">
-              <ActionButton
-                label="Save world"
-                onClick={() => void handleConsoleSave()}
-                disabled={consoleBusy || !consoleReady}
-              />
-              <ActionButton
-                label="Fetch logs"
-                onClick={() => void handleConsoleLogs()}
-                disabled={consoleBusy || !consoleReady}
-              />
-              <ActionButton
-                label="Clear"
-                onClick={() => setConsoleOutput([])}
-                disabled={consoleOutput.length === 0}
-              />
-              {!consoleReady ? (
-                <span className="ml-auto text-[11px] text-amber-300">
-                  Server status: {consoleServer.workload.status}. Console requires a running server.
-                </span>
-              ) : null}
-            </div>
-
-            <div className="max-h-96 overflow-y-auto rounded-lg border border-white/10 bg-black/60 p-3 font-mono text-[12px]">
-              {consoleOutput.length === 0 ? (
-                <p className="text-slate-600">No output yet.</p>
-              ) : (
-                consoleOutput.map((line) => (
-                  <p
-                    key={line.id}
-                    className={
-                      line.kind === "error"
-                        ? "text-red-300"
-                        : line.kind === "command"
-                        ? "text-accent"
-                        : line.kind === "info"
-                        ? "text-slate-500"
-                        : line.kind === "logs"
-                        ? "text-slate-300"
-                        : "text-emerald-200"
-                    }
-                  >
-                    {line.text}
-                  </p>
-                ))
-              )}
-            </div>
-
-            <form
-              className="flex gap-2"
-              onSubmit={(event) => {
-                event.preventDefault();
-                void handleConsoleCommand();
-              }}
-            >
-              <input
-                value={commandInput}
-                onChange={(event) => setCommandInput(event.target.value)}
-                placeholder={consoleReady ? "say hello" : "server is not running"}
-                disabled={consoleBusy || !consoleReady}
-                className="flex-1 rounded-lg border border-white/10 bg-white/[0.035] px-3 py-2 font-mono text-sm text-white outline-none focus:border-accent/40 disabled:opacity-40"
-              />
-              <button
-                type="submit"
-                disabled={consoleBusy || !consoleReady || !commandInput.trim()}
-                className="h-10 rounded-lg bg-accent/80 px-4 text-xs font-semibold text-obsidian transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                {consoleBusy ? "..." : "Send"}
-              </button>
-            </form>
-          </div>
-        ) : (
-          <p className="mt-4 text-sm text-slate-500">Pick a server above to open its console.</p>
-        )}
-      </section>
+      <MinecraftConsole
+        entry={consoleServer}
+        servers={servers}
+        selectedServerId={consoleServerId}
+        onSelectServer={(id) => {
+          setConsoleServerId(id);
+          setConsoleOutput([]);
+        }}
+        lines={consoleOutput}
+        commandInput={commandInput}
+        onCommandInputChange={setCommandInput}
+        onCommandSubmit={() => void handleConsoleCommand()}
+        onSave={() => void handleConsoleSave()}
+        onFetchLogs={() => void handleConsoleLogs()}
+        onRestart={() => {
+          if (consoleServerId) void handleAction(consoleServerId, "restart");
+        }}
+        onStop={() => {
+          if (consoleServerId) void handleAction(consoleServerId, "stop");
+        }}
+        onClear={() => setConsoleOutput([])}
+        busy={consoleBusy || (consoleServerId ? actionPending[consoleServerId] === true : false)}
+        operatorLabel="operator"
+      />
 
       <div className="grid gap-6 lg:grid-cols-2">
         <section className="rounded-2xl border border-line bg-panel/78 p-5 shadow-soft">
