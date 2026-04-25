@@ -14,6 +14,7 @@ export interface ProxyConfig {
   cacheRunningTtlMs: number;
   cacheMissTtlMs: number;
   cacheTransientTtlMs: number;
+  cacheSleepingTtlMs: number;
 
   maxConnections: number;
   maxBufferBytes: number;
@@ -44,7 +45,14 @@ export function loadConfig(): ProxyConfig {
 
     cacheRunningTtlMs: positiveInt(process.env.PROXY_CACHE_RUNNING_TTL_MS, 10_000),
     cacheMissTtlMs: positiveInt(process.env.PROXY_CACHE_MISS_TTL_MS, 2_000),
-    cacheTransientTtlMs: positiveInt(process.env.PROXY_CACHE_TRANSIENT_TTL_MS, 1_000),
+    cacheTransientTtlMs: clampMax(
+      positiveInt(process.env.PROXY_CACHE_TRANSIENT_TTL_MS, 1_000),
+      1_500
+    ),
+    cacheSleepingTtlMs: clampMax(
+      positiveInt(process.env.PROXY_CACHE_SLEEPING_TTL_MS, 1_000),
+      1_000
+    ),
 
     maxConnections: positiveInt(process.env.PROXY_MAX_CONNECTIONS, 5_000),
     maxBufferBytes: positiveInt(process.env.PROXY_MAX_BUFFER_BYTES, 4_096),
@@ -92,6 +100,10 @@ function positiveInt(value: string | undefined, fallback: number) {
     throw new Error(`Expected positive integer, received ${value}`);
   }
   return parsed;
+}
+
+function clampMax(value: number, max: number) {
+  return value > max ? max : value;
 }
 
 function boolFlag(value: string | undefined, fallback: boolean) {
