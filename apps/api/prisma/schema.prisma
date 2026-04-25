@@ -99,6 +99,18 @@ model Node {
   portRangeEnd         Int?         @map("port_range_end")
   openPorts            Int[]        @default([]) @map("open_ports")
   suggestedPortRanges  Json?        @map("suggested_port_ranges")
+  agentVersion         String?      @map("agent_version")
+  runtimeVersion       String?      @map("runtime_version")
+  dockerVersion        String?      @map("docker_version")
+  osPlatform           String?      @map("os_platform")
+  osRelease            String?      @map("os_release")
+  kernelVersion        String?      @map("kernel_version")
+  osArch               String?      @map("os_arch")
+  hostname             String?
+  uptimeSec            Int?         @map("uptime_sec")
+  cpuModel             String?      @map("cpu_model")
+  cpuCores             Int?         @map("cpu_cores")
+  totalDiskGb          Int?         @map("total_disk_gb")
   maintenanceMode      Boolean      @default(false) @map("maintenance_mode")
   createdAt       DateTime          @default(now()) @map("created_at")
   updatedAt       DateTime          @updatedAt @map("updated_at")
@@ -160,6 +172,9 @@ model Workload {
   lastHeartbeatAt DateTime? @map("last_heartbeat_at")
   lastExitCode    Int?     @map("last_exit_code")
   restartCount    Int      @default(0) @map("restart_count")
+  deleteRequestedAt DateTime? @map("delete_requested_at")
+  deleteRuntimeAckAt DateTime? @map("delete_runtime_ack_at")
+  deleteHardData  Boolean  @default(false) @map("delete_hard_data")
 
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt       @map("updated_at")
@@ -174,6 +189,7 @@ model Workload {
   @@index([status])
   @@index([type])
   @@index([deletedAt])
+  @@index([deleteRequestedAt])
   @@map("workloads")
 }
 

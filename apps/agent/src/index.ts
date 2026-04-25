@@ -29,6 +29,9 @@ async function main() {
     reconciler,
     cleanup,
     minecraftOps,
+    api,
+    docker,
+    config.dataDir,
     logger,
     config.pollIntervalMs
   );

@@ -62,6 +62,18 @@ export interface CompanyNode {
   portRangeEnd: number | null;
   openPorts: number[];
   suggestedPortRanges: SuggestedPortRange[] | null;
+  agentVersion: string | null;
+  runtimeVersion: string | null;
+  dockerVersion: string | null;
+  osPlatform: string | null;
+  osRelease: string | null;
+  kernelVersion: string | null;
+  osArch: string | null;
+  hostname: string | null;
+  uptimeSec: number | null;
+  cpuModel: string | null;
+  cpuCores: number | null;
+  totalDiskGb: number;
   maintenanceMode: boolean;
   hostedServersList?: HostedServer[];
   history?: NodeHistoryEvent[];
@@ -160,6 +172,9 @@ export interface CompanyWorkload {
   lastHeartbeatAt: string | null;
   lastExitCode: number | null;
   restartCount: number;
+  deleteRequestedAt: string | null;
+  deleteRuntimeAckAt: string | null;
+  deleteHardData: boolean;
   ports: WorkloadPort[];
   statusEvents: WorkloadStatusEvent[];
   createdAt: string;
@@ -192,6 +207,15 @@ export interface CreateWorkloadResult {
   workload: CompanyWorkload;
   placed: boolean;
   reason?: string;
+}
+
+export interface DeleteWorkloadOptions {
+  hardDeleteData?: boolean;
+}
+
+export interface DeleteWorkloadResult {
+  workload: CompanyWorkload | null;
+  finalized: boolean;
 }
 
 export type MinecraftTemplateFamily =
@@ -264,6 +288,16 @@ export interface CreateMinecraftServerResult {
   workload: CompanyWorkload;
   placed: boolean;
   reason?: string;
+}
+
+export interface DeleteMinecraftServerOptions {
+  hardDeleteData?: boolean;
+}
+
+export interface DeleteMinecraftServerResult {
+  server: MinecraftServer | null;
+  workload: CompanyWorkload | null;
+  finalized: boolean;
 }
 
 export type MinecraftOperationKind = "command" | "save" | "logs";

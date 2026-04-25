@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdir } from "node:fs/promises";
+import { access, mkdir, rm } from "node:fs/promises";
 import { resolve as resolvePath } from "node:path";
 import { promisify } from "node:util";
 import { Logger } from "./logger.js";
@@ -100,6 +100,11 @@ export class DockerRuntime {
 
   async pullImage(image: string) {
     await this.runDocker(["pull", image]);
+  }
+
+  async getDockerVersion() {
+    const { stdout } = await this.runDocker(["version", "--format", "{{.Server.Version}}"]);
+    return stdout.trim();
   }
 
   async createContainer(workload: AssignedWorkload, nodeId: string) {
@@ -281,6 +286,18 @@ export class DockerRuntime {
 
   async execInContainer(containerId: string, command: string[]) {
     return this.runDocker(["exec", containerId, ...command]);
+  }
+
+  async removeWorkloadData(workloadId: string): Promise<boolean> {
+    const target = resolvePath(this.dataDir, "workloads", workloadId);
+    try {
+      await access(target);
+    } catch {
+      return false;
+    }
+
+    await rm(target, { recursive: true, force: true });
+    return true;
   }
 
   async getContainerLogs(containerId: string, options: { tail?: number } = {}) {

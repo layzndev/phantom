@@ -149,6 +149,18 @@ export async function acceptNodeHeartbeat(
     diskUsedGb?: number;
     totalRamMb?: number;
     totalCpu?: number;
+    totalDiskGb?: number;
+    agentVersion?: string;
+    runtimeVersion?: string;
+    dockerVersion?: string;
+    osPlatform?: string;
+    osRelease?: string;
+    kernelVersion?: string;
+    osArch?: string;
+    hostname?: string;
+    uptimeSec?: number;
+    cpuModel?: string;
+    cpuCores?: number;
     openPorts?: number[];
     portRanges?: Array<{ start: number; end: number }>;
   }
@@ -182,10 +194,22 @@ export async function acceptNodeHeartbeat(
   await updateNodeHeartbeatInRegistry(nodeId, {
     status: nextStatus,
     health: nextHealth,
-    usedRamMb: payload.ramUsedMb ?? 0,
-    usedCpu: payload.cpuUsed ?? 0,
+    ...(payload.ramUsedMb !== undefined ? { usedRamMb: payload.ramUsedMb } : {}),
+    ...(payload.cpuUsed !== undefined ? { usedCpu: payload.cpuUsed } : {}),
     totalRamMb: payload.totalRamMb,
     totalCpu: payload.totalCpu,
+    totalDiskGb: payload.totalDiskGb,
+    agentVersion: payload.agentVersion,
+    runtimeVersion: payload.runtimeVersion,
+    dockerVersion: payload.dockerVersion,
+    osPlatform: payload.osPlatform,
+    osRelease: payload.osRelease,
+    kernelVersion: payload.kernelVersion,
+    osArch: payload.osArch,
+    hostname: payload.hostname,
+    uptimeSec: payload.uptimeSec,
+    cpuModel: payload.cpuModel,
+    cpuCores: payload.cpuCores,
     openPorts: payload.openPorts,
     suggestedPortRanges: payload.portRanges
   });
@@ -319,6 +343,18 @@ function toCompanyNode(
     portRangeEnd: node.portRangeEnd,
     openPorts: node.openPorts ?? [],
     suggestedPortRanges,
+    agentVersion: node.agentVersion,
+    runtimeVersion: node.runtimeVersion,
+    dockerVersion: node.dockerVersion,
+    osPlatform: node.osPlatform,
+    osRelease: node.osRelease,
+    kernelVersion: node.kernelVersion,
+    osArch: node.osArch,
+    hostname: node.hostname,
+    uptimeSec: node.uptimeSec,
+    cpuModel: node.cpuModel,
+    cpuCores: node.cpuCores,
+    totalDiskGb: node.totalDiskGb ?? 0,
     maintenanceMode: node.maintenanceMode,
     hostedServersList: options.hostedServersList,
     history: node.statusEvents.map((event) => ({

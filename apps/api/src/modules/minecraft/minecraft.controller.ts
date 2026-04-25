@@ -18,6 +18,7 @@ import {
 } from "./minecraft.service.js";
 import {
   createMinecraftServerSchema,
+  deleteMinecraftServerQuerySchema,
   minecraftCommandSchema,
   minecraftLogsQuerySchema,
   minecraftOperationParamsSchema,
@@ -159,15 +160,23 @@ minecraftController.delete(
   validateParams(minecraftServerParamsSchema),
   asyncHandler(async (req, res) => {
     const actor = req.session.admin!;
-    await deleteMinecraftServer(req.params.id);
+    const parsedQuery = deleteMinecraftServerQuerySchema.safeParse(req.query);
+    if (!parsedQuery.success) {
+      throw new AppError(400, "Invalid query parameters.", "VALIDATION_ERROR", parsedQuery.error.flatten());
+    }
+    const result = await deleteMinecraftServer(req.params.id, parsedQuery.data);
     await writeAuditLog(req, {
       action: "minecraft.server.delete",
       actorId: actor.id,
       actorEmail: actor.email,
       targetType: "system",
-      targetId: req.params.id
+      targetId: req.params.id,
+      metadata: {
+        finalized: result.finalized,
+        hardDeleteData: parsedQuery.data.hardDeleteData
+      }
     });
-    res.status(204).send();
+    res.status(result.finalized ? 200 : 202).json(result);
   })
 );
 

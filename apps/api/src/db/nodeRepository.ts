@@ -118,10 +118,22 @@ export function findActiveNodeTokenRecordByHash(tokenHash: string) {
 export interface UpdateNodeHeartbeatRecordInput {
   status: string;
   health: string;
-  usedRamMb: number;
-  usedCpu: number;
+  usedRamMb?: number;
+  usedCpu?: number;
   totalRamMb?: number;
   totalCpu?: number;
+  totalDiskGb?: number;
+  agentVersion?: string;
+  runtimeVersion?: string;
+  dockerVersion?: string;
+  osPlatform?: string;
+  osRelease?: string;
+  kernelVersion?: string;
+  osArch?: string;
+  hostname?: string;
+  uptimeSec?: number;
+  cpuModel?: string;
+  cpuCores?: number;
   openPorts?: number[];
   suggestedPortRanges?: PortRange[];
 }
@@ -135,10 +147,22 @@ export function updateNodeHeartbeatRecord(
     data: {
       status: updates.status,
       health: updates.health,
-      usedRamMb: updates.usedRamMb,
-      usedCpu: updates.usedCpu,
+      ...(updates.usedRamMb !== undefined ? { usedRamMb: updates.usedRamMb } : {}),
+      ...(updates.usedCpu !== undefined ? { usedCpu: updates.usedCpu } : {}),
       ...(updates.totalRamMb !== undefined ? { totalRamMb: updates.totalRamMb } : {}),
       ...(updates.totalCpu !== undefined ? { totalCpu: updates.totalCpu } : {}),
+      ...(updates.totalDiskGb !== undefined ? { totalDiskGb: updates.totalDiskGb } : {}),
+      ...(updates.agentVersion !== undefined ? { agentVersion: updates.agentVersion } : {}),
+      ...(updates.runtimeVersion !== undefined ? { runtimeVersion: updates.runtimeVersion } : {}),
+      ...(updates.dockerVersion !== undefined ? { dockerVersion: updates.dockerVersion } : {}),
+      ...(updates.osPlatform !== undefined ? { osPlatform: updates.osPlatform } : {}),
+      ...(updates.osRelease !== undefined ? { osRelease: updates.osRelease } : {}),
+      ...(updates.kernelVersion !== undefined ? { kernelVersion: updates.kernelVersion } : {}),
+      ...(updates.osArch !== undefined ? { osArch: updates.osArch } : {}),
+      ...(updates.hostname !== undefined ? { hostname: updates.hostname } : {}),
+      ...(updates.uptimeSec !== undefined ? { uptimeSec: updates.uptimeSec } : {}),
+      ...(updates.cpuModel !== undefined ? { cpuModel: updates.cpuModel } : {}),
+      ...(updates.cpuCores !== undefined ? { cpuCores: updates.cpuCores } : {}),
       ...(updates.openPorts !== undefined ? { openPorts: { set: updates.openPorts } } : {}),
       ...(updates.suggestedPortRanges !== undefined
         ? { suggestedPortRanges: updates.suggestedPortRanges as unknown as Prisma.InputJsonValue }

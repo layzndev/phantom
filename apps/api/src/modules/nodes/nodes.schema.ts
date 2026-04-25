@@ -93,6 +93,18 @@ export const nodeHeartbeatSchema = z.object({
   diskUsedGb: z.coerce.number().min(0).optional(),
   totalRamMb: totalRamField.optional(),
   totalCpu: totalCpuField.optional(),
+  totalDiskGb: z.coerce.number().int().positive().max(10_485_760).optional(),
+  agentVersion: z.string().min(1).max(120).optional(),
+  runtimeVersion: z.string().min(1).max(120).optional(),
+  dockerVersion: z.string().min(1).max(120).optional(),
+  osPlatform: z.string().min(1).max(80).optional(),
+  osRelease: z.string().min(1).max(120).optional(),
+  kernelVersion: z.string().min(1).max(120).optional(),
+  osArch: z.string().min(1).max(80).optional(),
+  hostname: z.string().min(1).max(255).optional(),
+  uptimeSec: z.coerce.number().int().min(0).max(31_536_000).optional(),
+  cpuModel: z.string().min(1).max(255).optional(),
+  cpuCores: z.coerce.number().int().positive().max(4096).optional(),
   openPorts: z.array(portField).max(10_000).optional(),
   portRanges: z.array(portRangeShape).max(100).optional()
 });

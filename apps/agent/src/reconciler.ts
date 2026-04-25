@@ -39,7 +39,6 @@ export class WorkloadReconciler {
     for (const workload of assigned.workloads) {
       seenWorkloadIds.add(workload.id);
       const containers = containerByWorkloadId.get(workload.id) ?? [];
-      const primaryContainer = containers[0] ?? null;
 
       if (containers.length > 1) {
         this.logger.warn("multiple managed containers detected for workload", {
@@ -48,7 +47,7 @@ export class WorkloadReconciler {
         });
       }
 
-      await this.reconcileWorkload(workload, primaryContainer);
+      await this.reconcileWorkload(workload, containers);
     }
 
     for (const workloadId of this.lastHeartbeatAt.keys()) {
@@ -61,13 +60,20 @@ export class WorkloadReconciler {
 
   private async reconcileWorkload(
     workload: AssignedWorkload,
-    container: DockerContainerSummary | null
+    containers: DockerContainerSummary[]
   ) {
+    const container = containers[0] ?? null;
+
     if (container && !this.docker.isManagedContainer(container, this.config.nodeId, workload.id)) {
       this.logger.warn("refusing to act on unmanaged container", {
         workloadId: workload.id,
         containerId: container.id
       });
+      return;
+    }
+
+    if (workload.status === "deleting") {
+      await this.ensureDeleted(workload, containers);
       return;
     }
 
@@ -77,6 +83,73 @@ export class WorkloadReconciler {
     }
 
     await this.ensureStopped(workload, container);
+  }
+
+  private async ensureDeleted(
+    workload: AssignedWorkload,
+    containers: DockerContainerSummary[]
+  ) {
+    this.logger.info("[delete] requested", {
+      workloadId: workload.id,
+      hardDeleteData: readHardDeleteData(workload),
+      containerCount: containers.length
+    });
+
+    const timeoutSeconds = this.docker.getStopTimeoutSeconds(workload.config);
+    const gracefulCommand = readGracefulStopCommand(workload);
+
+    if (containers.length === 0) {
+      this.logger.info("[delete] runtime removed", {
+        workloadId: workload.id,
+        containerId: null,
+        reason: "no managed container present"
+      });
+    }
+
+    for (const container of containers) {
+      if (container.running && gracefulCommand) {
+        try {
+          await this.docker.execInContainer(container.id, ["rcon-cli", gracefulCommand]);
+        } catch (error) {
+          this.logger.warn("graceful stop command failed during delete", {
+            workloadId: workload.id,
+            containerId: container.id,
+            error: error instanceof Error ? error.message : "unknown"
+          });
+        }
+      }
+
+      await this.docker.stopAndRemoveContainer(container.id, { timeoutSeconds });
+      this.logger.info("[delete] runtime removed", {
+        workloadId: workload.id,
+        containerId: container.id
+      });
+    }
+
+    let removedData = false;
+    if (readHardDeleteData(workload)) {
+      removedData = await this.docker.removeWorkloadData(workload.id);
+      this.logger.info("[delete] data removed", {
+        workloadId: workload.id,
+        removedData
+      });
+    }
+
+    await this.api.ackDelete(workload.id, {
+      removedRuntime: true,
+      removedData,
+      containerId: null,
+      reason: readHardDeleteData(workload)
+        ? "[delete] completed after runtime and data cleanup"
+        : "[delete] completed after runtime cleanup"
+    });
+
+    this.lastHeartbeatAt.delete(workload.id);
+    this.lastCrashFingerprint.delete(workload.id);
+    this.logger.info("[delete] completed", {
+      workloadId: workload.id,
+      removedData
+    });
   }
 
   private async ensureRunning(
@@ -278,6 +351,10 @@ function readGracefulStopCommand(workload: AssignedWorkload): string | null {
   }
   const value = (minecraft as Record<string, unknown>).gracefulStopCommand;
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function readHardDeleteData(workload: AssignedWorkload) {
+  return workload.deleteHardData === true;
 }
 
 function groupByWorkloadId(containers: DockerContainerSummary[]) {

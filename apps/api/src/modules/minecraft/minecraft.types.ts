@@ -33,6 +33,12 @@ export interface CreateMinecraftServerResult {
   reason?: string;
 }
 
+export interface DeleteMinecraftServerResult {
+  server: MinecraftServer | null;
+  workload: CompanyWorkload | null;
+  finalized: boolean;
+}
+
 export type MinecraftOperationKind = "command" | "save" | "logs";
 export type MinecraftOperationStatus =
   | "pending"

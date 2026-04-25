@@ -43,6 +43,10 @@ export const workloadListQuerySchema = z.object({
   type: workloadTypeEnum.optional()
 });
 
+export const workloadDeleteQuerySchema = z.object({
+  hardDeleteData: z.coerce.boolean().optional().default(false)
+});
+
 export const workloadRuntimeHeartbeatSchema = z
   .object({
     status: z.enum(["creating", "running", "stopped", "crashed"]),
@@ -81,10 +85,21 @@ export const workloadRuntimeAckActionSchema = z
   })
   .strict();
 
+export const workloadRuntimeAckDeleteSchema = z
+  .object({
+    removedRuntime: z.boolean().optional(),
+    removedData: z.boolean().optional(),
+    containerId: z.string().min(1).max(255).nullable().optional(),
+    reason: z.string().max(500).optional()
+  })
+  .strict();
+
 export type CreateWorkloadInput = z.infer<typeof createWorkloadSchema>;
 export type UpdateWorkloadInput = z.infer<typeof updateWorkloadSchema>;
 export type WorkloadPortSpec = z.infer<typeof portSpecShape>;
 export type WorkloadListQuery = z.infer<typeof workloadListQuerySchema>;
+export type WorkloadDeleteQuery = z.infer<typeof workloadDeleteQuerySchema>;
 export type WorkloadRuntimeHeartbeatInput = z.infer<typeof workloadRuntimeHeartbeatSchema>;
 export type WorkloadRuntimeEventInput = z.infer<typeof workloadRuntimeEventSchema>;
 export type WorkloadRuntimeAckActionInput = z.infer<typeof workloadRuntimeAckActionSchema>;
+export type WorkloadRuntimeAckDeleteInput = z.infer<typeof workloadRuntimeAckDeleteSchema>;

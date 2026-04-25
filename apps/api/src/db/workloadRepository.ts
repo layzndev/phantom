@@ -151,6 +151,84 @@ export function deleteWorkloadRecord(id: string) {
   return db.workload.delete({ where: { id } });
 }
 
+export function markWorkloadDeletingRecord(
+  id: string,
+  options: { hardDeleteData: boolean; reason: string }
+) {
+  return db.$transaction(async (tx) => {
+    const now = new Date();
+    const workload = await tx.workload.findUniqueOrThrow({ where: { id } });
+    return tx.workload.update({
+      where: { id },
+      data: {
+        status: "deleting",
+        desiredStatus: "stopped",
+        deleteRequestedAt: now,
+        deleteRuntimeAckAt: null,
+        deleteHardData: options.hardDeleteData,
+        statusEvents: {
+          create: {
+            previousStatus: workload.status,
+            newStatus: "deleting",
+            reason: options.reason
+          }
+        }
+      },
+      include: workloadInclude
+    });
+  });
+}
+
+export function finalizeWorkloadDeletionRecord(
+  id: string,
+  options: { mode: "hard" | "soft"; reason: string }
+) {
+  return db.$transaction(async (tx) => {
+    const workload = await tx.workload.findUniqueOrThrow({
+      where: { id },
+      select: { id: true, status: true }
+    });
+    const now = new Date();
+
+    await tx.workloadStatusEvent.create({
+      data: {
+        workloadId: id,
+        previousStatus: workload.status,
+        newStatus: "deleted",
+        reason: options.reason
+      }
+    });
+
+    if (options.mode === "hard") {
+      await tx.workload.delete({ where: { id } });
+      return null;
+    }
+
+    await tx.minecraftServer.updateMany({
+      where: { workloadId: id, deletedAt: null },
+      data: { deletedAt: now }
+    });
+
+    await tx.workloadPort.deleteMany({
+      where: { workloadId: id }
+    });
+
+    return tx.workload.update({
+      where: { id },
+      data: {
+        status: "deleted",
+        desiredStatus: "stopped",
+        containerId: null,
+        lastExitCode: null,
+        restartCount: 0,
+        deleteRuntimeAckAt: now,
+        deletedAt: now
+      },
+      include: workloadInclude
+    });
+  });
+}
+
 export function listWorkloadsByNodeIds(nodeIds: string[]) {
   return db.workload.findMany({
     where: { nodeId: { in: nodeIds }, deletedAt: null },
@@ -170,7 +248,7 @@ export function listRuntimeAssignedWorkloadRecords(nodeId: string) {
       nodeId,
       deletedAt: null,
       status: {
-        notIn: ["deleting", "deleted"]
+        notIn: ["deleted"]
       }
     },
     orderBy: { createdAt: "asc" },
@@ -195,6 +273,7 @@ export interface UpdateWorkloadRuntimeRecordInput {
   containerId?: string | null;
   lastExitCode?: number | null;
   restartCount?: number;
+  deleteRuntimeAckAt?: Date | null;
 }
 
 export function updateWorkloadRuntimeRecord(
@@ -209,6 +288,9 @@ export function updateWorkloadRuntimeRecord(
       ...(updates.containerId !== undefined ? { containerId: updates.containerId } : {}),
       ...(updates.lastExitCode !== undefined ? { lastExitCode: updates.lastExitCode } : {}),
       ...(updates.restartCount !== undefined ? { restartCount: updates.restartCount } : {}),
+      ...(updates.deleteRuntimeAckAt !== undefined
+        ? { deleteRuntimeAckAt: updates.deleteRuntimeAckAt }
+        : {}),
       lastHeartbeatAt: new Date(),
       updatedAt: new Date()
     },

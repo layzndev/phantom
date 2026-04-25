@@ -2,10 +2,12 @@ import {
   createWorkloadRecord,
   createWorkloadStatusEventRecord,
   deleteWorkloadRecord,
+  finalizeWorkloadDeletionRecord,
   findAssignedWorkloadRecordById,
   findWorkloadRecordById,
   listWorkloadRecords,
   listRuntimeAssignedWorkloadRecords,
+  markWorkloadDeletingRecord,
   setWorkloadDesiredStatusRecord,
   updateWorkloadRuntimeRecord,
   updateWorkloadRecord,
@@ -58,6 +60,20 @@ export function emitWorkloadStatusEvent(input: {
 
 export function deleteWorkloadFromRegistry(id: string) {
   return deleteWorkloadRecord(id);
+}
+
+export function markWorkloadDeletingInRegistry(
+  id: string,
+  options: { hardDeleteData: boolean; reason: string }
+) {
+  return markWorkloadDeletingRecord(id, options);
+}
+
+export function finalizeWorkloadDeletionInRegistry(
+  id: string,
+  options: { mode: "hard" | "soft"; reason: string }
+) {
+  return finalizeWorkloadDeletionRecord(id, options);
 }
 
 export function updateWorkloadRuntimeInRegistry(

@@ -19,14 +19,17 @@ import { authenticateRuntimeNode } from "../nodes/nodes.service.js";
 import { findWorkloadFromRegistry } from "../workloads/workloads.repository.js";
 import {
   createWorkload,
-  deleteWorkload,
   getWorkload,
+  requestWorkloadDeletion,
   restartWorkload,
   startWorkload,
   stopWorkload
 } from "../workloads/workloads.service.js";
 import type { CompanyWorkload } from "../workloads/workloads.types.js";
-import type { CreateMinecraftServerInput } from "./minecraft.schema.js";
+import type {
+  CreateMinecraftServerInput,
+  DeleteMinecraftServerQuery
+} from "./minecraft.schema.js";
 import {
   findMinecraftTemplate,
   listMinecraftTemplates,
@@ -34,6 +37,7 @@ import {
 } from "./minecraft.templates.js";
 import type {
   CreateMinecraftServerResult,
+  DeleteMinecraftServerResult,
   MinecraftDifficulty,
   MinecraftGameMode,
   MinecraftOperation,
@@ -192,9 +196,17 @@ export async function restartMinecraftServer(id: string) {
   return { server: toMinecraftServer(record), workload };
 }
 
-export async function deleteMinecraftServer(id: string) {
+export async function deleteMinecraftServer(
+  id: string,
+  options: DeleteMinecraftServerQuery
+): Promise<DeleteMinecraftServerResult> {
   const record = await ensureMinecraftServerRecord(id);
-  await deleteWorkload(record.workloadId);
+  const result = await requestWorkloadDeletion(record.workloadId, options);
+  return {
+    server: result.finalized ? null : toMinecraftServer(record),
+    workload: result.workload,
+    finalized: result.finalized
+  };
 }
 
 export async function enqueueMinecraftOperation(
@@ -354,7 +366,7 @@ async function ensureMinecraftServerRecord(id: string) {
 
 async function safeDeleteWorkload(workloadId: string) {
   try {
-    await deleteWorkload(workloadId);
+    await requestWorkloadDeletion(workloadId, { hardDeleteData: false });
   } catch {
     // Best-effort rollback; workload record will be cleaned up manually if this fails.
   }

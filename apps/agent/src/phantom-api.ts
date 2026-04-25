@@ -3,7 +3,9 @@ import type {
   AssignedWorkloadsResponse,
   MinecraftOperationCompletePayload,
   MinecraftRuntimeOperationsResponse,
+  NodeHeartbeatPayload,
   WorkloadAckActionPayload,
+  WorkloadAckDeletePayload,
   WorkloadEventPayload,
   WorkloadHeartbeatPayload
 } from "./types.js";
@@ -13,6 +15,13 @@ export class PhantomApiClient {
 
   async getAssignedWorkloads() {
     return this.request<AssignedWorkloadsResponse>("/runtime/workloads/assigned");
+  }
+
+  async sendNodeHeartbeat(payload: NodeHeartbeatPayload) {
+    return this.request(`/runtime/nodes/${encodeURIComponent(this.config.nodeId)}/heartbeat`, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
   }
 
   async sendHeartbeat(workloadId: string, payload: WorkloadHeartbeatPayload) {
@@ -31,6 +40,13 @@ export class PhantomApiClient {
 
   async ackAction(workloadId: string, payload: WorkloadAckActionPayload) {
     return this.request(`/runtime/workloads/${encodeURIComponent(workloadId)}/ack-action`, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+  }
+
+  async ackDelete(workloadId: string, payload: WorkloadAckDeletePayload) {
+    return this.request(`/runtime/workloads/${encodeURIComponent(workloadId)}/ack-delete`, {
       method: "POST",
       body: JSON.stringify(payload)
     });

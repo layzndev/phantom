@@ -31,6 +31,7 @@ export interface AssignedWorkload {
   lastHeartbeatAt: string | null;
   lastExitCode: number | null;
   restartCount: number;
+  deleteHardData: boolean;
   ports: AssignedWorkloadPort[];
 }
 
@@ -62,6 +63,36 @@ export interface WorkloadAckActionPayload {
   status?: WorkloadRuntimeStatus;
   containerId?: string | null;
   reason?: string;
+}
+
+export interface WorkloadAckDeletePayload {
+  removedRuntime?: boolean;
+  removedData?: boolean;
+  containerId?: string | null;
+  reason?: string;
+}
+
+export interface NodeHeartbeatPayload {
+  status: "healthy" | "degraded" | "offline";
+  agentVersion?: string;
+  runtimeVersion?: string;
+  dockerVersion?: string;
+  osPlatform?: string;
+  osRelease?: string;
+  kernelVersion?: string;
+  osArch?: string;
+  hostname?: string;
+  uptimeSec?: number;
+  cpuModel?: string;
+  cpuCores?: number;
+  totalRamMb?: number;
+  totalCpu?: number;
+  totalDiskGb?: number;
+  cpuUsed?: number;
+  ramUsedMb?: number;
+  diskUsedGb?: number;
+  openPorts?: number[];
+  portRanges?: Array<{ start: number; end: number }>;
 }
 
 export interface AgentConfig {

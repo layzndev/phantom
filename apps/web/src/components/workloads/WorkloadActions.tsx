@@ -33,6 +33,7 @@ export function WorkloadActions({
   const canOperate = adminRole !== null && OPERABLE_ROLES.includes(adminRole);
   const canKill = adminRole !== null && KILLABLE_ROLES.includes(adminRole);
   const canDelete = adminRole !== null && DELETABLE_ROLES.includes(adminRole);
+  const lockedByDelete = workload.status === "deleting";
 
   async function run(
     label: string,
@@ -66,8 +67,13 @@ export function WorkloadActions({
     setMessage(null);
 
     try {
-      await adminApi.deleteWorkload(workload.id);
-      onRemoved?.(workload.id);
+      const result = await adminApi.deleteWorkload(workload.id);
+      if (result.finalized) {
+        onRemoved?.(workload.id);
+      } else if (result.workload) {
+        onUpdated?.(result.workload);
+        setMessage("delete accepted");
+      }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Delete failed");
       setConfirmingDelete(false);
@@ -86,7 +92,7 @@ export function WorkloadActions({
           title="Start workload"
           aria-label="Start workload"
           className={compact ? iconButtonClass : undefined}
-          disabled={Boolean(busy)}
+          disabled={Boolean(busy) || lockedByDelete}
           onClick={() => run("start", () => adminApi.startWorkload(workload.id))}
         >
           <Play className="h-4 w-4 shrink-0" strokeWidth={2.4} />
@@ -99,7 +105,7 @@ export function WorkloadActions({
           title="Stop workload"
           aria-label="Stop workload"
           className={compact ? iconButtonClass : undefined}
-          disabled={Boolean(busy)}
+          disabled={Boolean(busy) || lockedByDelete}
           onClick={() => run("stop", () => adminApi.stopWorkload(workload.id))}
         >
           <Square className="h-4 w-4 shrink-0" strokeWidth={2.4} />
@@ -112,7 +118,7 @@ export function WorkloadActions({
           title="Restart workload"
           aria-label="Restart workload"
           className={compact ? iconButtonClass : undefined}
-          disabled={Boolean(busy)}
+          disabled={Boolean(busy) || lockedByDelete}
           onClick={() => run("restart", () => adminApi.restartWorkload(workload.id))}
         >
           <RotateCcw className="h-4 w-4 shrink-0" strokeWidth={2.4} />
@@ -129,7 +135,7 @@ export function WorkloadActions({
               ? `${iconButtonClass} border-red-500/25 text-red-300 hover:border-red-500/50 hover:bg-red-500/10 hover:text-red-200`
               : "border-red-500/25 text-red-300 hover:border-red-500/45 hover:bg-red-500/10 hover:text-red-200"
           }
-          disabled={Boolean(busy)}
+          disabled={Boolean(busy) || lockedByDelete}
           onClick={() => run("kill", () => adminApi.killWorkload(workload.id))}
         >
           <Skull className="h-4 w-4 shrink-0" strokeWidth={2.4} />
@@ -150,7 +156,7 @@ export function WorkloadActions({
                 ? "border-red-500/50 bg-red-500/15 text-red-200 hover:border-red-500/60 hover:bg-red-500/25 hover:text-red-100"
                 : "border-red-500/25 text-red-300 hover:border-red-500/45 hover:bg-red-500/10 hover:text-red-200"
           }
-          disabled={Boolean(busy)}
+          disabled={Boolean(busy) || lockedByDelete}
           onClick={handleDelete}
         >
           <Trash2 className="h-4 w-4 shrink-0" strokeWidth={2.4} />

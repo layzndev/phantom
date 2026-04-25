@@ -5,6 +5,10 @@ import {
   startNodeRuntimeMonitor,
   type NodeRuntimeMonitorHandle
 } from "./modules/nodes/nodes.runtime.monitor.js";
+import {
+  startWorkloadDeleteMonitor,
+  type WorkloadDeleteMonitorHandle
+} from "./modules/workloads/workloads.delete.monitor.js";
 
 assertRuntimeConfig();
 
@@ -16,6 +20,9 @@ const server = app.listen(env.port, env.host, () => {
 
 const monitor: NodeRuntimeMonitorHandle | null = env.nodeMonitorEnabled
   ? startNodeRuntimeMonitor()
+  : null;
+const workloadDeleteMonitor: WorkloadDeleteMonitorHandle | null = env.workloadDeleteMonitorEnabled
+  ? startWorkloadDeleteMonitor()
   : null;
 
 let shuttingDown = false;
@@ -34,6 +41,12 @@ async function shutdown(signal: string, exitCode = 0) {
     if (monitor) await monitor.stop();
   } catch (err) {
     console.error("[server] error while stopping node monitor", err);
+  }
+
+  try {
+    if (workloadDeleteMonitor) await workloadDeleteMonitor.stop();
+  } catch (err) {
+    console.error("[server] error while stopping workload delete monitor", err);
   }
 
   try {

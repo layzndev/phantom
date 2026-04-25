@@ -24,6 +24,10 @@ export const minecraftServerListQuerySchema = z.object({
   templateId: z.string().optional()
 });
 
+export const deleteMinecraftServerQuerySchema = z.object({
+  hardDeleteData: z.coerce.boolean().optional().default(false)
+});
+
 export const minecraftCommandSchema = z.object({
   command: z.string().min(1).max(500)
 });
@@ -39,5 +43,6 @@ export const minecraftOperationParamsSchema = z.object({
 
 export type CreateMinecraftServerInput = z.infer<typeof createMinecraftServerSchema>;
 export type MinecraftServerListQuery = z.infer<typeof minecraftServerListQuerySchema>;
+export type DeleteMinecraftServerQuery = z.infer<typeof deleteMinecraftServerQuerySchema>;
 export type MinecraftCommandInput = z.infer<typeof minecraftCommandSchema>;
 export type MinecraftLogsQuery = z.infer<typeof minecraftLogsQuerySchema>;

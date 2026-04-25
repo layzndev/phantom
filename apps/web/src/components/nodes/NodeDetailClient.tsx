@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { adminApi } from "@/lib/api/admin-api";
-import { formatDateTime } from "@/lib/utils/format";
+import { formatDateTime, formatDisk, formatRam, formatUptime } from "@/lib/utils/format";
 import type { AdminRole, CompanyNode } from "@/types/admin";
 import { NodeCapacityCard } from "./NodeCapacityCard";
 import { NodePortsCard } from "./NodePortsCard";
@@ -98,9 +98,45 @@ export function NodeDetailClient({ id }: { id: string }) {
         </div>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-2">
+      <section className="grid gap-6 xl:grid-cols-3">
         <NodeCapacityCard node={node} />
         <NodePortsCard node={node} adminRole={adminRole} onUpdated={setNode} />
+        <DetailCard
+          title="System Information"
+          description="Runtime and host information reported by the Phantom node agent."
+        >
+          <dl className="grid gap-3 text-sm">
+            <InfoRow label="Agent version" value={node.agentVersion ?? "Unknown"} />
+            <InfoRow label="Runtime version" value={node.runtimeVersion ?? "Unknown"} />
+            <InfoRow label="Docker version" value={node.dockerVersion ?? "Unknown"} />
+            <InfoRow
+              label="System"
+              value={[node.osPlatform, node.osArch].filter(Boolean).join(" ") || "Unknown"}
+            />
+            <InfoRow label="Kernel" value={node.kernelVersion ?? node.osRelease ?? "Unknown"} />
+            <InfoRow
+              label="Hostname"
+              value={node.hostname ?? "Unknown"}
+              mono
+            />
+            <InfoRow
+              label="CPU"
+              value={
+                node.cpuModel
+                  ? `${node.cpuModel}${node.cpuCores ? ` (${node.cpuCores} cores)` : ""}`
+                  : node.cpuCores
+                    ? `${node.cpuCores} cores`
+                    : "Unknown"
+              }
+            />
+            <InfoRow label="RAM total" value={formatRam(node.totalRamMb)} />
+            <InfoRow
+              label="Disk total"
+              value={node.totalDiskGb > 0 ? formatDisk(node.totalDiskGb) : "Unknown"}
+            />
+            <InfoRow label="Uptime" value={formatUptime(node.uptimeSec)} />
+          </dl>
+        </DetailCard>
       </section>
 
       <NodeServersTable servers={node.hostedServersList} />
@@ -131,6 +167,23 @@ export function NodeDetailClient({ id }: { id: string }) {
           </div>
         </DetailCard>
       </section>
+    </div>
+  );
+}
+
+function InfoRow({
+  label,
+  value,
+  mono = false
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-4 rounded-2xl bg-white/[0.04] px-4 py-3">
+      <dt className="text-slate-500">{label}</dt>
+      <dd className={`text-right text-slate-200 ${mono ? "font-mono text-xs" : ""}`}>{value}</dd>
     </div>
   );
 }

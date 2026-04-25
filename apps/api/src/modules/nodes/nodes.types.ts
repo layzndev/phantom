@@ -54,6 +54,18 @@ export interface CompanyNode {
   portRangeEnd: number | null;
   openPorts: number[];
   suggestedPortRanges: SuggestedPortRange[] | null;
+  agentVersion: string | null;
+  runtimeVersion: string | null;
+  dockerVersion: string | null;
+  osPlatform: string | null;
+  osRelease: string | null;
+  kernelVersion: string | null;
+  osArch: string | null;
+  hostname: string | null;
+  uptimeSec: number | null;
+  cpuModel: string | null;
+  cpuCores: number | null;
+  totalDiskGb: number;
   maintenanceMode: boolean;
   hostedServersList?: HostedServer[];
   history?: Array<{

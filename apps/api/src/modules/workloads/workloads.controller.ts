@@ -5,10 +5,10 @@ import { requireAdmin, requireRole } from "../../middleware/authMiddleware.js";
 import { writeAuditLog } from "../audit/audit.service.js";
 import {
   createWorkload,
-  deleteWorkload,
   getWorkload,
   killWorkload,
   listWorkloads,
+  requestWorkloadDeletion,
   restartWorkload,
   startWorkload,
   stopWorkload,
@@ -17,6 +17,7 @@ import {
 import {
   createWorkloadSchema,
   updateWorkloadSchema,
+  workloadDeleteQuerySchema,
   workloadListQuerySchema,
   workloadParamsSchema
 } from "./workloads.schema.js";
@@ -194,14 +195,23 @@ workloadsController.delete(
   validateParams(workloadParamsSchema),
   asyncHandler(async (req, res) => {
     const actor = req.session.admin!;
-    await deleteWorkload(req.params.id);
+    const parsed = workloadDeleteQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Invalid query parameters.", details: parsed.error.flatten() });
+      return;
+    }
+    const result = await requestWorkloadDeletion(req.params.id, parsed.data);
     await writeAuditLog(req, {
       action: "workload.delete",
       actorId: actor.id,
       actorEmail: actor.email,
       targetType: "system",
-      targetId: req.params.id
+      targetId: req.params.id,
+      metadata: {
+        finalized: result.finalized,
+        hardDeleteData: parsed.data.hardDeleteData
+      }
     });
-    res.status(204).send();
+    res.status(result.finalized ? 200 : 202).json(result);
   })
 );

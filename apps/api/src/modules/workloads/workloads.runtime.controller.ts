@@ -4,6 +4,7 @@ import { asyncHandler } from "../../lib/asyncHandler.js";
 import { validateBody, validateParams } from "../../lib/validate.js";
 import {
   ackRuntimeWorkloadAction,
+  ackRuntimeWorkloadDelete,
   acceptWorkloadHeartbeat,
   appendRuntimeWorkloadEvent,
   listAssignedRuntimeWorkloads
@@ -11,6 +12,7 @@ import {
 import {
   workloadParamsSchema,
   workloadRuntimeAckActionSchema,
+  workloadRuntimeAckDeleteSchema,
   workloadRuntimeEventSchema,
   workloadRuntimeHeartbeatSchema
 } from "./workloads.schema.js";
@@ -55,6 +57,17 @@ workloadsRuntimeController.post(
   asyncHandler(async (req, res) => {
     const token = extractBearerToken(req.headers.authorization);
     const result = await ackRuntimeWorkloadAction(req.params.id, token, req.body);
+    res.json(result);
+  })
+);
+
+workloadsRuntimeController.post(
+  "/:id/ack-delete",
+  validateParams(workloadParamsSchema),
+  validateBody(workloadRuntimeAckDeleteSchema),
+  asyncHandler(async (req, res) => {
+    const token = extractBearerToken(req.headers.authorization);
+    const result = await ackRuntimeWorkloadDelete(req.params.id, token, req.body);
     res.json(result);
   })
 );

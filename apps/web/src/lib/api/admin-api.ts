@@ -6,6 +6,11 @@ import type {
   CreateWorkloadPayload,
   CreateWorkloadResult,
   CreateNodePayload,
+  DeleteMinecraftServerOptions,
+  DeleteMinecraftServerResult,
+  DeleteWorkloadOptions,
+  DeleteWorkloadResult,
+  MinecraftServerWithWorkload,
   NodeSummary,
   UpdateNodePayload,
   UpdateWorkloadPayload
@@ -94,7 +99,17 @@ export const adminApi = {
     apiRequest<{ workload: CompanyWorkload }>(`/workloads/${encodeURIComponent(id)}/kill`, {
       method: "POST"
     }),
-  deleteWorkload: (id: string) =>
-    apiRequest<void>(`/workloads/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  deleteWorkload: (id: string, options: DeleteWorkloadOptions = {}) =>
+    apiRequest<DeleteWorkloadResult>(
+      `/workloads/${encodeURIComponent(id)}?hardDeleteData=${options.hardDeleteData === true}`,
+      { method: "DELETE" }
+    ),
+  minecraftServers: () =>
+    apiRequest<{ servers: MinecraftServerWithWorkload[] }>("/minecraft/servers"),
+  deleteMinecraftServer: (id: string, options: DeleteMinecraftServerOptions = {}) =>
+    apiRequest<DeleteMinecraftServerResult>(
+      `/minecraft/servers/${encodeURIComponent(id)}?hardDeleteData=${options.hardDeleteData === true}`,
+      { method: "DELETE" }
+    ),
   auditLogs: () => apiRequest<{ auditLogs: AuditLogEntry[] }>("/audit-logs")
 };

@@ -53,7 +53,11 @@ export function findMinecraftServerRecordByWorkloadId(workloadId: string) {
 }
 
 export function listMinecraftServerRecords(filter: MinecraftServerFilter = {}) {
-  const where: Prisma.MinecraftServerWhereInput = {};
+  const where: Prisma.MinecraftServerWhereInput = {
+    workload: {
+      deletedAt: null
+    }
+  };
   if (filter.templateId !== undefined) where.templateId = filter.templateId;
   if (!filter.includeDeleted) where.deletedAt = null;
 

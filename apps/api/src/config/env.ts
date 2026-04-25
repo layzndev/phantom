@@ -32,7 +32,11 @@ export const env = {
   hostingApiRetryAttempts: Number(process.env.HOSTING_API_RETRY_ATTEMPTS ?? 1),
   nodeHeartbeatTimeoutMs: Number(process.env.NODE_HEARTBEAT_TIMEOUT_MS ?? 45_000),
   nodeMonitorTickMs: Number(process.env.NODE_MONITOR_TICK_MS ?? 10_000),
-  nodeMonitorEnabled: (process.env.NODE_MONITOR_ENABLED ?? "true").toLowerCase() !== "false"
+  nodeMonitorEnabled: (process.env.NODE_MONITOR_ENABLED ?? "true").toLowerCase() !== "false",
+  workloadDeleteTimeoutMs: Number(process.env.WORKLOAD_DELETE_TIMEOUT_MS ?? 120_000),
+  workloadDeleteMonitorTickMs: Number(process.env.WORKLOAD_DELETE_MONITOR_TICK_MS ?? 10_000),
+  workloadDeleteMonitorEnabled:
+    (process.env.WORKLOAD_DELETE_MONITOR_ENABLED ?? "true").toLowerCase() !== "false"
 };
 
 export function assertRuntimeConfig() {
@@ -47,13 +51,25 @@ export function assertRuntimeConfig() {
   if (
     !Number.isFinite(env.nodeHeartbeatTimeoutMs) ||
     !Number.isFinite(env.nodeMonitorTickMs) ||
+    !Number.isFinite(env.workloadDeleteTimeoutMs) ||
+    !Number.isFinite(env.workloadDeleteMonitorTickMs) ||
     env.nodeHeartbeatTimeoutMs <= 0 ||
-    env.nodeMonitorTickMs <= 0
+    env.nodeMonitorTickMs <= 0 ||
+    env.workloadDeleteTimeoutMs <= 0 ||
+    env.workloadDeleteMonitorTickMs <= 0
   ) {
-    throw new Error("NODE_HEARTBEAT_TIMEOUT_MS and NODE_MONITOR_TICK_MS must be positive integers.");
+    throw new Error(
+      "NODE_HEARTBEAT_TIMEOUT_MS, NODE_MONITOR_TICK_MS, WORKLOAD_DELETE_TIMEOUT_MS and WORKLOAD_DELETE_MONITOR_TICK_MS must be positive integers."
+    );
   }
 
   if (env.nodeMonitorTickMs >= env.nodeHeartbeatTimeoutMs) {
     throw new Error("NODE_MONITOR_TICK_MS must be smaller than NODE_HEARTBEAT_TIMEOUT_MS.");
+  }
+
+  if (env.workloadDeleteMonitorTickMs >= env.workloadDeleteTimeoutMs) {
+    throw new Error(
+      "WORKLOAD_DELETE_MONITOR_TICK_MS must be smaller than WORKLOAD_DELETE_TIMEOUT_MS."
+    );
   }
 }

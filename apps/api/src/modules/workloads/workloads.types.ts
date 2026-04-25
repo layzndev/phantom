@@ -42,6 +42,9 @@ export interface CompanyWorkload {
   lastHeartbeatAt: string | null;
   lastExitCode: number | null;
   restartCount: number;
+  deleteRequestedAt: string | null;
+  deleteRuntimeAckAt: string | null;
+  deleteHardData: boolean;
   ports: WorkloadPort[];
   statusEvents: WorkloadStatusEvent[];
   createdAt: string;
@@ -53,4 +56,9 @@ export interface CreateWorkloadResult {
   workload: CompanyWorkload;
   placed: boolean;
   reason?: string;
+}
+
+export interface DeleteWorkloadResult {
+  workload: CompanyWorkload | null;
+  finalized: boolean;
 }

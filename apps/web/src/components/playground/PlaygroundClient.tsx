@@ -59,6 +59,7 @@ export function PlaygroundClient() {
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState<CreateFormState>(emptyForm());
   const [actionPending, setActionPending] = useState<Record<string, boolean>>({});
+  const [hardDeleteData, setHardDeleteData] = useState(false);
   const [consoleServerId, setConsoleServerId] = useState<string | null>(initialServerId);
   const [commandInput, setCommandInput] = useState("");
   const [consoleOutput, setConsoleOutput] = useState<MinecraftConsoleLine[]>([]);
@@ -217,10 +218,16 @@ export function PlaygroundClient() {
   };
 
   const handleDelete = async (id: string, name: string) => {
-    if (!window.confirm(`Delete Minecraft server "${name}"? This is irreversible.`)) return;
+    const prompt = hardDeleteData
+      ? `Delete Minecraft server "${name}" and remove /minecraft-data too?`
+      : `Delete Minecraft server "${name}" and keep /minecraft-data on disk?`;
+    if (!window.confirm(prompt)) return;
     setServerPending(id, true);
     try {
-      await callApi("DELETE", `/minecraft/servers/${id}`);
+      await callApi(
+        "DELETE",
+        `/minecraft/servers/${id}?hardDeleteData=${hardDeleteData}`
+      );
       await refreshServers();
     } finally {
       setServerPending(id, false);
@@ -579,13 +586,23 @@ export function PlaygroundClient() {
       <section className="rounded-2xl border border-line bg-panel/78 shadow-soft">
         <header className="flex items-center justify-between border-b border-white/5 px-5 py-4">
           <h2 className="text-sm font-semibold text-white">Servers ({servers.length})</h2>
-          <button
-            type="button"
-            onClick={() => void refreshServers()}
-            className="text-xs text-slate-400 hover:text-white"
-          >
-            Refresh
-          </button>
+          <div className="flex items-center gap-4">
+            <label className="flex items-center gap-2 text-xs text-slate-400">
+              <input
+                type="checkbox"
+                checked={hardDeleteData}
+                onChange={(event) => setHardDeleteData(event.target.checked)}
+              />
+              hard delete data
+            </label>
+            <button
+              type="button"
+              onClick={() => void refreshServers()}
+              className="text-xs text-slate-400 hover:text-white"
+            >
+              Refresh status
+            </button>
+          </div>
         </header>
 
         {loading && servers.length === 0 ? (
@@ -639,23 +656,36 @@ export function PlaygroundClient() {
                           <ActionButton
                             label="Start"
                             onClick={() => void handleAction(server.id, "start")}
-                            disabled={pending || workload.desiredStatus === "running"}
+                            disabled={
+                              pending ||
+                              workload.desiredStatus === "running" ||
+                              workload.status === "deleting"
+                            }
                           />
                           <ActionButton
                             label="Stop"
                             onClick={() => void handleAction(server.id, "stop")}
-                            disabled={pending || workload.desiredStatus === "stopped"}
+                            disabled={
+                              pending ||
+                              workload.desiredStatus === "stopped" ||
+                              workload.status === "deleting"
+                            }
                           />
                           <ActionButton
                             label="Restart"
                             onClick={() => void handleAction(server.id, "restart")}
+                            disabled={pending || workload.status === "deleting"}
+                          />
+                          <ActionButton
+                            label="Refresh"
+                            onClick={() => void refreshServers()}
                             disabled={pending}
                           />
                           <ActionButton
                             label="Delete"
                             tone="danger"
                             onClick={() => void handleDelete(server.id, server.name)}
-                            disabled={pending}
+                            disabled={pending || workload.status === "deleting"}
                           />
                         </div>
                       </td>

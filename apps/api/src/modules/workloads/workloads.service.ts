@@ -4,6 +4,7 @@ import { authenticateRuntimeNode } from "../nodes/nodes.service.js";
 import type {
   CompanyWorkload,
   CreateWorkloadResult,
+  DeleteWorkloadResult,
   WorkloadDesiredStatus,
   WorkloadPort,
   WorkloadPortProtocol,
@@ -13,19 +14,22 @@ import type {
 } from "./workloads.types.js";
 import {
   createWorkloadInRegistry,
-  deleteWorkloadFromRegistry,
   emitWorkloadStatusEvent,
+  finalizeWorkloadDeletionInRegistry,
   findAssignedWorkloadFromRegistry,
   findWorkloadFromRegistry,
   listAssignedRuntimeWorkloadsFromRegistry,
   listWorkloadsFromRegistry,
+  markWorkloadDeletingInRegistry,
   setWorkloadDesiredStatusInRegistry,
   updateWorkloadRuntimeInRegistry,
   updateWorkloadInRegistry
 } from "./workloads.repository.js";
 import type {
   CreateWorkloadInput,
+  WorkloadDeleteQuery,
   WorkloadRuntimeAckActionInput,
+  WorkloadRuntimeAckDeleteInput,
   WorkloadRuntimeEventInput,
   WorkloadRuntimeHeartbeatInput,
   UpdateWorkloadInput,
@@ -116,7 +120,7 @@ export async function stopWorkload(id: string) {
 
 export async function restartWorkload(id: string) {
   const existing = await ensureWorkload(id);
-  if (existing.deletedAt !== null) {
+  if (existing.deletedAt !== null || existing.status === "deleting") {
     throw new AppError(409, "Workload is being deleted.", "WORKLOAD_DELETING");
   }
   await emitWorkloadStatusEvent({
@@ -131,7 +135,7 @@ export async function restartWorkload(id: string) {
 
 export async function killWorkload(id: string) {
   const existing = await ensureWorkload(id);
-  if (existing.deletedAt !== null) {
+  if (existing.deletedAt !== null || existing.status === "deleting") {
     throw new AppError(409, "Workload is being deleted.", "WORKLOAD_DELETING");
   }
   await emitWorkloadStatusEvent({
@@ -144,9 +148,44 @@ export async function killWorkload(id: string) {
   return toCompanyWorkload(updated);
 }
 
-export async function deleteWorkload(id: string) {
+export async function requestWorkloadDeletion(
+  id: string,
+  options: WorkloadDeleteQuery
+): Promise<DeleteWorkloadResult> {
   const existing = await ensureWorkload(id);
-  await deleteWorkloadFromRegistry(existing.id);
+  if (existing.deletedAt !== null || existing.status === "deleted") {
+    throw new AppError(404, "Workload not found.", "WORKLOAD_NOT_FOUND");
+  }
+
+  if (existing.status === "deleting") {
+    return {
+      workload: toCompanyWorkload(existing),
+      finalized: false
+    };
+  }
+
+  if (existing.nodeId === null) {
+    await finalizeWorkloadDeletionInRegistry(existing.id, {
+      mode: "hard",
+      reason: "[delete] completed immediately for unassigned workload"
+    });
+    return {
+      workload: null,
+      finalized: true
+    };
+  }
+
+  const deleting = await markWorkloadDeletingInRegistry(existing.id, {
+    hardDeleteData: options.hardDeleteData,
+    reason: options.hardDeleteData
+      ? "[delete] requested (hardDeleteData=true)"
+      : "[delete] requested"
+  });
+
+  return {
+    workload: toCompanyWorkload(deleting),
+    finalized: false
+  };
 }
 
 export async function listAssignedRuntimeWorkloads(rawToken: string) {
@@ -171,6 +210,7 @@ export async function listAssignedRuntimeWorkloads(rawToken: string) {
       lastHeartbeatAt: record.lastHeartbeatAt?.toISOString() ?? null,
       lastExitCode: record.lastExitCode,
       restartCount: record.restartCount,
+      deleteHardData: record.deleteHardData,
       ports: record.ports.map((port) => ({
         internalPort: port.internalPort,
         externalPort: port.externalPort,
@@ -185,20 +225,24 @@ export async function acceptWorkloadHeartbeat(
   rawToken: string,
   payload: WorkloadRuntimeHeartbeatInput
 ) {
-  const workload = await ensureAssignedRuntimeWorkload(workloadId, rawToken);
+  const workload = await ensureAssignedRuntimeWorkload(workloadId, rawToken, {
+    allowDeleting: true
+  });
+  const nextRuntimeStatus: WorkloadStatus =
+    workload.status === "deleting" ? "deleting" : payload.status;
 
   const updated = await updateWorkloadRuntimeInRegistry(workload.id, {
-    status: payload.status,
+    status: nextRuntimeStatus,
     containerId: payload.containerId,
     lastExitCode: payload.exitCode,
     restartCount: payload.restartCount
   });
 
-  if (workload.status !== payload.status) {
+  if (workload.status !== nextRuntimeStatus) {
     await emitWorkloadStatusEvent({
       workloadId: workload.id,
       previousStatus: workload.status,
-      newStatus: payload.status,
+      newStatus: nextRuntimeStatus,
       reason: buildRuntimeReason("heartbeat", payload.reason, {
         exitCode: payload.exitCode,
         restartCount: payload.restartCount,
@@ -224,8 +268,13 @@ export async function appendRuntimeWorkloadEvent(
   rawToken: string,
   payload: WorkloadRuntimeEventInput
 ) {
-  const workload = await ensureAssignedRuntimeWorkload(workloadId, rawToken);
-  const nextStatus = payload.status ?? mapRuntimeEventTypeToStatus(payload.type);
+  const workload = await ensureAssignedRuntimeWorkload(workloadId, rawToken, {
+    allowDeleting: true
+  });
+  const nextStatus =
+    workload.status === "deleting"
+      ? "deleting"
+      : (payload.status ?? mapRuntimeEventTypeToStatus(payload.type));
 
   await emitWorkloadStatusEvent({
     workloadId: workload.id,
@@ -249,7 +298,9 @@ export async function ackRuntimeWorkloadAction(
   rawToken: string,
   payload: WorkloadRuntimeAckActionInput
 ) {
-  const workload = await ensureAssignedRuntimeWorkload(workloadId, rawToken);
+  const workload = await ensureAssignedRuntimeWorkload(workloadId, rawToken, {
+    allowDeleting: true
+  });
   const normalizedDesiredStatus =
     payload.handledDesiredStatus === "restart" ? "running" : "stopped";
 
@@ -281,13 +332,50 @@ export async function ackRuntimeWorkloadAction(
   };
 }
 
+export async function ackRuntimeWorkloadDelete(
+  workloadId: string,
+  rawToken: string,
+  payload: WorkloadRuntimeAckDeleteInput
+) {
+  const workload = await ensureAssignedRuntimeWorkload(workloadId, rawToken, {
+    allowDeleting: true
+  });
+
+  if (workload.status !== "deleting") {
+    throw new AppError(409, "Workload is not deleting.", "WORKLOAD_NOT_DELETING");
+  }
+
+  await updateWorkloadRuntimeInRegistry(workload.id, {
+    status: "deleting",
+    desiredStatus: "stopped",
+    containerId: payload.containerId ?? null,
+    deleteRuntimeAckAt: new Date()
+  });
+
+  await finalizeWorkloadDeletionInRegistry(workload.id, {
+    mode: "hard",
+    reason: buildRuntimeReason("ack-delete", payload.reason ?? "[delete] completed", {
+      removedRuntime: payload.removedRuntime,
+      removedData: payload.removedData
+    })
+  });
+
+  return {
+    ok: true,
+    nodeId: workload.nodeId,
+    workloadId,
+    deleted: true,
+    receivedAt: new Date().toISOString()
+  };
+}
+
 async function transitionDesired(
   id: string,
   desired: WorkloadDesiredStatus,
   reason: string
 ): Promise<CompanyWorkload> {
   const existing = await ensureWorkload(id);
-  if (existing.deletedAt !== null) {
+  if (existing.deletedAt !== null || existing.status === "deleting") {
     throw new AppError(409, "Workload is being deleted.", "WORKLOAD_DELETING");
   }
   if (existing.desiredStatus === desired) {
@@ -305,11 +393,19 @@ async function ensureWorkload(id: string) {
   return record;
 }
 
-async function ensureAssignedRuntimeWorkload(workloadId: string, rawToken: string) {
+async function ensureAssignedRuntimeWorkload(
+  workloadId: string,
+  rawToken: string,
+  options: { allowDeleting?: boolean } = {}
+) {
   const node = await authenticateRuntimeNode(rawToken);
   const workload = await findAssignedWorkloadFromRegistry(node.id, workloadId);
 
-  if (!workload || workload.status === "deleted" || workload.status === "deleting") {
+  if (
+    !workload ||
+    workload.status === "deleted" ||
+    (!options.allowDeleting && workload.status === "deleting")
+  ) {
     throw new AppError(404, "Workload not found.", "WORKLOAD_NOT_FOUND");
   }
 
@@ -317,7 +413,7 @@ async function ensureAssignedRuntimeWorkload(workloadId: string, rawToken: strin
 }
 
 function buildRuntimeReason(
-  prefix: "heartbeat" | "event" | "ack",
+  prefix: "heartbeat" | "event" | "ack" | "ack-delete",
   reason?: string,
   details: Record<string, unknown> = {}
 ) {
@@ -364,6 +460,9 @@ function toCompanyWorkload(record: WorkloadRecord): CompanyWorkload {
     lastHeartbeatAt: record.lastHeartbeatAt?.toISOString() ?? null,
     lastExitCode: record.lastExitCode,
     restartCount: record.restartCount,
+    deleteRequestedAt: record.deleteRequestedAt?.toISOString() ?? null,
+    deleteRuntimeAckAt: record.deleteRuntimeAckAt?.toISOString() ?? null,
+    deleteHardData: record.deleteHardData,
     ports: record.ports.map<WorkloadPort>((port) => ({
       id: port.id,
       internalPort: port.internalPort,
