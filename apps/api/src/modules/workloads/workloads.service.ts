@@ -6,6 +6,7 @@ import {
   findMinecraftServerRecordByWorkloadId,
   updateMinecraftServerRecord
 } from "../../db/minecraftRepository.js";
+import { minecraftConsoleGateway } from "../minecraft/minecraft.console.gateway.js";
 import { findNodeFromRegistry } from "../nodes/nodes.repository.js";
 import { authenticateRuntimeNode } from "../nodes/nodes.service.js";
 import type {
@@ -558,6 +559,7 @@ async function syncMinecraftSleepStateFromRuntimeHeartbeat(
         sleepingAt: null
       });
     }
+    minecraftConsoleGateway.publishLogs(server.id, ["__PHANTOM__ Server marked as running"]);
     return;
   }
 
@@ -568,6 +570,7 @@ async function syncMinecraftSleepStateFromRuntimeHeartbeat(
       sleepingAt: server.sleepingAt ?? confirmedAt,
       currentPlayerCount: 0
     });
+    minecraftConsoleGateway.publishLogs(server.id, ["__PHANTOM__ Server marked as sleeping"]);
     await createAuditLog({
       action: "minecraft.server.autosleep",
       actorEmail: "system",

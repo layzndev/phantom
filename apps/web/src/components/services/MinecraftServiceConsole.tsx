@@ -24,10 +24,21 @@ export function MinecraftServiceConsole({
   const reconnectTimerRef = useRef<number | null>(null);
   const shouldReconnectRef = useRef(true);
   const manuallyClosedRef = useRef(false);
+  const commandHistoryRef = useRef(new Set<string>());
+
+  const phantomIdentity = useMemo(() => {
+    const base = entry.server.slug?.trim() || "phantom";
+    return `${base}@phantom~`;
+  }, [entry.server.slug]);
 
   const appendLines = useCallback(
     (
-      incoming: Array<{ timestamp: string; kind: MinecraftConsoleLine["kind"]; text: string }>
+      incoming: Array<{
+        timestamp: string;
+        kind: MinecraftConsoleLine["kind"];
+        text: string;
+        channel?: MinecraftConsoleLine["channel"];
+      }>
     ) => {
       setLines((current) =>
         [...current, ...incoming.map((line, index) => ({
@@ -76,24 +87,28 @@ export function MinecraftServiceConsole({
 
           const timestamp = new Date().toISOString();
           if (payload.type === "log") {
-            appendLines(payload.line.split(/\r?\n/).filter(Boolean).map((text) => ({
-              timestamp,
-              kind: "logs" as const,
-              text
-            })));
+            appendLines(
+              payload.line
+                .split(/\r?\n/)
+                .flatMap((text) => normalizeConsoleLogLine(text, timestamp))
+            );
           } else if (payload.type === "status") {
-            appendLines([{ timestamp, kind: "info", text: `status: ${payload.status}` }]);
+            appendLines([
+              {
+                timestamp,
+                kind: "info",
+                channel: "PHANTOM",
+                text: describeStatusTransition(payload.status)
+              }
+            ]);
             void onRefresh();
           } else if (payload.type === "command_result") {
-            const output = payload.output.trim().length > 0 ? payload.output : "(no output)";
-            appendLines(output.split(/\r?\n/).map((text) => ({
-              timestamp,
-              kind: "response" as const,
-              text
-            })));
+            const isAdminCommand = commandHistoryRef.current.has(payload.id);
+            commandHistoryRef.current.delete(payload.id);
+            appendLines(normalizeCommandResult(payload.output, timestamp, isAdminCommand));
             void onRefresh();
           } else if (payload.type === "error") {
-            appendLines([{ timestamp, kind: "error", text: payload.message }]);
+            appendLines([{ timestamp, kind: "error", channel: "ERROR", text: payload.message }]);
             void onRefresh();
           }
         } catch {
@@ -101,6 +116,7 @@ export function MinecraftServiceConsole({
             {
               timestamp: new Date().toISOString(),
               kind: "error",
+              channel: "ERROR",
               text: "Invalid console payload received."
             }
           ]);
@@ -114,7 +130,8 @@ export function MinecraftServiceConsole({
           {
             timestamp: new Date().toISOString(),
             kind: "info",
-            text: `console websocket connected to ${entry.server.name}`
+            channel: "PHANTOM",
+            text: "Connected"
           }
         ]);
       });
@@ -127,7 +144,8 @@ export function MinecraftServiceConsole({
             {
               timestamp: new Date().toISOString(),
               kind: "info",
-              text: "console disconnected"
+              channel: "PHANTOM",
+              text: "Console disconnected"
             }
           ]);
           return;
@@ -138,7 +156,8 @@ export function MinecraftServiceConsole({
           {
             timestamp: new Date().toISOString(),
             kind: "info",
-            text: `console disconnected, retrying in ${RECONNECT_DELAY_MS / 1000}s`
+            channel: "PHANTOM",
+            text: `Console disconnected, retrying in ${RECONNECT_DELAY_MS / 1000}s`
           }
         ]);
         clearReconnectTimer();
@@ -152,7 +171,8 @@ export function MinecraftServiceConsole({
           {
             timestamp: new Date().toISOString(),
             kind: "error",
-            text: "console websocket error"
+            channel: "ERROR",
+            text: "WebSocket error"
           }
         ]);
       });
@@ -176,6 +196,7 @@ export function MinecraftServiceConsole({
         {
           timestamp: new Date().toISOString(),
           kind: "error",
+          channel: "ERROR",
           text: "console websocket is not connected"
         }
       ]);
@@ -192,10 +213,12 @@ export function MinecraftServiceConsole({
     }
     const id = `cmd-${Date.now()}`;
     if (sendMessage({ type: "command", id, command })) {
+      commandHistoryRef.current.add(id);
       appendLines([
         {
           timestamp: new Date().toISOString(),
           kind: "command",
+          channel: "ADMIN",
           text: `> ${command}`
         }
       ]);
@@ -204,12 +227,28 @@ export function MinecraftServiceConsole({
   };
 
   const handleSave = () => {
+    appendLines([
+      {
+        timestamp: new Date().toISOString(),
+        kind: "info",
+        channel: "PHANTOM",
+        text: "Saving world..."
+      }
+    ]);
     sendMessage({ type: "action", action: "save-all" });
   };
 
   const handleStop = async () => {
     setBusy(true);
     try {
+      appendLines([
+        {
+          timestamp: new Date().toISOString(),
+          kind: "info",
+          channel: "PHANTOM",
+          text: "Stopping server..."
+        }
+      ]);
       sendMessage({ type: "action", action: "stop" });
       await onRefresh();
     } finally {
@@ -220,6 +259,14 @@ export function MinecraftServiceConsole({
   const handleRestart = async () => {
     setBusy(true);
     try {
+      appendLines([
+        {
+          timestamp: new Date().toISOString(),
+          kind: "info",
+          channel: "PHANTOM",
+          text: "Restarting server..."
+        }
+      ]);
       await adminApi.restartMinecraftServer(entry.server.id);
       await onRefresh();
     } finally {
@@ -252,6 +299,158 @@ export function MinecraftServiceConsole({
       onClear={() => setLines([])}
       busy={derivedBusy}
       operatorLabel="admin"
+      phantomIdentity={phantomIdentity}
     />
   );
+}
+
+function normalizeConsoleLogLine(
+  rawLine: string,
+  timestamp: string
+): MinecraftConsoleLine[] {
+  const line = rawLine.trim();
+  if (!line) {
+    return [];
+  }
+
+  if (line.startsWith("__PHANTOM__ ")) {
+    return [
+      {
+        id: crypto.randomUUID(),
+        timestamp,
+        kind: "info",
+        channel: "PHANTOM",
+        text: line.slice("__PHANTOM__ ".length)
+      }
+    ];
+  }
+
+  const cleaned = stripDockerAndMinecraftTimestamps(line);
+  if (!cleaned) {
+    return [];
+  }
+
+  const parsed = parseMinecraftConsoleLine(cleaned);
+  if (!parsed) {
+    return [];
+  }
+
+  return [
+    {
+      id: crypto.randomUUID(),
+      timestamp,
+      kind: parsed.kind,
+      channel: parsed.channel,
+      text: parsed.text
+    }
+  ];
+}
+
+function normalizeCommandResult(
+  output: string,
+  timestamp: string,
+  isAdminCommand: boolean
+): MinecraftConsoleLine[] {
+  const lines = output
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && line !== '{"output":"\\n","stderr":""}');
+
+  if (lines.length === 0) {
+    return isAdminCommand
+      ? [
+          {
+            id: crypto.randomUUID(),
+            timestamp,
+            kind: "response",
+            channel: "RCON",
+            text: "Command executed"
+          }
+        ]
+      : [];
+  }
+
+  return lines
+    .filter((line) => !isHiddenRconNoise(line))
+    .map((line) => ({
+      id: crypto.randomUUID(),
+      timestamp,
+      kind: "response" as const,
+      channel: "RCON" as const,
+      text: stripDockerAndMinecraftTimestamps(line)
+    }))
+    .filter((line) => Boolean(line.text));
+}
+
+function stripDockerAndMinecraftTimestamps(line: string) {
+  return line
+    .replace(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})\s+/, "")
+    .replace(/^\[\d{2}:\d{2}:\d{2}\]\s*/, "")
+    .trim();
+}
+
+function parseMinecraftConsoleLine(line: string): {
+  kind: MinecraftConsoleLine["kind"];
+  channel: NonNullable<MinecraftConsoleLine["channel"]>;
+  text: string;
+} | null {
+  const match = line.match(/^\[([^\]]+?)\/(INFO|WARN|ERROR)\]:\s*(.*)$/);
+  const source = match?.[1] ?? null;
+  const level = match?.[2] ?? null;
+  const message = (match?.[3] ?? line).trim();
+
+  if (!message || isHiddenRconNoise(message)) {
+    return null;
+  }
+
+  if (isChatLine(message)) {
+    return { kind: "logs", channel: "CHAT", text: message };
+  }
+
+  if (level === "ERROR") {
+    return { kind: "error", channel: "ERROR", text: message };
+  }
+
+  if (level === "WARN") {
+    return { kind: "logs", channel: "WARN", text: message };
+  }
+
+  if (source?.includes("RCON")) {
+    return { kind: "response", channel: "RCON", text: message };
+  }
+
+  return { kind: "logs", channel: "SERVER", text: message };
+}
+
+function isChatLine(message: string) {
+  return (
+    / joined the game$/i.test(message) ||
+    / left the game$/i.test(message) ||
+    /^<[^>]+> /.test(message)
+  );
+}
+
+function isHiddenRconNoise(message: string) {
+  return (
+    /^Thread RCON Client .* started$/i.test(message) ||
+    /^Thread RCON Client .* shutting down$/i.test(message) ||
+    /^Thread RCON Listener started$/i.test(message) ||
+    /^Thread RCON Listener .* started$/i.test(message) ||
+    /^RCON running on /.test(message)
+  );
+}
+
+function describeStatusTransition(status: string) {
+  switch (status) {
+    case "running":
+      return "Server marked as running";
+    case "stopped":
+      return "Server marked as stopped";
+    case "creating":
+      return "Starting container";
+    case "crashed":
+      return "Server crashed";
+    default:
+      return `Status changed: ${status}`;
+  }
 }

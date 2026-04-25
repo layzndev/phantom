@@ -15,6 +15,7 @@ export interface MinecraftConsoleLine {
   timestamp: string;
   kind: ConsoleLineKind;
   text: string;
+  channel?: "SERVER" | "CHAT" | "WARN" | "ERROR" | "RCON" | "ADMIN" | "PHANTOM";
 }
 
 interface MinecraftConsoleProps {
@@ -33,6 +34,7 @@ interface MinecraftConsoleProps {
   onClear: () => void;
   busy: boolean;
   operatorLabel?: string;
+  phantomIdentity?: string;
 }
 
 const TABS = ["Console", "Files", "Upgrade", "Backups", "Plugins", "Monetise", "Settings"] as const;
@@ -52,7 +54,8 @@ export function MinecraftConsole({
   onStop,
   onClear,
   busy,
-  operatorLabel = "operator"
+  operatorLabel = "operator",
+  phantomIdentity = "phantom@system~"
 }: MinecraftConsoleProps) {
   const consoleReady = entry?.workload.status === "running";
 
@@ -225,16 +228,14 @@ export function MinecraftConsole({
           ) : (
             renderedLines.map((line) => (
               <p key={line.id} className="whitespace-pre-wrap">
-                {line.kind === "logs" && looksLikeMinecraftRuntimeLine(line.text) ? (
-                  <span className={lineTone(line.kind)}>{line.text}</span>
-                ) : (
-                  <>
-                    <span className="text-slate-500">[{formatClock(line.timestamp)} </span>
-                    <span className={sourceTone(line.kind)}>{lineSource(line.kind, operatorLabel)}</span>
-                    <span className="text-slate-500">] </span>
-                    <span className={lineTone(line.kind)}>{line.text}</span>
-                  </>
-                )}
+                <span className="text-slate-500">[{formatClock(line.timestamp)} </span>
+                <span className={sourceTone(line.kind, line.channel)}>
+                  {lineSource(line.kind, operatorLabel, line.channel)}
+                </span>
+                <span className="text-slate-500">] </span>
+                <span className={lineTone(line.kind, line.channel)}>
+                  {line.channel === "PHANTOM" ? `${phantomIdentity} ${line.text}` : line.text}
+                </span>
               </p>
             ))
           )}
@@ -279,48 +280,81 @@ export function MinecraftConsole({
   );
 }
 
-function lineTone(kind: ConsoleLineKind) {
-  switch (kind) {
+function lineTone(kind: ConsoleLineKind, channel?: MinecraftConsoleLine["channel"]) {
+  switch (channel ?? kind) {
+    case "ADMIN":
     case "command":
       return "text-cyan-300";
+    case "RCON":
     case "response":
       return "text-emerald-200";
-    case "logs":
-      return "text-slate-200";
+    case "CHAT":
+      return "text-sky-200";
+    case "WARN":
+      return "text-amber-200";
+    case "ERROR":
     case "error":
       return "text-red-300";
+    case "PHANTOM":
+      return "text-cyan-100";
+    case "SERVER":
+    case "logs":
+      return "text-slate-200";
     case "info":
     default:
       return "text-slate-400";
   }
 }
 
-function sourceTone(kind: ConsoleLineKind) {
-  switch (kind) {
+function sourceTone(kind: ConsoleLineKind, channel?: MinecraftConsoleLine["channel"]) {
+  switch (channel ?? kind) {
+    case "ADMIN":
     case "command":
       return "text-cyan-300";
+    case "RCON":
     case "response":
       return "text-emerald-300";
-    case "logs":
-      return "text-slate-300";
+    case "CHAT":
+      return "text-sky-300";
+    case "WARN":
+      return "text-amber-300";
+    case "ERROR":
     case "error":
       return "text-red-300";
+    case "PHANTOM":
+      return "text-cyan-200";
+    case "SERVER":
+    case "logs":
+      return "text-slate-300";
     case "info":
     default:
       return "text-slate-500";
   }
 }
 
-function lineSource(kind: ConsoleLineKind, operator: string) {
-  switch (kind) {
+function lineSource(
+  kind: ConsoleLineKind,
+  operator: string,
+  channel?: MinecraftConsoleLine["channel"]
+) {
+  switch (channel ?? kind) {
+    case "ADMIN":
     case "command":
       return operator.toUpperCase();
+    case "RCON":
     case "response":
       return "RCON";
-    case "logs":
-      return "LOG";
+    case "CHAT":
+      return "CHAT";
+    case "WARN":
+      return "WARN";
+    case "ERROR":
     case "error":
       return "ERROR";
+    case "SERVER":
+    case "logs":
+      return "SERVER";
+    case "PHANTOM":
     case "info":
     default:
       return "PHANTOM";
@@ -346,7 +380,8 @@ function welcomeLine(entry: MinecraftServerWithWorkload): MinecraftConsoleLine {
     id: `welcome-${entry.server.id}`,
     timestamp: new Date().toISOString(),
     kind: "info",
-    text: `Runtime attached to ${entry.server.name} (${entry.server.templateId} v${entry.server.minecraftVersion})`
+    channel: "PHANTOM",
+    text: `Console attached to ${entry.server.name} (${entry.server.templateId} v${entry.server.minecraftVersion})`
   };
 }
 
@@ -364,10 +399,6 @@ function useUptime(startedAtMs: number | null, finishedAtMs: number | null, runn
   const minutes = Math.floor((total % 3600) / 60);
   const seconds = total % 60;
   return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
-}
-
-function looksLikeMinecraftRuntimeLine(value: string) {
-  return /^\[\d{2}:\d{2}:\d{2}\]\s+\[[^\]]+\]:/.test(value);
 }
 
 function pad(n: number) {

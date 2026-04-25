@@ -203,6 +203,7 @@ export async function startMinecraftServer(id: string) {
     lastActivityAt: new Date()
   });
   const workload = await startWorkload(record.workloadId);
+  publishPhantomConsoleLifecycle(record.id, "Waking server...");
   minecraftConsoleGateway.publishStatus(record.id, workload.status);
   return { server: toMinecraftServer(updatedServer), workload };
 }
@@ -214,6 +215,7 @@ export async function stopMinecraftServer(id: string) {
     sleepingAt: null
   });
   const workload = await stopWorkload(record.workloadId);
+  publishPhantomConsoleLifecycle(record.id, "Stopping server...");
   minecraftConsoleGateway.publishStatus(record.id, workload.status);
   return { server: toMinecraftServer(updatedServer), workload };
 }
@@ -227,6 +229,7 @@ export async function restartMinecraftServer(id: string) {
     lastActivityAt: new Date()
   });
   const workload = await restartWorkload(record.workloadId);
+  publishPhantomConsoleLifecycle(record.id, "Restarting server...");
   minecraftConsoleGateway.publishStatus(record.id, workload.status);
   return { server: toMinecraftServer(updatedServer), workload };
 }
@@ -409,15 +412,17 @@ export async function completeRuntimeMinecraftOperation(
     const output = formatMinecraftOperationOutput(
       (completed.result as Record<string, unknown> | null) ?? payload.result ?? null
     );
-    const payloadRecord = (op.payload as Record<string, unknown> | null) ?? null;
-    const commandResultId =
-      payloadRecord && typeof payloadRecord.clientRequestId === "string"
-        ? payloadRecord.clientRequestId
-        : op.id;
-    minecraftConsoleGateway.publishCommandResult(op.workloadId, {
-      id: commandResultId,
-      output
-    });
+    if (shouldPublishMinecraftOperationResult(op, output)) {
+      const payloadRecord = (op.payload as Record<string, unknown> | null) ?? null;
+      const commandResultId =
+        payloadRecord && typeof payloadRecord.clientRequestId === "string"
+          ? payloadRecord.clientRequestId
+          : op.id;
+      minecraftConsoleGateway.publishCommandResult(op.workloadId, {
+        id: commandResultId,
+        output
+      });
+    }
   }
   return { ok: true };
 }
@@ -476,6 +481,7 @@ export async function runMinecraftAutoSleepTick() {
         planTier: record.planTier
       }
     });
+    publishPhantomConsoleLifecycle(record.id, "AutoSleep triggered");
 
     if (!activeSave) {
       await createMinecraftOperation({
@@ -753,6 +759,29 @@ function formatMinecraftOperationOutput(result: Record<string, unknown> | null) 
   return JSON.stringify(result);
 }
 
+function shouldPublishMinecraftOperationResult(
+  op: MinecraftOperationRecord,
+  output: string
+) {
+  const payload = (op.payload as Record<string, unknown> | null) ?? null;
+  const source = typeof payload?.source === "string" ? payload.source : null;
+  const normalized = sanitizeCommandResultOutput(output);
+
+  if (op.kind === "players") {
+    return false;
+  }
+
+  if (source === "autosleep" && (op.kind === "save" || op.kind === "stop")) {
+    return false;
+  }
+
+  if (normalized.length === 0) {
+    return false;
+  }
+
+  return true;
+}
+
 async function processMinecraftOperationSideEffects(
   op: MinecraftOperationRecord,
   completed: MinecraftOperationRecord
@@ -786,6 +815,7 @@ async function processMinecraftOperationSideEffects(
   if (op.kind === "stop" && op.actorEmail === "system") {
     const payload = (op.payload as Record<string, unknown> | null) ?? null;
     if (payload?.source === "autosleep") {
+      publishPhantomConsoleLifecycle(server.id, "AutoSleep stop sent");
       await createAuditLog({
         action: "minecraft.server.autosleep",
         actorEmail: "system",
@@ -805,6 +835,19 @@ function sanitizeConsoleLogLine(line: string) {
     /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})\s+/,
     ""
   );
+}
+
+function sanitizeCommandResultOutput(output: string) {
+  return output
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && line !== '{"output":"\\n","stderr":""}')
+    .join("\n")
+    .trim();
+}
+
+function publishPhantomConsoleLifecycle(serverId: string, message: string) {
+  minecraftConsoleGateway.publishLogs(serverId, [`__PHANTOM__ ${message}`]);
 }
 
 function parsePlayerSample(result: Record<string, unknown> | null, maxPlayers: number) {
