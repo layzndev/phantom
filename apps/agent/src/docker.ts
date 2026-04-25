@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { access, mkdir, rm } from "node:fs/promises";
+import { access, lstat, mkdir, readdir, rm } from "node:fs/promises";
 import { resolve as resolvePath } from "node:path";
 import { promisify } from "node:util";
 import { Logger } from "./logger.js";
@@ -371,6 +371,26 @@ export class DockerRuntime {
     }
   }
 
+  async getWorkloadDiskUsageGb(workloadId: string): Promise<number | undefined> {
+    const target = resolvePath(this.dataDir, "workloads", workloadId);
+    try {
+      await access(target);
+    } catch {
+      return undefined;
+    }
+
+    try {
+      const bytes = await measurePathBytes(target);
+      return Number((bytes / (1024 ** 3)).toFixed(2));
+    } catch (error) {
+      this.logger.debug("workload disk usage unavailable", {
+        workloadId,
+        error: error instanceof Error ? error.message : "unknown"
+      });
+      return undefined;
+    }
+  }
+
   isManagedContainer(
     container: DockerContainerSummary,
     nodeId: string,
@@ -440,6 +460,35 @@ export class DockerRuntime {
       throw error;
     }
   }
+}
+
+async function measurePathBytes(pathname: string): Promise<number> {
+  const stats = await lstat(pathname);
+  if (stats.isSymbolicLink()) {
+    return 0;
+  }
+  if (stats.isFile()) {
+    return stats.size;
+  }
+  if (!stats.isDirectory()) {
+    return stats.size;
+  }
+
+  const entries = await readdir(pathname, { withFileTypes: true });
+  let total = 0;
+  for (const entry of entries) {
+    const childPath = resolvePath(pathname, entry.name);
+    if (entry.isSymbolicLink()) {
+      continue;
+    }
+    if (entry.isDirectory()) {
+      total += await measurePathBytes(childPath);
+      continue;
+    }
+    const childStats = await lstat(childPath);
+    total += childStats.size;
+  }
+  return total;
 }
 
 function toContainerSummary(container: DockerInspectContainer): DockerContainerSummary | null {

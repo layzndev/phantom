@@ -58,6 +58,7 @@ export function MinecraftConsole({
   phantomIdentity = "phantom@system~"
 }: MinecraftConsoleProps) {
   const consoleReady = entry?.server.runtimeState === "running" && Boolean(entry?.server.readyAt);
+  const singleServerView = servers.length <= 1;
 
   const startedAtMs = useMemo(() => {
     if (!entry || !entry.workload.runtimeStartedAt) return null;
@@ -139,32 +140,36 @@ export function MinecraftConsole({
         </div>
 
         <div className="flex flex-col items-end gap-3">
-          <div className="flex flex-wrap justify-end gap-2 font-mono text-[11px] text-slate-300">
-            <span className="rounded-full border border-white/10 bg-white/[0.035] px-3 py-1">
-              CPU {cpuLabel}
-            </span>
-            <span className="rounded-full border border-white/10 bg-white/[0.035] px-3 py-1">
-              RAM {ramLabel}
-            </span>
-            {externalPort ? (
+          {!singleServerView ? (
+            <div className="flex flex-wrap justify-end gap-2 font-mono text-[11px] text-slate-300">
               <span className="rounded-full border border-white/10 bg-white/[0.035] px-3 py-1">
-                PORT {externalPort}
+                CPU {cpuLabel}
               </span>
-            ) : null}
-          </div>
+              <span className="rounded-full border border-white/10 bg-white/[0.035] px-3 py-1">
+                RAM {ramLabel}
+              </span>
+              {externalPort ? (
+                <span className="rounded-full border border-white/10 bg-white/[0.035] px-3 py-1">
+                  PORT {externalPort}
+                </span>
+              ) : null}
+            </div>
+          ) : null}
           <div className="flex flex-wrap items-center justify-end gap-2">
-            <select
-              value={selectedServerId ?? ""}
-              onChange={(event) => onSelectServer(event.target.value || null)}
-              className="h-9 rounded-md border border-white/10 bg-obsidian px-3 text-xs text-slate-200 outline-none focus:border-accent/40"
-            >
-              <option value="">Select a server…</option>
-              {servers.map(({ server, workload }) => (
-                <option key={server.id} value={server.id}>
-                  {server.name} ({workload.status})
-                </option>
-              ))}
-            </select>
+            {!singleServerView ? (
+              <select
+                value={selectedServerId ?? ""}
+                onChange={(event) => onSelectServer(event.target.value || null)}
+                className="h-9 rounded-md border border-white/10 bg-obsidian px-3 text-xs text-slate-200 outline-none focus:border-accent/40"
+              >
+                <option value="">Select a server…</option>
+                {servers.map(({ server, workload }) => (
+                  <option key={server.id} value={server.id}>
+                    {server.name} ({workload.status})
+                  </option>
+                ))}
+              </select>
+            ) : null}
             <button
               type="button"
               onClick={onRestart}

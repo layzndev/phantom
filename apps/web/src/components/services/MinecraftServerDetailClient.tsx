@@ -180,6 +180,17 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
 
   const rootDomain = entry.server.hostname.split(".").slice(1).join(".");
   const hostnamePreview = `${hostnameSlug.trim().toLowerCase() || entry.server.hostnameSlug}.${rootDomain}`;
+  const liveCpuLabel = formatRuntimeCpu(entry.workload.runtimeCpuPercent);
+  const liveRamLabel = formatRuntimeResource(
+    entry.workload.runtimeMemoryMb,
+    entry.workload.requestedRamMb,
+    formatRam
+  );
+  const liveDiskLabel = formatRuntimeResource(
+    entry.workload.runtimeDiskGb,
+    entry.workload.requestedDiskGb,
+    formatDisk
+  );
 
   return (
     <div className="space-y-6">
@@ -228,9 +239,12 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
       <section className="grid grid-cols-1 gap-6 xl:grid-cols-3">
         <DetailCard title="Resources">
           <div className="grid gap-3 text-sm">
-            <MetricRow label="CPU" value={`${formatCpu(entry.workload.requestedCpu)} vCPU`} />
-            <MetricRow label="RAM" value={formatRam(entry.workload.requestedRamMb)} />
-            <MetricRow label="Disk" value={formatDisk(entry.workload.requestedDiskGb)} />
+            <MetricRow label="CPU allocated" value={`${formatCpu(entry.workload.requestedCpu)} vCPU`} />
+            <MetricRow label="CPU live" value={liveCpuLabel} />
+            <MetricRow label="RAM allocated" value={formatRam(entry.workload.requestedRamMb)} />
+            <MetricRow label="RAM live" value={liveRamLabel} />
+            <MetricRow label="Disk allocated" value={formatDisk(entry.workload.requestedDiskGb)} />
+            <MetricRow label="Disk live" value={liveDiskLabel} />
           </div>
         </DetailCard>
 
@@ -365,6 +379,26 @@ function formatHms(totalSeconds: number) {
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
   return [hours, minutes, seconds].map((value) => String(value).padStart(2, "0")).join(":");
+}
+
+function formatRuntimeCpu(value: number | null) {
+  if (value === null) {
+    return "No live data";
+  }
+  return `${value.toFixed(1)}%`;
+}
+
+function formatRuntimeResource(
+  used: number | null,
+  allocated: number,
+  formatter: (value: number) => string
+) {
+  if (used === null) {
+    return "No live data";
+  }
+
+  const safeRemaining = Math.max(allocated - used, 0);
+  return `${formatter(used)} used · ${formatter(safeRemaining)} free`;
 }
 
 function StatePill({ label }: { label: string }) {

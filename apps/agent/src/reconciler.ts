@@ -297,7 +297,12 @@ export class WorkloadReconciler {
     }
 
     const stats =
-      container && container.running ? await this.docker.getContainerStats(container.id) : {};
+      container && container.running
+        ? {
+            ...(await this.docker.getContainerStats(container.id)),
+            diskGb: await this.docker.getWorkloadDiskUsageGb(workload.id)
+          }
+        : {};
 
     const payload = buildHeartbeatPayload(container, reason, stats, overrideStatus);
     await this.api.sendHeartbeat(workload.id, payload);
@@ -325,6 +330,7 @@ function buildHeartbeatPayload(
     restartCount: container.restartCount,
     cpuPercent: stats.cpuPercent,
     memoryMb: stats.memoryMb,
+    diskGb: stats.diskGb,
     startedAt: container.startedAt ?? undefined,
     finishedAt: container.finishedAt,
     reason

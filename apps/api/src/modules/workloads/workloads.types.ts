@@ -43,6 +43,9 @@ export interface CompanyWorkload {
   lastHeartbeatAt: string | null;
   runtimeStartedAt: string | null;
   runtimeFinishedAt: string | null;
+  runtimeCpuPercent: number | null;
+  runtimeMemoryMb: number | null;
+  runtimeDiskGb: number | null;
   lastExitCode: number | null;
   restartCount: number;
   deleteRequestedAt: string | null;

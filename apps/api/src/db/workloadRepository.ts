@@ -273,6 +273,9 @@ export interface UpdateWorkloadRuntimeRecordInput {
   containerId?: string | null;
   runtimeStartedAt?: Date | null;
   runtimeFinishedAt?: Date | null;
+  runtimeCpuPercent?: number | null;
+  runtimeMemoryMb?: number | null;
+  runtimeDiskGb?: number | null;
   lastExitCode?: number | null;
   restartCount?: number;
   deleteRuntimeAckAt?: Date | null;
@@ -290,6 +293,9 @@ export function updateWorkloadRuntimeRecord(
       ...(updates.containerId !== undefined ? { containerId: updates.containerId } : {}),
       ...(updates.runtimeStartedAt !== undefined ? { runtimeStartedAt: updates.runtimeStartedAt } : {}),
       ...(updates.runtimeFinishedAt !== undefined ? { runtimeFinishedAt: updates.runtimeFinishedAt } : {}),
+      ...(updates.runtimeCpuPercent !== undefined ? { runtimeCpuPercent: updates.runtimeCpuPercent } : {}),
+      ...(updates.runtimeMemoryMb !== undefined ? { runtimeMemoryMb: updates.runtimeMemoryMb } : {}),
+      ...(updates.runtimeDiskGb !== undefined ? { runtimeDiskGb: updates.runtimeDiskGb } : {}),
       ...(updates.lastExitCode !== undefined ? { lastExitCode: updates.lastExitCode } : {}),
       ...(updates.restartCount !== undefined ? { restartCount: updates.restartCount } : {}),
       ...(updates.deleteRuntimeAckAt !== undefined

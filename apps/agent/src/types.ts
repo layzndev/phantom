@@ -49,6 +49,7 @@ export interface WorkloadHeartbeatPayload {
   restartCount?: number;
   cpuPercent?: number;
   memoryMb?: number;
+  diskGb?: number;
   startedAt?: string;
   finishedAt?: string | null;
   reason?: string;
@@ -142,6 +143,7 @@ export interface DockerContainerSummary {
 export interface DockerContainerStats {
   cpuPercent?: number;
   memoryMb?: number;
+  diskGb?: number;
 }
 
 export interface DockerCreateOptions {

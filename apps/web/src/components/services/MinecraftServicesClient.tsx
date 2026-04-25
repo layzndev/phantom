@@ -193,9 +193,22 @@ export function MinecraftServicesClient() {
                 header: "CPU / RAM / Disk",
                 cell: ({ workload }) => (
                   <div className="text-slate-300">
-                    <p>{formatCpu(workload.requestedCpu)} CPU</p>
+                    <p>
+                      CPU {formatCpu(workload.requestedCpu)} vCPU
+                      <span className="text-slate-500">
+                        {" · "}
+                        {formatRuntimeCpu(workload.runtimeCpuPercent)}
+                      </span>
+                    </p>
                     <p className="text-xs text-slate-500">
-                      {formatRam(workload.requestedRamMb)} / {formatDisk(workload.requestedDiskGb)}
+                      RAM {formatRam(workload.requestedRamMb)}
+                      {" · "}
+                      {formatRuntimeRam(workload.runtimeMemoryMb)}
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      Disk {formatDisk(workload.requestedDiskGb)}
+                      {" · "}
+                      {formatRuntimeDisk(workload.runtimeDiskGb)}
                     </p>
                   </div>
                 )
@@ -237,4 +250,25 @@ function formatRuntimeState(value: MinecraftServerWithWorkload["server"]["runtim
     default:
       return "Stopped";
   }
+}
+
+function formatRuntimeCpu(value: number | null) {
+  if (value === null) {
+    return "live n/a";
+  }
+  return `live ${value.toFixed(1)}%`;
+}
+
+function formatRuntimeRam(value: number | null) {
+  if (value === null) {
+    return "live n/a";
+  }
+  return `used ${formatRam(value)}`;
+}
+
+function formatRuntimeDisk(value: number | null) {
+  if (value === null) {
+    return "live n/a";
+  }
+  return `used ${formatDisk(value)}`;
 }

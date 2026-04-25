@@ -56,6 +56,7 @@ export const workloadRuntimeHeartbeatSchema = z
     restartCount: z.coerce.number().int().min(0).optional(),
     cpuPercent: runtimeMetricField.optional(),
     memoryMb: runtimeMetricField.optional(),
+    diskGb: runtimeMetricField.optional(),
     startedAt: z.string().datetime().optional(),
     finishedAt: z.string().datetime().nullable().optional(),
     reason: z.string().max(500).optional()

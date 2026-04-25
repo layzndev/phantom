@@ -273,6 +273,9 @@ export async function acceptWorkloadHeartbeat(
       : payload.finishedAt === null
         ? null
         : new Date(payload.finishedAt),
+    runtimeCpuPercent: payload.cpuPercent ?? undefined,
+    runtimeMemoryMb: payload.memoryMb === undefined ? undefined : Math.round(payload.memoryMb),
+    runtimeDiskGb: payload.diskGb ?? undefined,
     lastExitCode: payload.exitCode,
     restartCount: payload.restartCount
   });
@@ -519,6 +522,9 @@ function toCompanyWorkload(record: WorkloadRecord): CompanyWorkload {
     lastHeartbeatAt: record.lastHeartbeatAt?.toISOString() ?? null,
     runtimeStartedAt: record.runtimeStartedAt?.toISOString() ?? null,
     runtimeFinishedAt: record.runtimeFinishedAt?.toISOString() ?? null,
+    runtimeCpuPercent: record.runtimeCpuPercent ?? null,
+    runtimeMemoryMb: record.runtimeMemoryMb ?? null,
+    runtimeDiskGb: record.runtimeDiskGb ?? null,
     lastExitCode: record.lastExitCode,
     restartCount: record.restartCount,
     deleteRequestedAt: record.deleteRequestedAt?.toISOString() ?? null,
