@@ -57,7 +57,7 @@ export function MinecraftConsole({
   operatorLabel = "operator",
   phantomIdentity = "phantom@system~"
 }: MinecraftConsoleProps) {
-  const consoleReady = entry?.server.runtimeState === "running";
+  const consoleReady = entry?.server.runtimeState === "running" && Boolean(entry?.server.readyAt);
 
   const startedAtMs = useMemo(() => {
     if (!entry || !entry.workload.runtimeStartedAt) return null;

@@ -27,6 +27,7 @@ export function MinecraftServiceConsole({
   const commandHistoryRef = useRef(new Set<string>());
   const lastStatusRef = useRef<string | null>(null);
   const lastRuntimeStartedAtRef = useRef<string | null>(entry.workload.runtimeStartedAt);
+  const currentRuntimeStateRef = useRef(entry.server.runtimeState);
 
   const phantomIdentity = useMemo(() => {
     const base = entry.server.slug?.trim() || "phantom";
@@ -59,6 +60,10 @@ export function MinecraftServiceConsole({
     base.search = "";
     return base.toString();
   }, [entry.server.id]);
+
+  useEffect(() => {
+    currentRuntimeStateRef.current = entry.server.runtimeState;
+  }, [entry.server.runtimeState]);
 
   useEffect(() => {
     if (lastRuntimeStartedAtRef.current !== entry.workload.runtimeStartedAt) {
@@ -105,9 +110,13 @@ export function MinecraftServiceConsole({
                 .flatMap((text) => normalizeConsoleLogLine(text, timestamp))
             );
           } else if (payload.type === "status") {
-            if (lastStatusRef.current !== payload.status) {
-              lastStatusRef.current = payload.status;
-              const description = describeStatusTransition(payload.status);
+            const normalizedStatus =
+              payload.status === "waking" && currentRuntimeStateRef.current === "restarting"
+                ? "starting"
+                : payload.status;
+            if (lastStatusRef.current !== normalizedStatus) {
+              lastStatusRef.current = normalizedStatus;
+              const description = describeStatusTransition(normalizedStatus);
               if (description) {
                 appendLines([
                   {
@@ -264,9 +273,6 @@ export function MinecraftServiceConsole({
           channel: "PHANTOM",
           text: "Restarting server..."
         }
-      ]);
-      appendLines([
-        // no-op: preserve helper path while keeping console fresh for the new boot
       ]);
       await adminApi.restartMinecraftServer(entry.server.id);
       manuallyClosedRef.current = false;
