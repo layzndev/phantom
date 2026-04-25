@@ -105,6 +105,14 @@ export class DockerRuntime {
   async createContainer(workload: AssignedWorkload, nodeId: string) {
     const runtimeConfig = parseRuntimeConfig(workload.config);
     const name = buildContainerName(workload.name, workload.id);
+
+    if (await this.removeContainerByName(name, { force: true })) {
+      this.logger.info("removed stale container with conflicting name before create", {
+        name,
+        workloadId: workload.id
+      });
+    }
+
     const args = [
       "create",
       "--name",
@@ -174,6 +182,101 @@ export class DockerRuntime {
 
   async killContainer(containerId: string) {
     await this.runDocker(["kill", containerId]);
+  }
+
+  async removeContainer(
+    containerId: string,
+    options: { force?: boolean } = {}
+  ): Promise<boolean> {
+    const args = ["rm"];
+    if (options.force) args.push("-f");
+    args.push(containerId);
+    try {
+      await this.runDocker(args);
+      return true;
+    } catch (error) {
+      if (isNoSuchContainerError(error)) {
+        return false;
+      }
+      throw error;
+    }
+  }
+
+  async removeContainerByName(
+    name: string,
+    options: { force?: boolean } = {}
+  ): Promise<boolean> {
+    if (!name.startsWith("phantom-")) {
+      throw new Error(
+        `refusing to remove non-phantom container by name: ${name}`
+      );
+    }
+    return this.removeContainer(name, options);
+  }
+
+  async stopAndRemoveContainer(
+    containerId: string,
+    options: { timeoutSeconds?: number } = {}
+  ): Promise<boolean> {
+    const timeout = clampStopTimeout(options.timeoutSeconds ?? DEFAULT_STOP_TIMEOUT_SECONDS);
+    try {
+      await this.runDocker(["stop", "-t", String(timeout), containerId]);
+    } catch (error) {
+      if (isNoSuchContainerError(error)) {
+        return false;
+      }
+      this.logger.debug("docker stop failed before remove, proceeding with rm -f", {
+        containerId,
+        error: error instanceof Error ? error.message : "unknown"
+      });
+    }
+    return this.removeContainer(containerId, { force: true });
+  }
+
+  async listManagedContainerIdsByWorkload(workloadId: string, nodeId: string) {
+    const { stdout } = await this.runDocker([
+      "ps",
+      "-a",
+      "--filter",
+      "label=phantom.managed=true",
+      "--filter",
+      `label=phantom.node.id=${nodeId}`,
+      "--filter",
+      `label=phantom.workload.id=${workloadId}`,
+      "--format",
+      "{{.ID}}"
+    ]);
+    return stdout
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+  }
+
+  async listPhantomNamedContainers(): Promise<DockerContainerSummary[]> {
+    const { stdout } = await this.runDocker([
+      "ps",
+      "-a",
+      "--filter",
+      "name=^phantom-",
+      "--format",
+      "{{json .}}"
+    ]);
+
+    const ids = stdout
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => JSON.parse(line) as { ID: string })
+      .map((row) => row.ID);
+
+    if (ids.length === 0) {
+      return [];
+    }
+
+    const inspected = await this.inspectMany(ids);
+    return inspected
+      .map((container) => toContainerSummaryUnfiltered(container))
+      .filter((container): container is DockerContainerSummary => container !== null);
   }
 
   async execInContainer(containerId: string, command: string[]) {
@@ -300,6 +403,12 @@ function toContainerSummary(container: DockerInspectContainer): DockerContainerS
     return null;
   }
 
+  return toContainerSummaryUnfiltered(container);
+}
+
+function toContainerSummaryUnfiltered(
+  container: DockerInspectContainer
+): DockerContainerSummary {
   return {
     id: container.Id,
     name: container.Name.replace(/^\//, ""),
@@ -315,6 +424,15 @@ function toContainerSummary(container: DockerInspectContainer): DockerContainerS
     finishedAt: normalizeDate(container.State?.FinishedAt),
     createdAt: normalizeDate(container.Created)
   };
+}
+
+function isNoSuchContainerError(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const message =
+    "message" in error && typeof (error as { message: unknown }).message === "string"
+      ? (error as { message: string }).message.toLowerCase()
+      : "";
+  return message.includes("no such container") || message.includes("is not running");
 }
 
 function normalizeDate(value: string | undefined) {
