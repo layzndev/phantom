@@ -259,7 +259,7 @@ export type MinecraftTemplateFamily =
 export type MinecraftDifficulty = "peaceful" | "easy" | "normal" | "hard";
 export type MinecraftGameMode = "survival" | "creative" | "adventure" | "spectator";
 export type PlanTier = "free" | "premium";
-export type MinecraftDnsStatus = "pending" | "active" | "failed" | "disabled";
+export type MinecraftDnsStatus = "wildcard" | "pending" | "active" | "failed" | "disabled";
 
 export const PLAN_TIERS: readonly PlanTier[] = ["free", "premium"] as const;
 

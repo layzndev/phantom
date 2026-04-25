@@ -24,6 +24,7 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
   const router = useRouter();
   const [entry, setEntry] = useState<MinecraftServerWithWorkload | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [hostnameError, setHostnameError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [hostnameSlug, setHostnameSlug] = useState("");
 
@@ -32,6 +33,7 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
       const next = await adminApi.minecraftServer(id);
       setEntry(next);
       setHostnameSlug(next.server.hostnameSlug);
+      setHostnameError(null);
       setError(null);
     } catch (detailError) {
       setError(detailError instanceof Error ? detailError.message : "Unable to load Minecraft server");
@@ -100,12 +102,16 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
       const next = await adminApi.updateMinecraftServerHostname(entry.server.id, hostnameSlug);
       setEntry(next);
       setHostnameSlug(next.server.hostnameSlug);
+      setHostnameError(null);
+    } catch (updateError) {
+      setHostnameError(updateError instanceof Error ? updateError.message : "Unable to update hostname.");
     } finally {
       setBusy(null);
     }
   };
 
   const rootDomain = entry.server.hostname.split(".").slice(1).join(".");
+  const hostnamePreview = `${hostnameSlug.trim().toLowerCase() || entry.server.hostnameSlug}.${rootDomain}`;
 
   return (
     <div className="space-y-6">
@@ -187,8 +193,8 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
             <MetricRow label="Connect address" value={entry.connectAddress ?? "Pending assignment"} mono />
             <MetricRow label="Game port" value={runtime.gamePort ? `${runtime.gamePort}/tcp` : "Unknown"} mono />
             <MetricRow label="DNS status" value={entry.server.dnsStatus} />
-            <MetricRow label="DNS synced" value={formatDateTime(entry.server.dnsSyncedAt)} />
-            <MetricRow label="DNS error" value={entry.server.dnsLastError ?? "None"} />
+            <MetricRow label="Hostname updated" value={formatDateTime(entry.server.hostnameUpdatedAt)} />
+            <MetricRow label="DNS error" value={entry.server.dnsLastError ?? "Wildcard DNS handled outside Phantom."} />
             <MetricRow
               label="Reserved ports"
               value={
@@ -204,7 +210,10 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
                 <div className="flex flex-1 items-center rounded-xl border border-white/10 bg-white/[0.03] px-3">
                   <input
                     value={hostnameSlug}
-                    onChange={(event) => setHostnameSlug(event.target.value.toLowerCase())}
+                    onChange={(event) => {
+                      setHostnameSlug(event.target.value.toLowerCase());
+                      setHostnameError(null);
+                    }}
                     className="h-10 flex-1 bg-transparent text-sm text-white outline-none"
                   />
                   <span className="text-xs text-slate-500">.{rootDomain}</span>
@@ -219,12 +228,14 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
                 </button>
                 <button
                   type="button"
-                  onClick={() => void navigator.clipboard.writeText(entry.connectAddress ?? entry.server.hostname)}
+                  onClick={() => void navigator.clipboard.writeText(entry.connectAddress ?? hostnamePreview)}
                   className="rounded-xl border border-white/10 bg-white/[0.05] px-4 py-2 text-sm text-white transition hover:bg-white/[0.08]"
                 >
                   Copy address
                 </button>
               </div>
+              <p className="mt-3 font-mono text-xs text-slate-400">Preview: {hostnamePreview}</p>
+              {hostnameError ? <p className="mt-2 text-xs text-red-300">{hostnameError}</p> : null}
             </div>
           </div>
         </DetailCard>

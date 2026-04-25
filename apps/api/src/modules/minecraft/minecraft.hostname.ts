@@ -10,13 +10,7 @@ const RESERVED = new Set([
   "ftp",
   "support",
   "root",
-  "system",
-  "panel",
-  "dashboard",
   "status",
-  "billing",
-  "login",
-  "logout",
   "ns1",
   "ns2"
 ]);
@@ -96,4 +90,26 @@ export async function allocateHostname(input: {
   }
 
   throw new AppError(409, "Unable to allocate a unique hostname.", "HOSTNAME_CONFLICT");
+}
+
+export function extractHostnameSlug(hostname: string) {
+  const normalized = hostname.trim().toLowerCase().replace(/\.$/, "");
+  if (!normalized) {
+    throw new AppError(400, "Hostname is required.", "HOSTNAME_REQUIRED");
+  }
+
+  if (normalized === env.hostingRootDomain) {
+    throw new AppError(404, "Minecraft server not found.", "MINECRAFT_SERVER_NOT_FOUND");
+  }
+
+  const suffix = `.${env.hostingRootDomain}`;
+  if (normalized.endsWith(suffix)) {
+    return normalizeHostnameSlug(normalized.slice(0, -suffix.length));
+  }
+
+  if (!normalized.includes(".")) {
+    return normalizeHostnameSlug(normalized);
+  }
+
+  throw new AppError(404, "Minecraft server not found.", "MINECRAFT_SERVER_NOT_FOUND");
 }

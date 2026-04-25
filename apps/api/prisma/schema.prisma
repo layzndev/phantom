@@ -235,7 +235,7 @@ model MinecraftServer {
   hostname         String?   @unique
   hostnameSlug     String?   @unique @map("hostname_slug")
   hostnameUpdatedAt DateTime? @map("hostname_updated_at")
-  dnsStatus        String    @default("disabled") @map("dns_status")
+  dnsStatus        String    @default("wildcard") @map("dns_status")
   dnsLastError     String?   @map("dns_last_error")
   dnsSyncedAt      DateTime? @map("dns_synced_at")
   workloadId       String    @unique @map("workload_id")

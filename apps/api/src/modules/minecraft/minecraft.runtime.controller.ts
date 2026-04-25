@@ -7,6 +7,7 @@ import {
   claimRuntimeMinecraftOperation,
   completeRuntimeMinecraftOperation,
   getMinecraftConsoleSession,
+  getRuntimeMinecraftRouting,
   listRuntimeMinecraftConsoleStreams,
   listRuntimeMinecraftOperations,
   publishRuntimeMinecraftConsoleLogs
@@ -16,6 +17,7 @@ export const minecraftRuntimeController = Router();
 
 const runtimeOpParamsSchema = z.object({ opId: z.string().uuid() });
 const runtimeConsoleParamsSchema = z.object({ id: z.string().uuid() });
+const runtimeRoutingQuerySchema = z.object({ hostname: z.string().min(1).max(255) });
 
 const runtimeCompleteSchema = z.object({
   status: z.enum(["succeeded", "failed"]),
@@ -26,6 +28,19 @@ const runtimeCompleteSchema = z.object({
 const runtimeConsoleLogsSchema = z.object({
   lines: z.array(z.string().min(1).max(4000)).max(200)
 });
+
+minecraftRuntimeController.get(
+  "/routing",
+  asyncHandler(async (req, res) => {
+    const token = extractBearerToken(req.headers.authorization);
+    const parsed = runtimeRoutingQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      throw new AppError(400, "Invalid query parameters.", "VALIDATION_ERROR", parsed.error.flatten());
+    }
+    const result = await getRuntimeMinecraftRouting(token, parsed.data.hostname);
+    res.json(result);
+  })
+);
 
 minecraftRuntimeController.get(
   "/servers/:id/console",

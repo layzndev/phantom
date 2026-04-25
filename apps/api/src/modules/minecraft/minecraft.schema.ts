@@ -8,13 +8,7 @@ const HOSTNAME_RESERVED = [
   "ftp",
   "support",
   "root",
-  "system",
-  "panel",
-  "dashboard",
   "status",
-  "billing",
-  "login",
-  "logout",
   "ns1",
   "ns2"
 ] as const;

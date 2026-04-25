@@ -155,22 +155,18 @@ CORS_ORIGINS=https://admin.phantom.example.com
 COOKIE_SAMESITE=lax
 ```
 
-Hosting DNS settings:
+Minecraft wildcard hostname settings:
 
 ```env
-HOSTING_ROOT_DOMAIN=hosting.gg
-DNS_PROVIDER=noop
-DNS_RECORD_TYPE=CNAME
-CLOUDFLARE_API_TOKEN=
-CLOUDFLARE_ZONE_ID=
+HOSTING_ROOT_DOMAIN=nptnz.co.uk
 ```
 
 Notes:
 
-- `HOSTING_ROOT_DOMAIN` is the suffix used for Minecraft hostnames such as `survival.hosting.gg`
-- `DNS_PROVIDER=noop` keeps hostname allocation active without touching an external DNS provider
-- `DNS_PROVIDER=cloudflare` enables automatic DNS sync when `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ZONE_ID` are both set
-- DNS sync is best-effort and does not block Minecraft server creation
+- `HOSTING_ROOT_DOMAIN` is the suffix used for Minecraft hostnames such as `survival.nptnz.co.uk`
+- Phantom no longer creates per-server DNS records
+- wildcard DNS must be configured manually at the zone level
+- legacy env vars like `DNS_PROVIDER`, `CLOUDFLARE_API_TOKEN`, and `CLOUDFLARE_ZONE_ID` are ignored safely if they still exist
 
 Different subdomains strategy:
 
@@ -186,7 +182,21 @@ Multiple allowed origins:
 CORS_ORIGINS=https://admin.phantom.example.com,https://ops.phantom.example.com
 ```
 
-## 8. Debug Commands
+## 8. Wildcard DNS Setup
+
+For `nptnz.co.uk`, configure Cloudflare DNS manually:
+
+```text
+A      @      -> NOVA_PUBLIC_IP    (DNS only)
+CNAME  *      -> nptnz.co.uk       (DNS only)
+```
+
+Notes:
+
+- do not enable the orange Cloudflare proxy for Minecraft traffic
+- Phantom owns hostname validation and TCP routing
+- every Minecraft hostname like `anthony.nptnz.co.uk` or `survival.nptnz.co.uk` resolves through the same proxy IP
+## 9. Debug Commands
 
 ```bash
 sudo systemctl status phantom-api

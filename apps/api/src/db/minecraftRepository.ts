@@ -68,6 +68,10 @@ export function findMinecraftServerRecordByHostnameSlug(hostnameSlug: string) {
   return db.minecraftServer.findUnique({ where: { hostnameSlug } });
 }
 
+export function findMinecraftServerRecordByHostname(hostname: string) {
+  return db.minecraftServer.findUnique({ where: { hostname } });
+}
+
 export function findMinecraftServerRecordByWorkloadId(workloadId: string) {
   return db.minecraftServer.findUnique({ where: { workloadId } });
 }

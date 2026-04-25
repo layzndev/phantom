@@ -5,15 +5,18 @@
   "workspaces": [
     "apps/api",
     "apps/web",
-    "apps/agent"
+    "apps/agent",
+    "apps/minecraft-proxy"
   ],
   "scripts": {
     "dev": "npm run dev --workspace @phantom/api & npm run dev --workspace @phantom/web",
-    "build": "npm run build --workspace @phantom/api && npm run build --workspace @phantom/web && npm run build --workspace @phantom/agent",
-    "typecheck": "npm run typecheck --workspace @phantom/api && npm run typecheck --workspace @phantom/web && npm run typecheck --workspace @phantom/agent",
+    "build": "npm run build --workspace @phantom/api && npm run build --workspace @phantom/web && npm run build --workspace @phantom/agent && npm run build --workspace @phantom/minecraft-proxy",
+    "typecheck": "npm run typecheck --workspace @phantom/api && npm run typecheck --workspace @phantom/web && npm run typecheck --workspace @phantom/agent && npm run typecheck --workspace @phantom/minecraft-proxy",
     "lint": "npm run lint --workspace @phantom/web",
     "build:agent": "npm run build --workspace @phantom/agent",
-    "start:agent": "npm run start --workspace @phantom/agent"
+    "start:agent": "npm run start --workspace @phantom/agent",
+    "build:proxy": "npm run build --workspace @phantom/minecraft-proxy",
+    "start:proxy": "npm run start --workspace @phantom/minecraft-proxy"
   },
   "dependencies": {
     "lucide-react": "^1.9.0"

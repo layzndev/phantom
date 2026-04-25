@@ -91,7 +91,7 @@ export function MinecraftServicesClient() {
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search by name, UUID, node, status, template or port"
+            placeholder="Search by name, UUID, hostname, node, status, template or port"
             className="w-full rounded-2xl border border-white/10 bg-white/[0.035] px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-accent/40"
           />
         </div>
@@ -163,12 +163,12 @@ export function MinecraftServicesClient() {
                 key: "port",
                 header: "Connect",
                 cell: (entry) => {
-                  const { workload, connectAddress } = entry;
+                  const { server, workload, connectAddress } = entry;
                   const gamePort =
                     workload.ports.find((port) => port.internalPort === 25565)?.externalPort ?? null;
                   return (
                     <div className="text-slate-300">
-                      <p className="font-mono text-xs">{connectAddress ?? (gamePort ? `${gamePort}/tcp` : "—")}</p>
+                      <p className="font-mono text-xs">{connectAddress ?? server.hostname ?? (gamePort ? `${gamePort}/tcp` : "—")}</p>
                       <p className="mt-1 text-xs text-slate-500">
                         {gamePort ? `${gamePort}/tcp` : "No port"}
                       </p>

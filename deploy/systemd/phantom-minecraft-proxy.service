@@ -1,0 +1,16 @@
+[Unit]
+Description=Phantom Minecraft TCP Proxy
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/phantom
+EnvironmentFile=/opt/phantom/apps/minecraft-proxy/.env
+ExecStart=/usr/bin/npm run start --workspace @phantom/minecraft-proxy
+Restart=always
+RestartSec=5
+User=phantom
+Group=phantom
+
+[Install]
+WantedBy=multi-user.target
