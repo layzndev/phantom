@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { ADMIN_API_BASE_URL } from "@/lib/api/admin-api";
 import type {
   CreateMinecraftServerPayload,
@@ -54,6 +55,9 @@ const DIFFICULTIES: MinecraftDifficulty[] = ["peaceful", "easy", "normal", "hard
 const GAME_MODES: MinecraftGameMode[] = ["survival", "creative", "adventure", "spectator"];
 
 export function PlaygroundClient() {
+  const searchParams = useSearchParams();
+  const initialServerId = searchParams.get("server");
+
   const [templates, setTemplates] = useState<MinecraftTemplate[]>([]);
   const [servers, setServers] = useState<MinecraftServerWithWorkload[]>([]);
   const [operations, setOperations] = useState<Operation[]>([]);
@@ -61,7 +65,7 @@ export function PlaygroundClient() {
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState<CreateFormState>(emptyForm());
   const [actionPending, setActionPending] = useState<Record<string, boolean>>({});
-  const [consoleServerId, setConsoleServerId] = useState<string | null>(null);
+  const [consoleServerId, setConsoleServerId] = useState<string | null>(initialServerId);
   const [commandInput, setCommandInput] = useState("");
   const [consoleOutput, setConsoleOutput] = useState<ConsoleLine[]>([]);
   const [consoleBusy, setConsoleBusy] = useState(false);

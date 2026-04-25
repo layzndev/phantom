@@ -1,8 +1,13 @@
 import { randomBytes, createHash } from "node:crypto";
 import { AppError } from "../../lib/appError.js";
+import {
+  listMinecraftServerNodeAssignments,
+  listMinecraftServerRecordsForNode
+} from "../../db/minecraftRepository.js";
 import type {
   CreateNodeResult,
   CompanyNode,
+  HostedServer,
   NodeHealth,
   NodeStatus,
   RuntimeMode
@@ -30,17 +35,38 @@ type NodeRecord = Awaited<ReturnType<typeof findNodeFromRegistry>>;
 type NonNullNodeRecord = NonNullable<NodeRecord>;
 
 export async function listNodes() {
-  const nodes = await listNodesFromRegistry();
-  return nodes.map(toCompanyNode);
+  const [nodes, hostedAssignments] = await Promise.all([
+    listNodesFromRegistry(),
+    listMinecraftServerNodeAssignments()
+  ]);
+
+  const countsByNode = new Map<string, number>();
+  for (const assignment of hostedAssignments) {
+    const nodeId = assignment.workload.nodeId;
+    if (!nodeId) continue;
+    countsByNode.set(nodeId, (countsByNode.get(nodeId) ?? 0) + 1);
+  }
+
+  return nodes.map((node) =>
+    toCompanyNode(node, { hostedServersCount: countsByNode.get(node.id) ?? 0 })
+  );
 }
 
 export async function getNode(id: string) {
-  const node = await findNodeFromRegistry(id);
+  const [node, hostedRecords] = await Promise.all([
+    findNodeFromRegistry(id),
+    listMinecraftServerRecordsForNode(id)
+  ]);
+
   if (!node) {
     throw new AppError(404, "Node not found.", "NODE_NOT_FOUND");
   }
 
-  return toCompanyNode(node);
+  const hostedServersList = hostedRecords.map(toHostedServer);
+  return toCompanyNode(node, {
+    hostedServersCount: hostedServersList.length,
+    hostedServersList
+  });
 }
 
 export async function createNode(input: CreateNodeInput): Promise<CreateNodeResult> {
@@ -228,11 +254,41 @@ function generateNodeToken(nodeId: string) {
   return `phn_${nodeId}_${randomBytes(32).toString("base64url")}`;
 }
 
+type MinecraftHostedRecord = Awaited<
+  ReturnType<typeof listMinecraftServerRecordsForNode>
+>[number];
+
+function toHostedServer(record: MinecraftHostedRecord): HostedServer {
+  const port = record.workload.ports.find((entry) => entry.internalPort === 25565);
+  return {
+    id: record.id,
+    name: record.name,
+    kind: "minecraft",
+    status: record.workload.status,
+    desiredStatus: record.workload.desiredStatus,
+    ramMb: record.workload.requestedRamMb,
+    cpu: record.workload.requestedCpu,
+    diskGb: record.workload.requestedDiskGb,
+    port: port?.externalPort,
+    templateId: record.templateId,
+    version: record.minecraftVersion,
+    workloadId: record.workloadId
+  };
+}
+
 function hashNodeToken(token: string) {
   return createHash("sha256").update(token).digest("hex");
 }
 
-function toCompanyNode(node: NonNullNodeRecord): CompanyNode {
+interface ToCompanyNodeOptions {
+  hostedServersCount?: number;
+  hostedServersList?: HostedServer[];
+}
+
+function toCompanyNode(
+  node: NonNullNodeRecord,
+  options: ToCompanyNodeOptions = {}
+): CompanyNode {
   const hasRange = node.portRangeStart !== null && node.portRangeEnd !== null;
   const portRange = hasRange ? `${node.portRangeStart}-${node.portRangeEnd}` : null;
   const totalPorts = hasRange ? (node.portRangeEnd as number) - (node.portRangeStart as number) + 1 : 0;
@@ -255,7 +311,7 @@ function toCompanyNode(node: NonNullNodeRecord): CompanyNode {
     usedRamMb: node.usedRamMb ?? 0,
     totalCpu: node.totalCpu ?? 0,
     usedCpu: node.usedCpu ?? 0,
-    hostedServers: 0,
+    hostedServers: options.hostedServersCount ?? 0,
     availablePorts: totalPorts,
     reservedPorts: 0,
     portRange,
@@ -264,6 +320,7 @@ function toCompanyNode(node: NonNullNodeRecord): CompanyNode {
     openPorts: node.openPorts ?? [],
     suggestedPortRanges,
     maintenanceMode: node.maintenanceMode,
+    hostedServersList: options.hostedServersList,
     history: node.statusEvents.map((event) => ({
       id: event.id,
       type: event.newStatus === "maintenance" ? "maintenance" : "status",

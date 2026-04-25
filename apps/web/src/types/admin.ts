@@ -14,11 +14,17 @@ export interface AdminUser {
 export interface HostedServer {
   id: string;
   name: string;
-  ownerId?: string;
+  kind?: "minecraft";
   status: string;
+  desiredStatus?: string;
   ramMb: number;
   cpu: number;
+  diskGb?: number;
   port?: number;
+  templateId?: string;
+  version?: string;
+  workloadId?: string;
+  ownerId?: string;
 }
 
 export interface NodeHistoryEvent {

@@ -11,6 +11,21 @@ export interface NodeStatusEvent {
   createdAt: string;
 }
 
+export interface HostedServer {
+  id: string;
+  name: string;
+  kind: "minecraft";
+  status: string;
+  desiredStatus: string;
+  ramMb: number;
+  cpu: number;
+  diskGb: number;
+  port?: number;
+  templateId?: string;
+  version?: string;
+  workloadId: string;
+}
+
 export interface SuggestedPortRange {
   start: number;
   end: number;
@@ -40,6 +55,7 @@ export interface CompanyNode {
   openPorts: number[];
   suggestedPortRanges: SuggestedPortRange[] | null;
   maintenanceMode: boolean;
+  hostedServersList?: HostedServer[];
   history?: Array<{
     id: string;
     type: "status" | "maintenance";
