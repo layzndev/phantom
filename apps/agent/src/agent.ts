@@ -1,4 +1,5 @@
 import { Logger } from "./logger.js";
+import { MinecraftOperationsProcessor } from "./minecraft.js";
 import { WorkloadReconciler } from "./reconciler.js";
 
 export class PhantomAgent {
@@ -9,6 +10,7 @@ export class PhantomAgent {
 
   constructor(
     private readonly reconciler: WorkloadReconciler,
+    private readonly minecraftOps: MinecraftOperationsProcessor,
     logger: Logger,
     private readonly pollIntervalMs: number
   ) {
@@ -40,6 +42,7 @@ export class PhantomAgent {
     this.running = true;
     try {
       await this.reconciler.reconcileOnce();
+      await this.minecraftOps.processOnce();
     } catch (error) {
       this.logger.error("reconciliation failed", {
         error: error instanceof Error ? error.message : "unknown"

@@ -72,6 +72,7 @@ export interface AgentConfig {
   heartbeatIntervalMs: number;
   agentId: string;
   logLevel: LogLevel;
+  dataDir: string;
 }
 
 export type LogLevel = "debug" | "info" | "warn" | "error";
@@ -98,4 +99,27 @@ export interface DockerContainerStats {
 export interface DockerCreateOptions {
   workload: AssignedWorkload;
   nodeId: string;
+}
+
+export type MinecraftOperationKind = "command" | "save" | "logs";
+
+export interface MinecraftRuntimeOperation {
+  id: string;
+  workloadId: string;
+  containerId: string | null;
+  kind: MinecraftOperationKind;
+  payload: Record<string, unknown>;
+  attempts: number;
+  createdAt: string;
+}
+
+export interface MinecraftRuntimeOperationsResponse {
+  nodeId: string;
+  operations: MinecraftRuntimeOperation[];
+}
+
+export interface MinecraftOperationCompletePayload {
+  status: "succeeded" | "failed";
+  result?: Record<string, unknown> | null;
+  error?: string | null;
 }

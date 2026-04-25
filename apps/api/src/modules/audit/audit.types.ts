@@ -22,6 +22,17 @@ export type AuditAction =
   | "workload.restart"
   | "workload.kill"
   | "workload.schedule_failed"
+  | "minecraft.template.list"
+  | "minecraft.server.list"
+  | "minecraft.server.detail"
+  | "minecraft.server.create"
+  | "minecraft.server.start"
+  | "minecraft.server.stop"
+  | "minecraft.server.restart"
+  | "minecraft.server.delete"
+  | "minecraft.server.command"
+  | "minecraft.server.save"
+  | "minecraft.server.logs"
   | "system.critical_error";
 
 export interface AuditLogEntry {

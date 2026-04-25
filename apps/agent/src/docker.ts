@@ -1,4 +1,6 @@
 import { execFile } from "node:child_process";
+import { mkdir } from "node:fs/promises";
+import { resolve as resolvePath } from "node:path";
 import { promisify } from "node:util";
 import { Logger } from "./logger.js";
 import type {
@@ -8,6 +10,8 @@ import type {
 } from "./types.js";
 
 const execFileAsync = promisify(execFile);
+const DEFAULT_STOP_TIMEOUT_SECONDS = 10;
+const MAX_STOP_TIMEOUT_SECONDS = 600;
 
 type DockerInspectContainer = {
   Id: string;
@@ -27,19 +31,37 @@ type DockerInspectContainer = {
   };
 };
 
+interface WorkloadVolumeSpec {
+  name: string;
+  containerPath: string;
+  readOnly?: boolean;
+}
+
 type WorkloadRuntimeConfig = {
   env?: Record<string, string | number | boolean>;
   cmd?: string[];
   entrypoint?: string;
   workingDir?: string;
   user?: string;
+  volumes?: WorkloadVolumeSpec[];
+  stopTimeoutSeconds?: number;
 };
+
+export interface DockerRuntimeOptions {
+  dataDir: string;
+}
 
 export class DockerRuntime {
   private readonly logger: Logger;
+  private readonly dataDir: string;
 
-  constructor(logger: Logger) {
+  constructor(logger: Logger, options: DockerRuntimeOptions) {
     this.logger = logger.child("docker");
+    this.dataDir = options.dataDir;
+  }
+
+  getStopTimeoutSeconds(config: Record<string, unknown>) {
+    return parseRuntimeConfig(config).stopTimeoutSeconds ?? DEFAULT_STOP_TIMEOUT_SECONDS;
   }
 
   async listManagedContainers(nodeId: string) {
@@ -110,6 +132,11 @@ export class DockerRuntime {
       );
     }
 
+    const volumeMounts = await this.prepareVolumes(workload.id, runtimeConfig.volumes);
+    for (const mount of volumeMounts) {
+      args.push("-v", mount);
+    }
+
     if (runtimeConfig.workingDir) {
       args.push("--workdir", runtimeConfig.workingDir);
     }
@@ -140,12 +167,27 @@ export class DockerRuntime {
     await this.runDocker(["start", containerId]);
   }
 
-  async stopContainer(containerId: string) {
-    await this.runDocker(["stop", "-t", "10", containerId]);
+  async stopContainer(containerId: string, options: { timeoutSeconds?: number } = {}) {
+    const timeout = clampStopTimeout(options.timeoutSeconds ?? DEFAULT_STOP_TIMEOUT_SECONDS);
+    await this.runDocker(["stop", "-t", String(timeout), containerId]);
   }
 
   async killContainer(containerId: string) {
     await this.runDocker(["kill", containerId]);
+  }
+
+  async execInContainer(containerId: string, command: string[]) {
+    return this.runDocker(["exec", containerId, ...command]);
+  }
+
+  async getContainerLogs(containerId: string, options: { tail?: number } = {}) {
+    const args = ["logs"];
+    if (options.tail !== undefined) {
+      args.push("--tail", String(Math.max(1, Math.min(options.tail, 5000))));
+    }
+    args.push(containerId);
+    const { stdout, stderr } = await this.runDocker(args);
+    return [stdout, stderr].filter(Boolean).join("");
   }
 
   async inspectContainer(containerId: string) {
@@ -199,6 +241,26 @@ export class DockerRuntime {
     }
 
     return true;
+  }
+
+  private async prepareVolumes(workloadId: string, volumes: WorkloadVolumeSpec[] | undefined) {
+    if (!volumes || volumes.length === 0) {
+      return [] as string[];
+    }
+
+    const mounts: string[] = [];
+    for (const volume of volumes) {
+      const hostPath = this.resolveVolumeHostPath(workloadId, volume.name);
+      await mkdir(hostPath, { recursive: true });
+      const mode = volume.readOnly ? ":ro" : "";
+      mounts.push(`${hostPath}:${volume.containerPath}${mode}`);
+    }
+    return mounts;
+  }
+
+  private resolveVolumeHostPath(workloadId: string, volumeName: string) {
+    const safeName = sanitizeVolumeName(volumeName);
+    return resolvePath(this.dataDir, "workloads", workloadId, safeName);
   }
 
   private async inspectMany(containerIds: string[]) {
@@ -346,11 +408,61 @@ function parseRuntimeConfig(config: Record<string, unknown>): WorkloadRuntimeCon
   const user =
     typeof config.user === "string" && config.user.length > 0 ? config.user : undefined;
 
+  const volumes = parseVolumes(config.volumes);
+  const stopTimeoutSeconds = parseStopTimeoutSeconds(config.stopTimeoutSeconds);
+
   return {
     env,
     cmd,
     entrypoint,
     workingDir,
-    user
+    user,
+    volumes,
+    stopTimeoutSeconds
   };
+}
+
+function parseVolumes(raw: unknown): WorkloadVolumeSpec[] | undefined {
+  if (!Array.isArray(raw) || raw.length === 0) {
+    return undefined;
+  }
+
+  const parsed: WorkloadVolumeSpec[] = [];
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object") continue;
+    const candidate = entry as Record<string, unknown>;
+    const name = typeof candidate.name === "string" ? candidate.name.trim() : "";
+    const containerPath =
+      typeof candidate.containerPath === "string" ? candidate.containerPath.trim() : "";
+    if (!name || !containerPath) continue;
+    if (!containerPath.startsWith("/")) continue;
+    parsed.push({
+      name,
+      containerPath,
+      readOnly: candidate.readOnly === true
+    });
+  }
+  return parsed.length > 0 ? parsed : undefined;
+}
+
+function parseStopTimeoutSeconds(raw: unknown) {
+  if (typeof raw !== "number" || !Number.isFinite(raw)) {
+    return undefined;
+  }
+  if (raw < 0) {
+    return undefined;
+  }
+  return Math.min(Math.round(raw), MAX_STOP_TIMEOUT_SECONDS);
+}
+
+function sanitizeVolumeName(name: string) {
+  const normalized = name.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "");
+  return normalized.length > 0 ? normalized.slice(0, 64) : "data";
+}
+
+function clampStopTimeout(seconds: number) {
+  if (!Number.isFinite(seconds) || seconds < 0) {
+    return DEFAULT_STOP_TIMEOUT_SECONDS;
+  }
+  return Math.min(Math.round(seconds), MAX_STOP_TIMEOUT_SECONDS);
 }

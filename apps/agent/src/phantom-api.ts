@@ -1,6 +1,8 @@
 import type {
   AgentConfig,
   AssignedWorkloadsResponse,
+  MinecraftOperationCompletePayload,
+  MinecraftRuntimeOperationsResponse,
   WorkloadAckActionPayload,
   WorkloadEventPayload,
   WorkloadHeartbeatPayload
@@ -32,6 +34,26 @@ export class PhantomApiClient {
       method: "POST",
       body: JSON.stringify(payload)
     });
+  }
+
+  async listMinecraftOperations() {
+    return this.request<MinecraftRuntimeOperationsResponse>(
+      "/runtime/minecraft/operations/pending"
+    );
+  }
+
+  async claimMinecraftOperation(opId: string) {
+    return this.request<{ ok: true }>(
+      `/runtime/minecraft/operations/${encodeURIComponent(opId)}/claim`,
+      { method: "POST" }
+    );
+  }
+
+  async completeMinecraftOperation(opId: string, payload: MinecraftOperationCompletePayload) {
+    return this.request<{ ok: true }>(
+      `/runtime/minecraft/operations/${encodeURIComponent(opId)}/complete`,
+      { method: "POST", body: JSON.stringify(payload) }
+    );
   }
 
   private async request<T>(path: string, init?: RequestInit): Promise<T> {

@@ -4,6 +4,7 @@ import type { AgentConfig, LogLevel } from "./types.js";
 
 const DEFAULT_POLL_INTERVAL_MS = 5_000;
 const DEFAULT_HEARTBEAT_INTERVAL_MS = 10_000;
+const DEFAULT_DATA_DIR = "/srv/phantom";
 
 export function loadConfig(): AgentConfig {
   loadEnvFile();
@@ -21,6 +22,7 @@ export function loadConfig(): AgentConfig {
   );
   const agentId = process.env.PHANTOM_AGENT_ID?.trim() || `${nodeId}-agent`;
   const logLevel = normalizeLogLevel(process.env.PHANTOM_AGENT_LOG_LEVEL);
+  const dataDir = normalizeDataDir(process.env.PHANTOM_DATA_DIR) ?? DEFAULT_DATA_DIR;
 
   return {
     apiUrl: apiUrl.replace(/\/+$/, ""),
@@ -29,8 +31,20 @@ export function loadConfig(): AgentConfig {
     pollIntervalMs,
     heartbeatIntervalMs,
     agentId,
-    logLevel
+    logLevel,
+    dataDir
   };
+}
+
+function normalizeDataDir(value: string | undefined) {
+  if (!value) {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return undefined;
+  }
+  return trimmed.replace(/\/+$/, "") || "/";
 }
 
 function loadEnvFile() {

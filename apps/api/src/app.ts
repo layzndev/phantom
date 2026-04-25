@@ -3,6 +3,8 @@ import express from "express";
 import morgan from "morgan";
 import { auditController } from "./modules/audit/audit.controller.js";
 import { authController } from "./modules/auth/auth.controller.js";
+import { minecraftController } from "./modules/minecraft/minecraft.controller.js";
+import { minecraftRuntimeController } from "./modules/minecraft/minecraft.runtime.controller.js";
 import { nodesController } from "./modules/nodes/nodes.controller.js";
 import { nodesRuntimeController } from "./modules/nodes/nodes.runtime.controller.js";
 import { workloadsController } from "./modules/workloads/workloads.controller.js";
@@ -32,8 +34,10 @@ export function createApp() {
   app.use("/auth", authController);
   app.use("/nodes", nodesController);
   app.use("/workloads", workloadsController);
+  app.use("/minecraft", minecraftController);
   app.use("/runtime/nodes", nodesRuntimeController);
   app.use("/runtime/workloads", workloadsRuntimeController);
+  app.use("/runtime/minecraft", minecraftRuntimeController);
   app.use("/audit-logs", auditController);
 
   app.use(notFoundHandler);
