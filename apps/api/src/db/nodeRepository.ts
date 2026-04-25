@@ -2,6 +2,12 @@ import { Prisma } from "@prisma/client";
 import { db } from "./client.js";
 
 export type PortRange = { start: number; end: number };
+export type OpenPortDetailRecord = {
+  port: number;
+  protocol: "tcp" | "udp";
+  address: string;
+  category: "phantom-range" | "system";
+};
 
 export interface CreateNodeRecordInput {
   id: string;
@@ -135,6 +141,7 @@ export interface UpdateNodeHeartbeatRecordInput {
   cpuModel?: string;
   cpuCores?: number;
   openPorts?: number[];
+  openPortDetails?: OpenPortDetailRecord[];
   suggestedPortRanges?: PortRange[];
 }
 
@@ -164,6 +171,9 @@ export function updateNodeHeartbeatRecord(
       ...(updates.cpuModel !== undefined ? { cpuModel: updates.cpuModel } : {}),
       ...(updates.cpuCores !== undefined ? { cpuCores: updates.cpuCores } : {}),
       ...(updates.openPorts !== undefined ? { openPorts: { set: updates.openPorts } } : {}),
+      ...(updates.openPortDetails !== undefined
+        ? { openPortDetails: updates.openPortDetails as unknown as Prisma.InputJsonValue }
+        : {}),
       ...(updates.suggestedPortRanges !== undefined
         ? { suggestedPortRanges: updates.suggestedPortRanges as unknown as Prisma.InputJsonValue }
         : {}),

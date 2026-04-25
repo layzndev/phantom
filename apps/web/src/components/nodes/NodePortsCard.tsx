@@ -10,6 +10,11 @@ import { ActionButton } from "@/components/ui/ActionButton";
 const APPLY_ROLES: ReadonlyArray<AdminRole> = ["superadmin", "ops"];
 
 const rangeSize = (range: SuggestedPortRange) => range.end - range.start + 1;
+const SYSTEM_PORT_LABELS: Record<number, string> = {
+  22: "SSH",
+  80: "HTTP",
+  443: "HTTPS"
+};
 
 export function NodePortsCard({
   node,
@@ -27,6 +32,36 @@ export function NodePortsCard({
   const reservedPercent = percent(node.reservedPorts, totalPorts);
   const rangeDefined = node.portRange !== null;
   const canApply = adminRole !== null && APPLY_ROLES.includes(adminRole);
+  const reservedPorts = Array.from(
+    new Set(
+      (node.hostedServersList ?? [])
+        .map((server) => server.port)
+        .filter((port): port is number => typeof port === "number")
+    )
+  ).sort((a, b) => a - b);
+  const listeningDetails =
+    node.openPortDetails.length > 0
+      ? [...node.openPortDetails]
+      : node.openPorts.map((port) => ({
+          port,
+          protocol: "tcp" as const,
+          address: "unknown",
+          category: "phantom-range" as const
+        }));
+  const phantomListeningPorts = Array.from(
+    new Set(
+      listeningDetails
+        .filter((entry) => entry.category === "phantom-range")
+        .map((entry) => entry.port)
+    )
+  ).sort((a, b) => a - b);
+  const reservedButNotListening = reservedPorts.filter(
+    (port) => !phantomListeningPorts.includes(port)
+  );
+  const listeningButNotReserved = phantomListeningPorts.filter(
+    (port) => !reservedPorts.includes(port)
+  );
+  const systemListening = listeningDetails.filter((entry) => entry.category === "system");
 
   const suggestions = [...(node.suggestedPortRanges ?? [])]
     .filter((range) => range.end >= range.start)
@@ -74,13 +109,53 @@ export function NodePortsCard({
         <div className="col-span-2 rounded-2xl bg-white/[0.04] p-4">
           <p className="text-slate-400">Open ports detected</p>
           <p className="mt-1 font-semibold text-white">
-            {node.openPorts.length > 0 ? `${node.openPorts.length} listening` : "None reported"}
+            {listeningDetails.length > 0 ? `${listeningDetails.length} listening` : "None reported"}
           </p>
-          {node.openPorts.length > 0 ? (
-            <p className="mt-1 break-all font-mono text-xs text-slate-500">
-              {node.openPorts.slice(0, 24).join(", ")}
-              {node.openPorts.length > 24 ? ` +${node.openPorts.length - 24} more` : ""}
-            </p>
+          {listeningDetails.length > 0 ? (
+            <div className="mt-2 space-y-2">
+              <p className="break-all font-mono text-xs text-slate-500">
+                {listeningDetails
+                  .slice(0, 12)
+                  .map((entry) => `${entry.port}/${entry.protocol}`)
+                  .join(", ")}
+                {listeningDetails.length > 12 ? ` +${listeningDetails.length - 12} more` : ""}
+              </p>
+              <div className="space-y-1 text-xs text-slate-400">
+                {reservedButNotListening.length > 0 ? (
+                  <p>
+                    Reserved but not listening:{" "}
+                    <span className="font-mono text-slate-300">
+                      {reservedButNotListening.join(", ")}
+                    </span>
+                  </p>
+                ) : null}
+                {listeningButNotReserved.length > 0 ? (
+                  <p>
+                    Listening but not reserved:{" "}
+                    <span className="font-mono text-slate-300">
+                      {listeningButNotReserved.join(", ")}
+                    </span>
+                  </p>
+                ) : null}
+                {systemListening.length > 0 ? (
+                  <p>
+                    System ports:{" "}
+                    <span className="font-mono text-slate-300">
+                      {systemListening
+                        .slice(0, 8)
+                        .map((entry) =>
+                          `${entry.port}/${entry.protocol}${
+                            SYSTEM_PORT_LABELS[entry.port]
+                              ? ` (${SYSTEM_PORT_LABELS[entry.port]})`
+                              : ""
+                          }`
+                        )
+                        .join(", ")}
+                    </span>
+                  </p>
+                ) : null}
+              </div>
+            </div>
           ) : null}
         </div>
       </div>

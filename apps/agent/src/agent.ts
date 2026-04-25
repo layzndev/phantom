@@ -4,7 +4,11 @@ import { Logger } from "./logger.js";
 import { MinecraftOperationsProcessor } from "./minecraft.js";
 import { PhantomApiClient } from "./phantom-api.js";
 import { WorkloadReconciler } from "./reconciler.js";
-import { collectNodeSystemInfo, type NodeSystemInfo } from "./system-info.js";
+import {
+  collectNodeSystemInfo,
+  NodeLiveMetricsCollector,
+  type NodeSystemInfo
+} from "./system-info.js";
 
 const DEFAULT_FULL_GC_INTERVAL_MS = 5 * 60 * 1000;
 const SYSTEM_INFO_REFRESH_MS = 60 * 1000;
@@ -17,6 +21,7 @@ export class PhantomAgent {
   private lastFullGcAt = 0;
   private lastSystemInfoAt = 0;
   private cachedSystemInfo: NodeSystemInfo | null = null;
+  private readonly liveMetrics = new NodeLiveMetricsCollector();
 
   constructor(
     private readonly reconciler: WorkloadReconciler,
@@ -59,6 +64,7 @@ export class PhantomAgent {
     try {
       try {
         const systemInfo = await this.getSystemInfo();
+        const liveMetrics = await this.liveMetrics.collect();
         await this.api.sendNodeHeartbeat({
           status: "healthy",
           agentVersion: systemInfo.agentVersion ?? undefined,
@@ -74,7 +80,16 @@ export class PhantomAgent {
           cpuCores: systemInfo.cpuCores,
           totalRamMb: systemInfo.totalRamMb,
           totalCpu: systemInfo.totalCpu,
-          totalDiskGb: systemInfo.totalDiskGb ?? undefined
+          totalDiskGb: systemInfo.totalDiskGb ?? undefined,
+          ...(liveMetrics.usedCpu !== undefined ? { cpuUsed: liveMetrics.usedCpu } : {}),
+          ...(liveMetrics.usedRamMb !== undefined ? { ramUsedMb: liveMetrics.usedRamMb } : {}),
+          ...(liveMetrics.loadAverage1m !== undefined
+            ? { loadAverage1m: liveMetrics.loadAverage1m }
+            : {}),
+          ...(liveMetrics.openPorts !== undefined ? { openPorts: liveMetrics.openPorts } : {}),
+          ...(liveMetrics.openPortDetails !== undefined
+            ? { openPortDetails: liveMetrics.openPortDetails }
+            : {})
         });
       } catch (error) {
         this.logger.error("node heartbeat failed", {

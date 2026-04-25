@@ -9,6 +9,12 @@ export const runtimeNodeParamsSchema = nodeParamsSchema;
 const totalRamField = z.coerce.number().int().positive().max(2_097_152);
 const totalCpuField = z.coerce.number().positive().max(4096);
 const portField = z.coerce.number().int().min(1).max(65535);
+const openPortDetailShape = z.object({
+  port: portField,
+  protocol: z.enum(["tcp", "udp"]),
+  address: z.string().min(1).max(255),
+  category: z.enum(["phantom-range", "system"])
+});
 
 const portRangeShape = z
   .object({
@@ -89,6 +95,7 @@ export const maintenanceSchema = z.object({
 export const nodeHeartbeatSchema = z.object({
   status: z.enum(["healthy", "degraded", "offline"]).default("healthy"),
   cpuUsed: z.coerce.number().min(0).optional(),
+  loadAverage1m: z.coerce.number().min(0).optional(),
   ramUsedMb: z.coerce.number().min(0).optional(),
   diskUsedGb: z.coerce.number().min(0).optional(),
   totalRamMb: totalRamField.optional(),
@@ -106,5 +113,6 @@ export const nodeHeartbeatSchema = z.object({
   cpuModel: z.string().min(1).max(255).optional(),
   cpuCores: z.coerce.number().int().positive().max(4096).optional(),
   openPorts: z.array(portField).max(10_000).optional(),
+  openPortDetails: z.array(openPortDetailShape).max(10_000).optional(),
   portRanges: z.array(portRangeShape).max(100).optional()
 });

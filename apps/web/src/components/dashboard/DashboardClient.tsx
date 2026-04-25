@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, Zap } from "lucide-react";
 import { adminApi } from "@/lib/api/admin-api";
 import { formatRam, percent } from "@/lib/utils/format";
@@ -11,12 +11,53 @@ import { SectionHeader } from "@/components/ui/SectionHeader";
 import { DetailCard } from "@/components/ui/DetailCard";
 import { SkeletonBlock } from "@/components/ui/SkeletonBlock";
 
+const DASHBOARD_REFRESH_MS = 5_000;
+
 export function DashboardClient() {
   const [summary, setSummary] = useState<NodeSummary | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const loadedOnceRef = useRef(false);
 
   useEffect(() => {
-    adminApi.nodeSummary().then(({ summary: nextSummary }) => setSummary(nextSummary));
+    let active = true;
+
+    async function refresh() {
+      try {
+        const { summary: nextSummary } = await adminApi.nodeSummary();
+        if (!active) return;
+        setSummary(nextSummary);
+        setError(null);
+        loadedOnceRef.current = true;
+      } catch (refreshError) {
+        if (!active) return;
+        if (!loadedOnceRef.current) {
+          setError(
+            refreshError instanceof Error
+              ? refreshError.message
+              : "Unable to load infrastructure telemetry"
+          );
+        }
+      }
+    }
+
+    void refresh();
+    const timer = setInterval(() => {
+      void refresh();
+    }, DASHBOARD_REFRESH_MS);
+
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
   }, []);
+
+  if (error) {
+    return (
+      <div className="rounded-3xl border border-red-400/20 bg-red-400/10 p-8 text-red-100">
+        {error}
+      </div>
+    );
+  }
 
   if (!summary) {
     return <SkeletonBlock label="Loading infrastructure telemetry..." />;
@@ -42,7 +83,14 @@ export function DashboardClient() {
         <StatCard label="Total nodes" value={summary.totalNodes} caption="registered" />
         <StatCard label="Healthy nodes" value={summary.healthyNodes} caption="green health" tone="good" />
         <StatCard label="Offline nodes" value={summary.offlineNodes} caption="requires attention" tone={summary.offlineNodes > 0 ? "bad" : "neutral"} />
-        <StatCard label="Hosted servers" value={summary.totalHostedServers} caption="across nodes" />
+        <StatCard label="Hosted servers" value={summary.totalHostedServers} caption="minecraft nodes" />
+      </section>
+
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <StatCard label="Workloads total" value={summary.totalWorkloads} caption="cluster-wide" />
+        <StatCard label="Workloads running" value={summary.runningWorkloads} caption="live runtime" tone="good" />
+        <StatCard label="Workloads stopped" value={summary.stoppedWorkloads} caption="idle, pending or crashed" />
+        <StatCard label="Workloads stopping" value={summary.deletingWorkloads} caption="deleting" tone={summary.deletingWorkloads > 0 ? "warn" : "neutral"} />
       </section>
 
       <section className="grid gap-4 lg:grid-cols-2">

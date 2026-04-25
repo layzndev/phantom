@@ -8,6 +8,7 @@ export type WorkloadEventType =
   | "killed"
   | "crashed";
 export type WorkloadPortProtocol = "tcp" | "udp";
+export type OpenPortCategory = "phantom-range" | "system";
 
 export interface AssignedWorkloadPort {
   internalPort: number;
@@ -91,7 +92,14 @@ export interface NodeHeartbeatPayload {
   cpuUsed?: number;
   ramUsedMb?: number;
   diskUsedGb?: number;
+  loadAverage1m?: number;
   openPorts?: number[];
+  openPortDetails?: Array<{
+    port: number;
+    protocol: WorkloadPortProtocol;
+    address: string;
+    category: OpenPortCategory;
+  }>;
   portRanges?: Array<{ start: number; end: number }>;
 }
 

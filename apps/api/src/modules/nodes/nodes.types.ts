@@ -31,6 +31,13 @@ export interface SuggestedPortRange {
   end: number;
 }
 
+export interface OpenPortDetail {
+  port: number;
+  protocol: "tcp" | "udp";
+  address: string;
+  category: "phantom-range" | "system";
+}
+
 export interface CompanyNode {
   id: string;
   name: string;
@@ -53,6 +60,7 @@ export interface CompanyNode {
   portRangeStart: number | null;
   portRangeEnd: number | null;
   openPorts: number[];
+  openPortDetails: OpenPortDetail[];
   suggestedPortRanges: SuggestedPortRange[] | null;
   agentVersion: string | null;
   runtimeVersion: string | null;
@@ -82,6 +90,10 @@ export interface NodeSummary {
   healthyNodes: number;
   offlineNodes: number;
   totalHostedServers: number;
+  totalWorkloads: number;
+  runningWorkloads: number;
+  stoppedWorkloads: number;
+  deletingWorkloads: number;
   totalRamMb: number;
   usedRamMb: number;
   totalCpu: number;

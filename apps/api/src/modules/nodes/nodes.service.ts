@@ -4,6 +4,7 @@ import {
   listMinecraftServerNodeAssignments,
   listMinecraftServerRecordsForNode
 } from "../../db/minecraftRepository.js";
+import { listWorkloadsFromRegistry } from "../workloads/workloads.repository.js";
 import type {
   CreateNodeResult,
   CompanyNode,
@@ -84,7 +85,16 @@ export async function createNode(input: CreateNodeInput): Promise<CreateNodeResu
 }
 
 export async function getNodeSummary() {
-  const nodes = await listNodes();
+  const [nodes, workloads] = await Promise.all([
+    listNodes(),
+    listWorkloadsFromRegistry()
+  ]);
+
+  const runningWorkloads = workloads.filter((workload) => workload.status === "running").length;
+  const deletingWorkloads = workloads.filter((workload) => workload.status === "deleting").length;
+  const stoppedWorkloads = workloads.filter((workload) =>
+    ["stopped", "crashed", "pending", "creating"].includes(workload.status)
+  ).length;
 
   return {
     totalNodes: nodes.length,
@@ -95,6 +105,10 @@ export async function getNodeSummary() {
       (node) => node.status === "offline" || node.health === "unreachable"
     ).length,
     totalHostedServers: nodes.reduce((sum, node) => sum + node.hostedServers, 0),
+    totalWorkloads: workloads.length,
+    runningWorkloads,
+    stoppedWorkloads,
+    deletingWorkloads,
     totalRamMb: nodes.reduce((sum, node) => sum + node.totalRamMb, 0),
     usedRamMb: nodes.reduce((sum, node) => sum + node.usedRamMb, 0),
     totalCpu: nodes.reduce((sum, node) => sum + node.totalCpu, 0),
@@ -145,6 +159,7 @@ export async function acceptNodeHeartbeat(
   payload: {
     status: "healthy" | "degraded" | "offline";
     cpuUsed?: number;
+    loadAverage1m?: number;
     ramUsedMb?: number;
     diskUsedGb?: number;
     totalRamMb?: number;
@@ -162,6 +177,12 @@ export async function acceptNodeHeartbeat(
     cpuModel?: string;
     cpuCores?: number;
     openPorts?: number[];
+    openPortDetails?: Array<{
+      port: number;
+      protocol: "tcp" | "udp";
+      address: string;
+      category: "phantom-range" | "system";
+    }>;
     portRanges?: Array<{ start: number; end: number }>;
   }
 ) {
@@ -211,6 +232,7 @@ export async function acceptNodeHeartbeat(
     cpuModel: payload.cpuModel,
     cpuCores: payload.cpuCores,
     openPorts: payload.openPorts,
+    openPortDetails: payload.openPortDetails,
     suggestedPortRanges: payload.portRanges
   });
 
@@ -342,6 +364,14 @@ function toCompanyNode(
     portRangeStart: node.portRangeStart,
     portRangeEnd: node.portRangeEnd,
     openPorts: node.openPorts ?? [],
+    openPortDetails: Array.isArray(node.openPortDetails)
+      ? (node.openPortDetails as Array<{
+          port: number;
+          protocol: "tcp" | "udp";
+          address: string;
+          category: "phantom-range" | "system";
+        }>)
+      : [],
     suggestedPortRanges,
     agentVersion: node.agentVersion,
     runtimeVersion: node.runtimeVersion,
