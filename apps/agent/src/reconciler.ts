@@ -95,6 +95,28 @@ export class WorkloadReconciler {
       });
       await this.docker.pullImage(workload.image);
 
+      const staleIds = await this.docker.listManagedContainerIdsByWorkload(
+        workload.id,
+        this.config.nodeId
+      );
+      for (const staleId of staleIds) {
+        try {
+          const ok = await this.docker.stopAndRemoveContainer(staleId);
+          if (ok) {
+            this.logger.info("removed stale container before create", {
+              workloadId: workload.id,
+              containerId: staleId
+            });
+          }
+        } catch (error) {
+          this.logger.warn("failed to remove stale container before create", {
+            workloadId: workload.id,
+            containerId: staleId,
+            error: error instanceof Error ? error.message : "unknown"
+          });
+        }
+      }
+
       const containerId = await this.docker.createContainer(workload, this.config.nodeId);
       await this.api.sendEvent(workload.id, {
         type: "created",
