@@ -138,12 +138,8 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
             <dl className="mt-6 grid gap-4 text-sm md:grid-cols-2 xl:grid-cols-4">
               <Field label="UUID" value={entry.server.id} mono />
               <Field label="Node" value={entry.node?.name ?? "Unassigned"} />
-              <Field label="Port" value={runtime.gamePort ? `${runtime.gamePort}/tcp` : "Unknown"} mono />
-              <Field
-                label="Hostname"
-                value={entry.connectAddress ?? entry.server.hostname}
-                mono
-              />
+              <Field label="Direct port" value={runtime.gamePort ? `${runtime.gamePort}/tcp` : "Unknown"} mono />
+              <Field label="Proxy address" value={entry.server.hostname} mono />
             </dl>
           </div>
 
@@ -188,9 +184,10 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
           <div className="grid gap-3 text-sm">
             <MetricRow label="Node" value={entry.node?.name ?? "Unassigned"} />
             <MetricRow label="Public host" value={entry.node?.publicHost ?? "Unknown"} mono />
-            <MetricRow label="Hostname" value={entry.server.hostname} mono />
-            <MetricRow label="Connect address" value={entry.connectAddress ?? "Pending assignment"} mono />
-            <MetricRow label="Game port" value={runtime.gamePort ? `${runtime.gamePort}/tcp` : "Unknown"} mono />
+            <MetricRow label="Proxy address" value={entry.server.hostname} mono />
+            <MetricRow label="Direct address" value={runtime.gamePort ? `${entry.server.hostname}:${runtime.gamePort}` : "Pending assignment"} mono />
+            <MetricRow label="Internal container port" value="25565/tcp" mono />
+            <MetricRow label="Public direct port" value={runtime.gamePort ? `${runtime.gamePort}/tcp` : "Unknown"} mono />
             <MetricRow label="DNS status" value={entry.server.dnsStatus} />
             <MetricRow label="Hostname updated" value={formatDateTime(entry.server.hostnameUpdatedAt)} />
             <MetricRow label="DNS error" value={entry.server.dnsLastError ?? "Wildcard DNS handled outside Phantom."} />

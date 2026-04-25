@@ -10,6 +10,7 @@ class MinecraftConsoleGateway {
   private readonly byServerId = new Map<string, Set<ConnectionEntry>>();
   private readonly byWorkloadId = new Map<string, Set<ConnectionEntry>>();
   private readonly lifecycleDedup = new Map<string, number>();
+  private readonly lastStatusByServerId = new Map<string, string>();
   private static readonly LIFECYCLE_DEDUP_MS = 30_000;
 
   attach(connection: WebSocketConnection, serverId: string, workloadId: string) {
@@ -27,6 +28,10 @@ class MinecraftConsoleGateway {
   }
 
   publishStatus(serverId: string, status: string) {
+    if (this.lastStatusByServerId.get(serverId) === status) {
+      return;
+    }
+    this.lastStatusByServerId.set(serverId, status);
     this.publishByServer(serverId, { type: "status", status });
   }
 
@@ -110,6 +115,9 @@ class MinecraftConsoleGateway {
     set.delete(entry);
     if (set.size === 0) {
       bucket.delete(key);
+      if (bucket === this.byServerId) {
+        this.lastStatusByServerId.delete(key);
+      }
     }
   }
 }

@@ -25,6 +25,7 @@ export function MinecraftServiceConsole({
   const shouldReconnectRef = useRef(true);
   const manuallyClosedRef = useRef(false);
   const commandHistoryRef = useRef(new Set<string>());
+  const lastStatusRef = useRef<string | null>(null);
 
   const phantomIdentity = useMemo(() => {
     const base = entry.server.slug?.trim() || "phantom";
@@ -70,6 +71,7 @@ export function MinecraftServiceConsole({
     };
 
     const connect = () => {
+      lastStatusRef.current = null;
       setConnectionState((current) =>
         current === "connected" ? "connected" : current === "disconnected" ? "reconnecting" : "connecting"
       );
@@ -93,14 +95,20 @@ export function MinecraftServiceConsole({
                 .flatMap((text) => normalizeConsoleLogLine(text, timestamp))
             );
           } else if (payload.type === "status") {
-            appendLines([
-              {
-                timestamp,
-                kind: "info",
-                channel: "PHANTOM",
-                text: describeStatusTransition(payload.status)
+            if (lastStatusRef.current !== payload.status) {
+              lastStatusRef.current = payload.status;
+              const description = describeStatusTransition(payload.status);
+              if (description) {
+                appendLines([
+                  {
+                    timestamp,
+                    kind: "info",
+                    channel: "PHANTOM",
+                    text: description
+                  }
+                ]);
               }
-            ]);
+            }
             void onRefresh();
           } else if (payload.type === "command_result") {
             const isAdminCommand = commandHistoryRef.current.has(payload.id);
@@ -443,15 +451,15 @@ function isHiddenRconNoise(message: string) {
 function describeStatusTransition(status: string) {
   switch (status) {
     case "running":
-      return "Server marked as running";
+      return null;
     case "waking":
-      return "Waking server";
+      return null;
     case "starting":
       return "Starting Minecraft";
     case "stopping":
       return "Stopping server";
     case "sleeping":
-      return "Server marked as sleeping";
+      return null;
     case "stopped":
       return "Server marked as stopped";
     case "creating":
