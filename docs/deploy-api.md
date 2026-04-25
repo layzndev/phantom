@@ -119,6 +119,13 @@ sudo systemctl reload nginx
 sudo systemctl status nginx
 ```
 
+Minecraft console WebSocket:
+
+- the API process must be started from `apps/api/src/server.ts`, which attaches `server.on("upgrade")` on the same HTTP server used by Express
+- Nginx must forward `Upgrade` and `Connection` headers to `/runtime/minecraft/servers/:id/console`
+- a successful browser handshake must show `101 Switching Protocols`
+- if the request hits Express over plain HTTP instead of Node's `upgrade` event, the API now returns `426 Upgrade Required` instead of a generic `404`
+
 Healthcheck through Nginx:
 
 ```bash

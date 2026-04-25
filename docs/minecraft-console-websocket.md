@@ -4,6 +4,12 @@ Endpoint browser:
 
 - `WS /runtime/minecraft/servers/:id/console`
 
+Expected handshake:
+
+- browser request must be upgraded to WebSocket
+- API response must be `101 Switching Protocols`
+- if the request reaches Express as plain HTTP, Phantom returns `426 Upgrade Required`, which indicates a proxy/misconfigured upgrade path upstream
+
 Authentication:
 
 - reuses the Phantom admin session cookie

@@ -6,6 +6,7 @@ import { validateBody, validateParams } from "../../lib/validate.js";
 import {
   claimRuntimeMinecraftOperation,
   completeRuntimeMinecraftOperation,
+  getMinecraftConsoleSession,
   listRuntimeMinecraftConsoleStreams,
   listRuntimeMinecraftOperations,
   publishRuntimeMinecraftConsoleLogs
@@ -25,6 +26,19 @@ const runtimeCompleteSchema = z.object({
 const runtimeConsoleLogsSchema = z.object({
   lines: z.array(z.string().min(1).max(4000)).max(200)
 });
+
+minecraftRuntimeController.get(
+  "/servers/:id/console",
+  validateParams(runtimeConsoleParamsSchema),
+  asyncHandler(async (req, res) => {
+    await getMinecraftConsoleSession(req.params.id);
+    res.status(426).json({
+      error: "Upgrade Required.",
+      code: "WEBSOCKET_UPGRADE_REQUIRED",
+      endpoint: `/runtime/minecraft/servers/${req.params.id}/console`
+    });
+  })
+);
 
 minecraftRuntimeController.get(
   "/operations/pending",

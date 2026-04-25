@@ -31,6 +31,14 @@ const app = createApp();
 const server = createServer(app);
 
 server.on("upgrade", (req, socket, head) => {
+  const upgradePath = safeRequestPath(req);
+  console.info("[server] websocket upgrade requested", {
+    path: upgradePath,
+    upgrade: req.headers.upgrade,
+    connection: req.headers.connection,
+    host: req.headers.host,
+    origin: req.headers.origin
+  });
   void handleMinecraftConsoleUpgrade(req, socket, head).catch((error) => {
     console.error("[server] websocket upgrade failed", error);
     if (!socket.destroyed) {
@@ -116,19 +124,36 @@ async function handleMinecraftConsoleUpgrade(
   socket: import("node:stream").Duplex,
   head: Buffer
 ) {
-  const pathname = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`).pathname;
+  const pathname = safeRequestPath(req);
   const match = pathname.match(/^\/runtime\/minecraft\/servers\/([0-9a-fA-F-]+)\/console$/);
   if (!match) {
-    socket.write("HTTP/1.1 404 Not Found\r\n\r\n");
-    socket.destroy();
+    console.warn("[server] websocket upgrade rejected", {
+      reason: "path_not_matched",
+      path: pathname
+    });
+    rejectUpgrade(socket, 404, "Not Found");
+    return;
+  }
+
+  if (!isWebSocketUpgradeRequest(req)) {
+    console.warn("[server] websocket upgrade rejected", {
+      reason: "missing_upgrade_headers",
+      path: pathname,
+      upgrade: req.headers.upgrade,
+      connection: req.headers.connection
+    });
+    rejectUpgrade(socket, 400, "Bad Request");
     return;
   }
 
   await loadAdminSession(req);
   const admin = (req as IncomingMessage & { session?: { admin?: { id: string; email: string; role: string } }; sessionID?: string }).session?.admin;
   if (!admin) {
-    socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
-    socket.destroy();
+    console.warn("[server] websocket upgrade rejected", {
+      reason: "unauthorized",
+      path: pathname
+    });
+    rejectUpgrade(socket, 401, "Unauthorized");
     return;
   }
 
@@ -149,6 +174,11 @@ async function handleMinecraftConsoleUpgrade(
     onClose: () => detach()
   });
   if (!connection) {
+    console.warn("[server] websocket upgrade rejected", {
+      reason: "handshake_failed",
+      path: pathname,
+      serverId
+    });
     return;
   }
 
@@ -158,6 +188,12 @@ async function handleMinecraftConsoleUpgrade(
     detail.workload.id
   );
 
+  console.info("[server] websocket upgrade accepted", {
+    path: pathname,
+    serverId,
+    workloadId: detail.workload.id,
+    adminId: admin.id
+  });
   connection.sendJson({ type: "status", status: detail.workload.status });
 }
 
@@ -258,3 +294,22 @@ type ConsoleRequest = IncomingMessage & {
   };
   sessionID?: string;
 };
+
+function isWebSocketUpgradeRequest(req: IncomingMessage) {
+  const upgrade = typeof req.headers.upgrade === "string" ? req.headers.upgrade.toLowerCase() : "";
+  const connection = typeof req.headers.connection === "string" ? req.headers.connection.toLowerCase() : "";
+  return upgrade === "websocket" && connection.includes("upgrade");
+}
+
+function safeRequestPath(req: IncomingMessage) {
+  try {
+    return new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`).pathname;
+  } catch {
+    return req.url ?? "/";
+  }
+}
+
+function rejectUpgrade(socket: import("node:stream").Duplex, statusCode: number, reason: string) {
+  socket.write(`HTTP/1.1 ${statusCode} ${reason}\r\n\r\n`);
+  socket.destroy();
+}
