@@ -57,7 +57,7 @@ export function NodeServersTable({ servers = [] }: { servers?: HostedServer[] })
                   <td className="px-4 py-4 text-right">
                     {server.kind === "minecraft" ? (
                       <Link
-                        href={`/admin/playground?server=${encodeURIComponent(server.id)}`}
+                        href={`/services/playground?server=${encodeURIComponent(server.id)}`}
                         className="inline-flex h-8 items-center rounded-md border border-white/10 bg-white/[0.035] px-3 text-xs font-semibold text-slate-200 transition hover:border-white/20 hover:bg-white/[0.07]"
                       >
                         Open

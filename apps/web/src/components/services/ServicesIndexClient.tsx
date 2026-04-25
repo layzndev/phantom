@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Blocks, HardDrive, ShieldCheck, Swords } from "lucide-react";
+import { Blocks, FlaskConical, HardDrive, ShieldCheck, Swords } from "lucide-react";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 
 const services = [
@@ -11,6 +11,13 @@ const services = [
     description: "Operate Minecraft servers, console access, lifecycle actions and runtime diagnostics.",
     status: "Available",
     icon: Swords
+  },
+  {
+    title: "Playground",
+    href: "/services/playground",
+    description: "Internal sandbox for Minecraft service flows, API actions and lifecycle debugging.",
+    status: "Available",
+    icon: FlaskConical
   },
   {
     title: "Proxies",

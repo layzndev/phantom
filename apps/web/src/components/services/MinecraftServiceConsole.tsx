@@ -26,6 +26,7 @@ export function MinecraftServiceConsole({
   const manuallyClosedRef = useRef(false);
   const commandHistoryRef = useRef(new Set<string>());
   const lastStatusRef = useRef<string | null>(null);
+  const lastRuntimeStartedAtRef = useRef<string | null>(entry.workload.runtimeStartedAt);
 
   const phantomIdentity = useMemo(() => {
     const base = entry.server.slug?.trim() || "phantom";
@@ -58,6 +59,15 @@ export function MinecraftServiceConsole({
     base.search = "";
     return base.toString();
   }, [entry.server.id]);
+
+  useEffect(() => {
+    if (lastRuntimeStartedAtRef.current !== entry.workload.runtimeStartedAt) {
+      lastRuntimeStartedAtRef.current = entry.workload.runtimeStartedAt;
+      lastStatusRef.current = null;
+      commandHistoryRef.current.clear();
+      setLines([]);
+    }
+  }, [entry.workload.runtimeStartedAt]);
 
   useEffect(() => {
     shouldReconnectRef.current = true;
@@ -134,40 +144,17 @@ export function MinecraftServiceConsole({
       socket.addEventListener("open", () => {
         clearReconnectTimer();
         setConnectionState("connected");
-        appendLines([
-          {
-            timestamp: new Date().toISOString(),
-            kind: "info",
-            channel: "PHANTOM",
-            text: "Connected"
-          }
-        ]);
+        void onRefresh();
       });
 
       socket.addEventListener("close", () => {
         socketRef.current = null;
         if (!shouldReconnectRef.current || manuallyClosedRef.current) {
           setConnectionState("disconnected");
-          appendLines([
-            {
-              timestamp: new Date().toISOString(),
-              kind: "info",
-              channel: "PHANTOM",
-              text: "Console disconnected"
-            }
-          ]);
           return;
         }
 
         setConnectionState("reconnecting");
-        appendLines([
-          {
-            timestamp: new Date().toISOString(),
-            kind: "info",
-            channel: "PHANTOM",
-            text: `Console disconnected, retrying in ${RECONNECT_DELAY_MS / 1000}s`
-          }
-        ]);
         clearReconnectTimer();
         reconnectTimerRef.current = window.setTimeout(() => {
           connect();
@@ -267,15 +254,24 @@ export function MinecraftServiceConsole({
   const handleRestart = async () => {
     setBusy(true);
     try {
-      appendLines([
+      lastStatusRef.current = "restarting";
+      commandHistoryRef.current.clear();
+      setLines([
         {
+          id: crypto.randomUUID(),
           timestamp: new Date().toISOString(),
           kind: "info",
           channel: "PHANTOM",
           text: "Restarting server..."
         }
       ]);
+      appendLines([
+        // no-op: preserve helper path while keeping console fresh for the new boot
+      ]);
       await adminApi.restartMinecraftServer(entry.server.id);
+      manuallyClosedRef.current = false;
+      shouldReconnectRef.current = true;
+      socketRef.current?.close();
       await onRefresh();
     } finally {
       setBusy(false);
@@ -453,9 +449,11 @@ function describeStatusTransition(status: string) {
     case "running":
       return null;
     case "waking":
-      return null;
+      return "Waking server...";
     case "starting":
-      return "Starting Minecraft";
+      return "Starting Minecraft...";
+    case "restarting":
+      return "Restarting server...";
     case "stopping":
       return "Stopping server";
     case "sleeping":

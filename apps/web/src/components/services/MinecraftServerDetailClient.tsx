@@ -26,6 +26,7 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
   const [hostnameError, setHostnameError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [hostnameSlug, setHostnameSlug] = useState("");
+  const [optimisticRuntimeState, setOptimisticRuntimeState] = useState<MinecraftServerWithWorkload["server"]["runtimeState"] | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -47,6 +48,46 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
     return () => clearInterval(timer);
   }, [id, refresh]);
 
+  useEffect(() => {
+    if (!entry || !optimisticRuntimeState) {
+      return;
+    }
+
+    if (optimisticRuntimeState === "restarting") {
+      if (entry.server.runtimeState === "running" && entry.server.readyAt) {
+        setOptimisticRuntimeState(null);
+        return;
+      }
+      if (entry.server.runtimeState === "starting" || entry.server.runtimeState === "waking") {
+        setOptimisticRuntimeState("starting");
+        return;
+      }
+      if (entry.server.runtimeState === "crashed") {
+        setOptimisticRuntimeState("error");
+        return;
+      }
+      return;
+    }
+
+    if (
+      (optimisticRuntimeState === "starting" || optimisticRuntimeState === "waking") &&
+      entry.server.runtimeState === "running" &&
+      entry.server.readyAt
+    ) {
+      setOptimisticRuntimeState(null);
+      return;
+    }
+
+    if (optimisticRuntimeState === "stopping" && ["stopped", "sleeping"].includes(entry.server.runtimeState)) {
+      setOptimisticRuntimeState(null);
+      return;
+    }
+
+    if (optimisticRuntimeState === "error" && entry.server.runtimeState === "running" && entry.server.readyAt) {
+      setOptimisticRuntimeState(null);
+    }
+  }, [entry, optimisticRuntimeState]);
+
   const runtime = useMemo(() => {
     if (!entry) {
       return null;
@@ -64,11 +105,36 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
     };
   }, [entry]);
 
+  const displayEntry = useMemo(() => {
+    if (!entry) {
+      return null;
+    }
+
+    if (!optimisticRuntimeState) {
+      return entry;
+    }
+
+    return {
+      ...entry,
+      server: {
+        ...entry.server,
+        runtimeState:
+          optimisticRuntimeState === "starting" && entry.server.runtimeState === "waking"
+            ? "starting"
+            : optimisticRuntimeState,
+        readyAt:
+          optimisticRuntimeState === "running" || optimisticRuntimeState === null
+            ? entry.server.readyAt
+            : null
+      }
+    };
+  }, [entry, optimisticRuntimeState]);
+
   if (error) {
     return <div className="rounded-3xl border border-red-400/20 bg-red-400/10 p-8 text-red-100">{error}</div>;
   }
 
-  if (!entry || !runtime) {
+  if (!entry || !displayEntry || !runtime) {
     return <SkeletonBlock label="Loading Minecraft service..." />;
   }
 
@@ -78,10 +144,13 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
     setBusy(action);
     try {
       if (action === "start") {
+        setOptimisticRuntimeState(entry.server.sleeping ? "waking" : "starting");
         await adminApi.startMinecraftServer(entry.server.id);
       } else if (action === "stop") {
+        setOptimisticRuntimeState("stopping");
         await adminApi.stopMinecraftServer(entry.server.id);
       } else if (action === "restart") {
+        setOptimisticRuntimeState("restarting");
         await adminApi.restartMinecraftServer(entry.server.id);
       } else {
         await adminApi.deleteMinecraftServer(entry.server.id, { hardDeleteData: false });
@@ -123,29 +192,29 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
               description="Dedicated admin view on top of the Phantom workload runtime."
             />
             <div className="mt-4 flex flex-wrap items-center gap-2">
-              <StatePill label={formatRuntimeState(entry.server.runtimeState)} />
+              <StatePill label={formatRuntimeState(displayEntry.server.runtimeState)} />
               <span className="rounded-full border border-white/10 bg-white/[0.035] px-3 py-1 font-mono text-[11px] text-slate-300">
-                {entry.server.templateId}
+                {displayEntry.server.templateId}
               </span>
               <span className="rounded-full border border-white/10 bg-white/[0.035] px-3 py-1 font-mono text-[11px] text-slate-300">
-                v{entry.server.minecraftVersion}
+                v{displayEntry.server.minecraftVersion}
               </span>
               <span className="rounded-full border border-white/10 bg-white/[0.035] px-3 py-1 text-[11px] text-slate-300">
-                {entry.server.planTier}
+                {displayEntry.server.planTier}
               </span>
             </div>
 
             <dl className="mt-6 grid gap-4 text-sm md:grid-cols-2 xl:grid-cols-4">
-              <Field label="UUID" value={entry.server.id} mono />
-              <Field label="Node" value={entry.node?.name ?? "Unassigned"} />
+              <Field label="UUID" value={displayEntry.server.id} mono />
+              <Field label="Node" value={displayEntry.node?.name ?? "Unassigned"} />
               <Field label="Direct port" value={runtime.gamePort ? `${runtime.gamePort}/tcp` : "Unknown"} mono />
-              <Field label="Proxy address" value={entry.server.hostname} mono />
+              <Field label="Proxy address" value={displayEntry.server.hostname} mono />
             </dl>
           </div>
 
           <div className="flex flex-wrap gap-2">
             <ActionButton
-              label={entry.server.sleeping ? "Wake" : "Start"}
+              label={displayEntry.server.runtimeState === "sleeping" ? "Wake" : "Start"}
               busy={busy === "start"}
               onClick={() => void runAction("start")}
             />
@@ -156,7 +225,7 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
         </div>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-3">
+      <section className="grid grid-cols-1 gap-6 xl:grid-cols-3">
         <DetailCard title="Resources">
           <div className="grid gap-3 text-sm">
             <MetricRow label="CPU" value={`${formatCpu(entry.workload.requestedCpu)} vCPU`} />
@@ -166,78 +235,80 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
         </DetailCard>
 
         <DetailCard title="Runtime">
-          <div className="grid gap-3 text-sm">
+          <div className="grid min-w-0 gap-3 text-sm">
             <MetricRow label="Uptime" value={formatHms(runtime.uptimeSeconds)} />
             <MetricRow label="Started at" value={formatDateTime(runtime.startedAt)} />
             <MetricRow label="Finished at" value={formatDateTime(runtime.finishedAt)} />
             <MetricRow label="Restart count" value={String(entry.workload.restartCount)} />
-            <MetricRow label="AutoSleep" value={entry.server.autoSleepEnabled ? "Enabled" : "Disabled"} />
-            <MetricRow label="Idle since" value={formatDateTime(entry.server.idleSince)} />
-            <MetricRow label="Last player seen" value={formatDateTime(entry.server.lastPlayerSeenAt)} />
-            <MetricRow label="Idle duration" value={formatRelativeDurationSince(entry.server.idleSince)} />
-            <MetricRow label="Workload ID" value={entry.workload.id} mono />
-            <MetricRow label="Container ID" value={entry.workload.containerId ?? "Pending"} mono />
+            <MetricRow label="AutoSleep" value={displayEntry.server.autoSleepEnabled ? "Enabled" : "Disabled"} />
+            <MetricRow label="Idle since" value={formatDateTime(displayEntry.server.idleSince)} />
+            <MetricRow label="Last player seen" value={formatDateTime(displayEntry.server.lastPlayerSeenAt)} />
+            <MetricRow label="Idle duration" value={formatRelativeDurationSince(displayEntry.server.idleSince)} />
+            <MetricRow label="Workload ID" value={entry.workload.id} mono wrap />
+            <MetricRow label="Container ID" value={entry.workload.containerId ?? "Pending"} mono wrap />
           </div>
         </DetailCard>
 
         <DetailCard title="Network">
-          <div className="grid gap-3 text-sm">
-            <MetricRow label="Node" value={entry.node?.name ?? "Unassigned"} />
-            <MetricRow label="Public host" value={entry.node?.publicHost ?? "Unknown"} mono />
-            <MetricRow label="Proxy address" value={entry.server.hostname} mono />
-            <MetricRow label="Direct address" value={runtime.gamePort ? `${entry.server.hostname}:${runtime.gamePort}` : "Pending assignment"} mono />
+          <div className="grid min-w-0 gap-3 text-sm">
+            <MetricRow label="Node" value={displayEntry.node?.name ?? "Unassigned"} />
+            <MetricRow label="Public host" value={displayEntry.node?.publicHost ?? "Unknown"} mono wrap />
+            <MetricRow label="Proxy address" value={displayEntry.server.hostname} mono wrap />
+            <MetricRow
+              label="Direct address"
+              value={runtime.gamePort ? `${displayEntry.server.hostname}:${runtime.gamePort}` : "Pending assignment"}
+              mono
+              wrap
+            />
             <MetricRow label="Internal container port" value="25565/tcp" mono />
             <MetricRow label="Public direct port" value={runtime.gamePort ? `${runtime.gamePort}/tcp` : "Unknown"} mono />
-            <MetricRow label="DNS status" value={entry.server.dnsStatus} />
-            <MetricRow label="Hostname updated" value={formatDateTime(entry.server.hostnameUpdatedAt)} />
-            <MetricRow label="DNS error" value={entry.server.dnsLastError ?? "Wildcard DNS handled outside Phantom."} />
+            <MetricRow label="DNS status" value={displayEntry.server.dnsStatus} />
+            <MetricRow label="Hostname updated" value={formatDateTime(displayEntry.server.hostnameUpdatedAt)} />
             <MetricRow
-              label="Reserved ports"
-              value={
-                entry.workload.ports.length > 0
-                  ? entry.workload.ports.map((port) => `${port.externalPort}/${port.protocol}`).join(", ")
-                  : "None"
-              }
-              mono
+              label="DNS error"
+              value={displayEntry.server.dnsLastError ?? "Wildcard DNS handled outside Phantom."}
+              wrap
             />
-            <div className="rounded-2xl bg-white/[0.04] px-4 py-3">
-              <p className="text-slate-500">Hostname slug</p>
-              <div className="mt-2 flex flex-col gap-3 md:flex-row">
-                <div className="flex flex-1 items-center rounded-xl border border-white/10 bg-white/[0.03] px-3">
+            <div className="mt-2 rounded-2xl bg-white/[0.04] px-4 py-4">
+              <p className="text-sm text-slate-500">Hostname slug</p>
+              <div className="mt-3 flex min-w-0 flex-col gap-3">
+                <div className="flex min-w-0 items-center rounded-xl border border-white/10 bg-white/[0.03] px-3">
                   <input
                     value={hostnameSlug}
                     onChange={(event) => {
                       setHostnameSlug(event.target.value.toLowerCase());
                       setHostnameError(null);
                     }}
-                    className="h-10 flex-1 bg-transparent text-sm text-white outline-none"
+                    className="h-10 min-w-0 flex-1 bg-transparent text-sm text-white outline-none"
                   />
-                  <span className="text-xs text-slate-500">.{rootDomain}</span>
+                  <span className="shrink-0 text-xs text-slate-500">.{rootDomain}</span>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => void runHostnameUpdate()}
-                  disabled={busy === "hostname" || hostnameSlug.trim().length === 0 || hostnameSlug === entry.server.hostnameSlug}
-                  className="rounded-xl border border-white/10 bg-white/[0.05] px-4 py-2 text-sm text-white transition hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  {busy === "hostname" ? "Saving..." : "Save hostname"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void navigator.clipboard.writeText(entry.connectAddress ?? hostnamePreview)}
-                  className="rounded-xl border border-white/10 bg-white/[0.05] px-4 py-2 text-sm text-white transition hover:bg-white/[0.08]"
-                >
-                  Copy address
-                </button>
+                <div className="flex flex-col gap-3 sm:flex-row">
+                  <button
+                    type="button"
+                    onClick={() => void runHostnameUpdate()}
+                    disabled={busy === "hostname" || hostnameSlug.trim().length === 0 || hostnameSlug === entry.server.hostnameSlug}
+                    className="rounded-xl border border-white/10 bg-white/[0.05] px-4 py-2 text-sm text-white transition hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {busy === "hostname" ? "Saving..." : "Save hostname"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void navigator.clipboard.writeText(entry.connectAddress ?? hostnamePreview)}
+                    className="rounded-xl border border-white/10 bg-white/[0.05] px-4 py-2 text-sm text-white transition hover:bg-white/[0.08]"
+                  >
+                    Copy address
+                  </button>
+                </div>
               </div>
-              <p className="mt-3 font-mono text-xs text-slate-400">Preview: {hostnamePreview}</p>
+              <p className="mt-3 break-all font-mono text-xs text-slate-400">Preview: {hostnamePreview}</p>
               {hostnameError ? <p className="mt-2 text-xs text-red-300">{hostnameError}</p> : null}
             </div>
           </div>
         </DetailCard>
       </section>
 
-      <MinecraftServiceConsole entry={entry} onRefresh={refresh} />
+      <MinecraftServiceConsole entry={displayEntry} onRefresh={refresh} />
 
       <section className="grid gap-6 xl:grid-cols-4">
         <PlaceholderCard
@@ -312,12 +383,16 @@ function formatRuntimeState(value: MinecraftServerWithWorkload["server"]["runtim
       return "Waking";
     case "starting":
       return "Starting";
+    case "restarting":
+      return "Restarting";
     case "stopping":
       return "Stopping";
     case "running":
       return "Running";
     case "crashed":
       return "Crashed";
+    case "error":
+      return "Error";
     default:
       return "Stopped";
   }
@@ -336,12 +411,14 @@ function MetricRow({
   label,
   value,
   mono = false,
-  href
+  href,
+  wrap = false
 }: {
   label: string;
   value: string;
   mono?: boolean;
   href?: string;
+  wrap?: boolean;
 }) {
   const content = href ? (
     <Link href={href} className="text-accent hover:text-accent/80">
@@ -352,9 +429,14 @@ function MetricRow({
   );
 
   return (
-    <div className="flex items-start justify-between gap-4 rounded-2xl bg-white/[0.04] px-4 py-3">
-      <span className="text-slate-500">{label}</span>
-      <span className={`text-right text-slate-200 ${mono ? "font-mono text-xs" : ""}`}>
+    <div className="grid min-w-0 grid-cols-[minmax(0,120px)_minmax(0,1fr)] items-start gap-4 rounded-2xl bg-white/[0.04] px-4 py-3">
+      <span className="min-w-0 text-slate-500">{label}</span>
+      <span
+        title={value}
+        className={`min-w-0 text-right text-slate-200 ${
+          mono ? "font-mono text-xs" : ""
+        } ${wrap ? "break-all whitespace-normal" : "truncate"}`}
+      >
         {content}
       </span>
     </div>

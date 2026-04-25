@@ -264,10 +264,12 @@ export type MinecraftRuntimeState =
   | "sleeping"
   | "waking"
   | "starting"
+  | "restarting"
   | "running"
   | "stopping"
   | "stopped"
-  | "crashed";
+  | "crashed"
+  | "error";
 
 export const PLAN_TIERS: readonly PlanTier[] = ["free", "premium"] as const;
 

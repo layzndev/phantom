@@ -1,10 +1,5 @@
-import { AdminShell } from "@/components/layout/AdminShell";
-import { PlaygroundClient } from "@/components/playground/PlaygroundClient";
+import { redirect } from "next/navigation";
 
 export default function PlaygroundPage() {
-  return (
-    <AdminShell>
-      <PlaygroundClient />
-    </AdminShell>
-  );
+  redirect("/services/playground");
 }

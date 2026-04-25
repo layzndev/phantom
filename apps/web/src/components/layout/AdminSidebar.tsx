@@ -10,7 +10,7 @@ const links = [
   { href: "/nodes", label: "Nodes", icon: ServerCog },
   { href: "/workloads", label: "Workloads", icon: Boxes },
   { href: "/services", label: "Services", icon: Layers3 },
-  { href: "/admin/playground", label: "Playground", icon: FlaskConical },
+  { href: "/services/playground", label: "Playground", icon: FlaskConical },
   { href: "/audit-logs", label: "Audit Logs", icon: FileClock },
   { href: "/settings", label: "Settings", icon: Settings }
 ];

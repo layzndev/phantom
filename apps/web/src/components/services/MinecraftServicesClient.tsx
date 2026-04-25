@@ -224,12 +224,16 @@ function formatRuntimeState(value: MinecraftServerWithWorkload["server"]["runtim
       return "Waking";
     case "starting":
       return "Starting";
+    case "restarting":
+      return "Restarting";
     case "stopping":
       return "Stopping";
     case "running":
       return "Running";
     case "crashed":
       return "Crashed";
+    case "error":
+      return "Error";
     default:
       return "Stopped";
   }
