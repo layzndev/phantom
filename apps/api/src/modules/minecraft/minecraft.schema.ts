@@ -1,11 +1,44 @@
 import { z } from "zod";
 
+const HOSTNAME_RESERVED = [
+  "admin",
+  "api",
+  "www",
+  "mail",
+  "ftp",
+  "support",
+  "root",
+  "system",
+  "panel",
+  "dashboard",
+  "status",
+  "billing",
+  "login",
+  "logout",
+  "ns1",
+  "ns2"
+] as const;
+
+export const hostnameSlugSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .min(1)
+  .max(32)
+  .regex(/^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/, {
+    message: "Hostname slug must use lowercase letters, numbers or hyphens, without leading/trailing hyphens."
+  })
+  .refine((value) => !HOSTNAME_RESERVED.includes(value as (typeof HOSTNAME_RESERVED)[number]), {
+    message: "Hostname slug is reserved."
+  });
+
 export const minecraftServerParamsSchema = z.object({
   id: z.string().uuid()
 });
 
 export const createMinecraftServerSchema = z.object({
   name: z.string().min(2).max(60),
+  hostnameSlug: hostnameSlugSchema.optional(),
   templateId: z.string().min(1).max(100),
   version: z.string().max(20).optional(),
   motd: z.string().max(120).optional(),
@@ -42,8 +75,13 @@ export const minecraftOperationParamsSchema = z.object({
   opId: z.string().uuid()
 });
 
+export const updateMinecraftHostnameSchema = z.object({
+  hostnameSlug: hostnameSlugSchema
+});
+
 export type CreateMinecraftServerInput = z.infer<typeof createMinecraftServerSchema>;
 export type MinecraftServerListQuery = z.infer<typeof minecraftServerListQuerySchema>;
 export type DeleteMinecraftServerQuery = z.infer<typeof deleteMinecraftServerQuerySchema>;
 export type MinecraftCommandInput = z.infer<typeof minecraftCommandSchema>;
 export type MinecraftLogsQuery = z.infer<typeof minecraftLogsQuerySchema>;
+export type UpdateMinecraftHostnameInput = z.infer<typeof updateMinecraftHostnameSchema>;

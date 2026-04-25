@@ -3,6 +3,7 @@ import type { CompanyWorkload } from "../workloads/workloads.types.js";
 export type MinecraftDifficulty = "peaceful" | "easy" | "normal" | "hard";
 export type MinecraftGameMode = "survival" | "creative" | "adventure" | "spectator";
 export type PlanTier = "free" | "premium";
+export type MinecraftDnsStatus = "pending" | "active" | "failed" | "disabled";
 
 export const PLAN_TIERS: readonly PlanTier[] = ["free", "premium"] as const;
 
@@ -10,6 +11,12 @@ export interface MinecraftServer {
   id: string;
   name: string;
   slug: string;
+  hostname: string;
+  hostnameSlug: string;
+  hostnameUpdatedAt: string | null;
+  dnsStatus: MinecraftDnsStatus;
+  dnsLastError: string | null;
+  dnsSyncedAt: string | null;
   workloadId: string;
   templateId: string;
   minecraftVersion: string;
@@ -44,6 +51,7 @@ export interface MinecraftServerWithWorkload {
     internalHost: string;
   } | null;
   hostname?: string | null;
+  connectAddress: string | null;
 }
 
 export interface CreateMinecraftServerResult {

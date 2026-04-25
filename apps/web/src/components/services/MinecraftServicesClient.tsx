@@ -19,6 +19,7 @@ export function MinecraftServicesClient() {
   const [servers, setServers] = useState<MinecraftServerWithWorkload[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -126,6 +127,7 @@ export function MinecraftServicesClient() {
                       {server.name}
                     </Link>
                     <p className="mt-1 font-mono text-[11px] text-slate-500">{server.id}</p>
+                    <p className="mt-1 font-mono text-[11px] text-slate-400">{server.hostname}</p>
                   </div>
                 )
               },
@@ -159,18 +161,31 @@ export function MinecraftServicesClient() {
               },
               {
                 key: "port",
-                header: "Port",
-                cell: ({ workload, hostname }) => {
+                header: "Connect",
+                cell: (entry) => {
+                  const { workload, connectAddress } = entry;
                   const gamePort =
                     workload.ports.find((port) => port.internalPort === 25565)?.externalPort ?? null;
                   return (
                     <div className="text-slate-300">
-                      <p className="font-mono text-xs">
-                        {gamePort ? `${gamePort}/tcp` : "—"}
-                      </p>
+                      <p className="font-mono text-xs">{connectAddress ?? (gamePort ? `${gamePort}/tcp` : "—")}</p>
                       <p className="mt-1 text-xs text-slate-500">
-                        {hostname ? `${hostname}:${gamePort ?? ""}` : "No hostname"}
+                        {gamePort ? `${gamePort}/tcp` : "No port"}
                       </p>
+                      {connectAddress ? (
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void navigator.clipboard.writeText(connectAddress);
+                            setCopiedId(entry.server.id);
+                            window.setTimeout(() => setCopiedId((current) => (current === entry.server.id ? null : current)), 1500);
+                          }}
+                          className="mt-2 text-[11px] text-accent hover:text-accent/80"
+                        >
+                          {copiedId === entry.server.id ? "Copied" : "Copy address"}
+                        </button>
+                      ) : null}
                     </div>
                   );
                 }

@@ -6,6 +6,7 @@ import { createAuditLog } from "../audit/audit.repository.js";
 import {
   createMinecraftServerRecord,
   findMinecraftServerRecordById,
+  findMinecraftServerRecordByHostnameSlug,
   findMinecraftServerRecordBySlug,
   findMinecraftServerRecordByWorkloadId,
   listAutoSleepCandidateServers,
@@ -43,6 +44,8 @@ import {
   type MinecraftTemplate
 } from "./minecraft.templates.js";
 import { minecraftConsoleGateway } from "./minecraft.console.gateway.js";
+import { allocateHostname, buildHostname, normalizeHostnameSlug } from "./minecraft.hostname.js";
+import { isDnsProviderActive, resolveDnsProvider } from "./minecraft.dns.js";
 import type {
   CreateMinecraftServerResult,
   DeleteMinecraftServerResult,
@@ -100,7 +103,8 @@ export async function getMinecraftServer(id: string): Promise<MinecraftServerWit
 }
 
 export async function createMinecraftServer(
-  input: CreateMinecraftServerInput
+  input: CreateMinecraftServerInput,
+  actor?: { email?: string | null }
 ): Promise<CreateMinecraftServerResult> {
   const template = findMinecraftTemplate(input.templateId);
   if (!template) {
@@ -119,6 +123,13 @@ export async function createMinecraftServer(
   const requiredPool: NodePool = planTier === "premium" ? "premium" : "free";
 
   const slug = await allocateUniqueSlug(input.name);
+  const username = actor?.email ? actor.email.split("@")[0] : null;
+  const allocatedHostname = await allocateHostname({
+    requestedSlug: input.hostnameSlug,
+    username,
+    serverSlug: slug,
+    serverName: input.name
+  });
   const rconPassword = generateRconPassword();
 
   const env = buildMinecraftEnv({
@@ -167,6 +178,9 @@ export async function createMinecraftServer(
     const record = await createMinecraftServerRecord({
       name: input.name,
       slug,
+      hostname: allocatedHostname.hostname,
+      hostnameSlug: allocatedHostname.hostnameSlug,
+      dnsStatus: isDnsProviderActive() ? "pending" : "disabled",
       workloadId: placement.workload.id,
       templateId: template.id,
       minecraftVersion: version,
@@ -180,6 +194,8 @@ export async function createMinecraftServer(
       serverProperties: {} as Prisma.InputJsonValue,
       rconPassword
     });
+
+    await syncMinecraftServerDns(record.id);
 
     return {
       server: toMinecraftServer(record),
@@ -203,6 +219,7 @@ export async function startMinecraftServer(id: string) {
     lastActivityAt: new Date()
   });
   const workload = await startWorkload(record.workloadId);
+  await syncMinecraftServerDns(record.id);
   publishPhantomConsoleLifecycle(record.id, "Waking server...");
   minecraftConsoleGateway.publishStatus(record.id, workload.status);
   return { server: toMinecraftServer(updatedServer), workload };
@@ -229,9 +246,34 @@ export async function restartMinecraftServer(id: string) {
     lastActivityAt: new Date()
   });
   const workload = await restartWorkload(record.workloadId);
+  await syncMinecraftServerDns(record.id);
   publishPhantomConsoleLifecycle(record.id, "Restarting server...");
   minecraftConsoleGateway.publishStatus(record.id, workload.status);
   return { server: toMinecraftServer(updatedServer), workload };
+}
+
+export async function updateMinecraftServerHostname(id: string, hostnameSlug: string) {
+  const record = await ensureMinecraftServerRecord(id);
+  const normalized = normalizeHostnameSlug(hostnameSlug);
+  const existing = await findMinecraftServerRecordByHostnameSlug(normalized);
+  if (existing && existing.id !== record.id) {
+    throw new AppError(409, "Hostname already in use.", "HOSTNAME_CONFLICT");
+  }
+
+  const nextHostname = buildHostname(normalized);
+  const updated = await updateMinecraftServerRecord(record.id, {
+    hostname: nextHostname,
+    hostnameSlug: normalized,
+    hostnameUpdatedAt: new Date(),
+    dnsStatus: isDnsProviderActive() ? "pending" : "disabled",
+    dnsLastError: null,
+    dnsSyncedAt: null
+  });
+
+  await syncMinecraftServerDns(updated.id, { previousHostname: record.hostname ?? undefined });
+
+  const workload = await getWorkload(record.workloadId);
+  return toMinecraftServerWithRuntime(updated, workload);
 }
 
 export async function deleteMinecraftServer(
@@ -239,10 +281,11 @@ export async function deleteMinecraftServer(
   options: DeleteMinecraftServerQuery
 ): Promise<DeleteMinecraftServerResult> {
   const record = await ensureMinecraftServerRecord(id);
+  const preparedRecord = await cleanupMinecraftServerDnsBeforeDelete(record);
   const result = await requestWorkloadDeletion(record.workloadId, options);
   minecraftConsoleGateway.publishStatus(record.id, result.workload?.status ?? "deleted");
   return {
-    server: result.finalized ? null : toMinecraftServer(record),
+    server: result.finalized ? null : toMinecraftServer(preparedRecord),
     workload: result.workload,
     finalized: result.finalized
   };
@@ -694,6 +737,12 @@ function toMinecraftServer(record: MinecraftServerRecord): MinecraftServer {
     id: record.id,
     name: record.name,
     slug: record.slug,
+    hostname: record.hostname ?? buildHostname(record.hostnameSlug ?? record.slug),
+    hostnameSlug: record.hostnameSlug ?? record.slug,
+    hostnameUpdatedAt: record.hostnameUpdatedAt?.toISOString() ?? null,
+    dnsStatus: (record.dnsStatus as MinecraftServer["dnsStatus"]) ?? "disabled",
+    dnsLastError: record.dnsLastError ?? null,
+    dnsSyncedAt: record.dnsSyncedAt?.toISOString() ?? null,
     workloadId: record.workloadId,
     templateId: record.templateId,
     minecraftVersion: record.minecraftVersion,
@@ -735,7 +784,11 @@ async function toMinecraftServerWithRuntime(
           internalHost: node.internalHost
         }
       : null,
-    hostname: node?.publicHost ?? null
+    hostname: record.hostname ?? null,
+    connectAddress:
+      record.hostname && workload.ports.length > 0
+        ? `${record.hostname}:${workload.ports[0]?.externalPort ?? 25565}`
+        : null
   };
 }
 
@@ -848,6 +901,124 @@ function sanitizeCommandResultOutput(output: string) {
 
 function publishPhantomConsoleLifecycle(serverId: string, message: string) {
   minecraftConsoleGateway.publishLogs(serverId, [`__PHANTOM__ ${message}`]);
+}
+
+async function syncMinecraftServerDns(
+  serverId: string,
+  options: { previousHostname?: string } = {}
+) {
+  const record = await findMinecraftServerRecordById(serverId);
+  if (!record || record.deletedAt !== null) {
+    return;
+  }
+
+  if (!isDnsProviderActive()) {
+    await updateMinecraftServerRecord(record.id, {
+      dnsStatus: "disabled",
+      dnsLastError: null
+    });
+    return;
+  }
+
+  const workload = await findWorkloadFromRegistry(record.workloadId);
+  if (!workload?.nodeId) {
+    await updateMinecraftServerRecord(record.id, {
+      dnsStatus: "pending",
+      dnsLastError: null
+    });
+    return;
+  }
+
+  const node = await findNodeFromRegistry(workload.nodeId);
+  if (!node?.publicHost || !record.hostname) {
+    await updateMinecraftServerRecord(record.id, {
+      dnsStatus: "pending",
+      dnsLastError: null
+    });
+    return;
+  }
+
+  const provider = resolveDnsProvider();
+
+  try {
+    if (options.previousHostname && options.previousHostname !== record.hostname) {
+      await provider.updateRecord(options.previousHostname, record.hostname, node.publicHost);
+    } else {
+      await provider.createRecord(record.hostname, node.publicHost);
+    }
+
+    await updateMinecraftServerRecord(record.id, {
+      dnsStatus: "active",
+      dnsLastError: null,
+      dnsSyncedAt: new Date()
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message.slice(0, 500) : "dns sync failed";
+    console.warn("[minecraft-dns] sync failed", {
+      serverId: record.id,
+      hostname: record.hostname,
+      error: message
+    });
+    await updateMinecraftServerRecord(record.id, {
+      dnsStatus: "failed",
+      dnsLastError: message
+    });
+  }
+}
+
+async function cleanupMinecraftServerDnsBeforeDelete(record: MinecraftServerRecord) {
+  if (!record.hostname) {
+    return updateMinecraftServerRecord(record.id, {
+      dnsStatus: "disabled",
+      dnsLastError: null,
+      dnsSyncedAt: null
+    });
+  }
+
+  const provider = resolveDnsProvider();
+
+  try {
+    await provider.deleteRecord(record.hostname);
+    await createAuditLog({
+      action: "minecraft.server.dns_cleanup",
+      actorEmail: "system",
+      targetType: "system",
+      targetId: record.id,
+      metadata: {
+        hostname: record.hostname,
+        dnsProvider: env.dnsProvider,
+        status: "success"
+      }
+    });
+    return updateMinecraftServerRecord(record.id, {
+      dnsStatus: "disabled",
+      dnsLastError: null,
+      dnsSyncedAt: new Date()
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message.slice(0, 500) : "dns cleanup failed";
+    console.warn("[minecraft-dns] cleanup failed", {
+      serverId: record.id,
+      hostname: record.hostname,
+      error: message
+    });
+    await createAuditLog({
+      action: "minecraft.server.dns_cleanup",
+      actorEmail: "system",
+      targetType: "system",
+      targetId: record.id,
+      metadata: {
+        hostname: record.hostname,
+        dnsProvider: env.dnsProvider,
+        status: "failed",
+        error: message
+      }
+    });
+    return updateMinecraftServerRecord(record.id, {
+      dnsStatus: isDnsProviderActive() ? "failed" : "disabled",
+      dnsLastError: message
+    });
+  }
 }
 
 function parsePlayerSample(result: Record<string, unknown> | null, maxPlayers: number) {

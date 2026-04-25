@@ -3,6 +3,7 @@ import type {
   AuditLogEntry,
   CompanyNode,
   CompanyWorkload,
+  CreateMinecraftServerPayload,
   CreateWorkloadPayload,
   CreateWorkloadResult,
   CreateNodePayload,
@@ -107,6 +108,16 @@ export const adminApi = {
     ),
   minecraftServers: () =>
     apiRequest<{ servers: MinecraftServerWithWorkload[] }>("/minecraft/servers"),
+  createMinecraftServer: (payload: CreateMinecraftServerPayload) =>
+    apiRequest<{
+      server: MinecraftServerWithWorkload["server"];
+      workload: CompanyWorkload;
+      placed: boolean;
+      reason?: string;
+    }>("/minecraft/servers", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
   minecraftServer: (id: string) =>
     apiRequest<MinecraftServerWithWorkload>(`/minecraft/servers/${encodeURIComponent(id)}`),
   startMinecraftServer: (id: string) =>
@@ -123,6 +134,14 @@ export const adminApi = {
     apiRequest<{ server: MinecraftServerWithWorkload["server"]; workload: CompanyWorkload }>(
       `/minecraft/servers/${encodeURIComponent(id)}/restart`,
       { method: "POST" }
+    ),
+  updateMinecraftServerHostname: (id: string, hostnameSlug: string) =>
+    apiRequest<MinecraftServerWithWorkload>(
+      `/minecraft/servers/${encodeURIComponent(id)}/hostname`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ hostnameSlug })
+      }
     ),
   commandMinecraftServer: (id: string, command: string) =>
     apiRequest<{ operation: unknown; pending: boolean }>(

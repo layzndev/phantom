@@ -232,6 +232,12 @@ model MinecraftServer {
   id               String    @id @default(uuid())
   name             String
   slug             String    @unique
+  hostname         String?   @unique
+  hostnameSlug     String?   @unique @map("hostname_slug")
+  hostnameUpdatedAt DateTime? @map("hostname_updated_at")
+  dnsStatus        String    @default("disabled") @map("dns_status")
+  dnsLastError     String?   @map("dns_last_error")
+  dnsSyncedAt      DateTime? @map("dns_synced_at")
   workloadId       String    @unique @map("workload_id")
   workload         Workload  @relation(fields: [workloadId], references: [id], onDelete: Cascade)
   templateId       String    @map("template_id")
@@ -260,6 +266,8 @@ model MinecraftServer {
   @@index([templateId])
   @@index([deletedAt])
   @@index([planTier])
+  @@index([hostnameSlug])
+  @@index([dnsStatus])
   @@map("minecraft_servers")
 }
 

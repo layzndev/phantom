@@ -14,7 +14,8 @@ import {
   listMinecraftServers,
   restartMinecraftServer,
   startMinecraftServer,
-  stopMinecraftServer
+  stopMinecraftServer,
+  updateMinecraftServerHostname
 } from "./minecraft.service.js";
 import {
   createMinecraftServerSchema,
@@ -22,7 +23,8 @@ import {
   minecraftCommandSchema,
   minecraftLogsQuerySchema,
   minecraftOperationParamsSchema,
-  minecraftServerParamsSchema
+  minecraftServerParamsSchema,
+  updateMinecraftHostnameSchema
 } from "./minecraft.schema.js";
 
 export const minecraftController = Router();
@@ -63,7 +65,7 @@ minecraftController.post(
   validateBody(createMinecraftServerSchema),
   asyncHandler(async (req, res) => {
     const actor = req.session.admin!;
-    const result = await createMinecraftServer(req.body);
+    const result = await createMinecraftServer(req.body, { email: actor.email });
     await writeAuditLog(req, {
       action: "minecraft.server.create",
       actorId: actor.id,
@@ -72,6 +74,9 @@ minecraftController.post(
       targetId: result.server.id,
       metadata: {
         workloadId: result.workload.id,
+        hostname: result.server.hostname,
+        hostnameSlug: result.server.hostnameSlug,
+        dnsStatus: result.server.dnsStatus,
         templateId: result.server.templateId,
         version: result.server.minecraftVersion,
         placed: result.placed,
@@ -98,6 +103,30 @@ minecraftController.get(
       actorEmail: actor.email,
       targetType: "system",
       targetId: req.params.id
+    });
+    res.json(result);
+  })
+);
+
+minecraftController.patch(
+  "/servers/:id/hostname",
+  requireRole(["superadmin", "ops"]),
+  validateParams(minecraftServerParamsSchema),
+  validateBody(updateMinecraftHostnameSchema),
+  asyncHandler(async (req, res) => {
+    const actor = req.session.admin!;
+    const result = await updateMinecraftServerHostname(req.params.id, req.body.hostnameSlug);
+    await writeAuditLog(req, {
+      action: "minecraft.server.hostname",
+      actorId: actor.id,
+      actorEmail: actor.email,
+      targetType: "system",
+      targetId: req.params.id,
+      metadata: {
+        hostname: result.server.hostname,
+        hostnameSlug: result.server.hostnameSlug,
+        dnsStatus: result.server.dnsStatus
+      }
     });
     res.json(result);
   })

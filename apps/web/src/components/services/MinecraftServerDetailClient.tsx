@@ -25,11 +25,13 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
   const [entry, setEntry] = useState<MinecraftServerWithWorkload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [hostnameSlug, setHostnameSlug] = useState("");
 
   const refresh = useCallback(async () => {
     try {
       const next = await adminApi.minecraftServer(id);
       setEntry(next);
+      setHostnameSlug(next.server.hostnameSlug);
       setError(null);
     } catch (detailError) {
       setError(detailError instanceof Error ? detailError.message : "Unable to load Minecraft server");
@@ -91,6 +93,20 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
     }
   };
 
+  const runHostnameUpdate = async () => {
+    if (!entry) return;
+    setBusy("hostname");
+    try {
+      const next = await adminApi.updateMinecraftServerHostname(entry.server.id, hostnameSlug);
+      setEntry(next);
+      setHostnameSlug(next.server.hostnameSlug);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const rootDomain = entry.server.hostname.split(".").slice(1).join(".");
+
   return (
     <div className="space-y-6">
       <section className="rounded-3xl border border-line bg-panel/78 p-6 shadow-soft">
@@ -120,7 +136,7 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
               <Field label="Port" value={runtime.gamePort ? `${runtime.gamePort}/tcp` : "Unknown"} mono />
               <Field
                 label="Hostname"
-                value={entry.hostname ? `${entry.hostname}${runtime.gamePort ? `:${runtime.gamePort}` : ""}` : "Unknown"}
+                value={entry.connectAddress ?? entry.server.hostname}
                 mono
               />
             </dl>
@@ -167,7 +183,12 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
           <div className="grid gap-3 text-sm">
             <MetricRow label="Node" value={entry.node?.name ?? "Unassigned"} />
             <MetricRow label="Public host" value={entry.node?.publicHost ?? "Unknown"} mono />
+            <MetricRow label="Hostname" value={entry.server.hostname} mono />
+            <MetricRow label="Connect address" value={entry.connectAddress ?? "Pending assignment"} mono />
             <MetricRow label="Game port" value={runtime.gamePort ? `${runtime.gamePort}/tcp` : "Unknown"} mono />
+            <MetricRow label="DNS status" value={entry.server.dnsStatus} />
+            <MetricRow label="DNS synced" value={formatDateTime(entry.server.dnsSyncedAt)} />
+            <MetricRow label="DNS error" value={entry.server.dnsLastError ?? "None"} />
             <MetricRow
               label="Reserved ports"
               value={
@@ -177,6 +198,34 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
               }
               mono
             />
+            <div className="rounded-2xl bg-white/[0.04] px-4 py-3">
+              <p className="text-slate-500">Hostname slug</p>
+              <div className="mt-2 flex flex-col gap-3 md:flex-row">
+                <div className="flex flex-1 items-center rounded-xl border border-white/10 bg-white/[0.03] px-3">
+                  <input
+                    value={hostnameSlug}
+                    onChange={(event) => setHostnameSlug(event.target.value.toLowerCase())}
+                    className="h-10 flex-1 bg-transparent text-sm text-white outline-none"
+                  />
+                  <span className="text-xs text-slate-500">.{rootDomain}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void runHostnameUpdate()}
+                  disabled={busy === "hostname" || hostnameSlug.trim().length === 0 || hostnameSlug === entry.server.hostnameSlug}
+                  className="rounded-xl border border-white/10 bg-white/[0.05] px-4 py-2 text-sm text-white transition hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {busy === "hostname" ? "Saving..." : "Save hostname"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void navigator.clipboard.writeText(entry.connectAddress ?? entry.server.hostname)}
+                  className="rounded-xl border border-white/10 bg-white/[0.05] px-4 py-2 text-sm text-white transition hover:bg-white/[0.08]"
+                >
+                  Copy address
+                </button>
+              </div>
+            </div>
           </div>
         </DetailCard>
       </section>

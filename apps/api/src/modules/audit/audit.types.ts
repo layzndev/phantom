@@ -29,6 +29,8 @@ export type AuditAction =
   | "minecraft.server.start"
   | "minecraft.server.stop"
   | "minecraft.server.restart"
+  | "minecraft.server.hostname"
+  | "minecraft.server.dns_cleanup"
   | "minecraft.server.delete"
   | "minecraft.server.autosleep"
   | "minecraft.server.command"

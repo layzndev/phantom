@@ -4,6 +4,12 @@ import { db } from "./client.js";
 export interface CreateMinecraftServerRecordInput {
   name: string;
   slug: string;
+  hostname: string;
+  hostnameSlug: string;
+  hostnameUpdatedAt?: Date | null;
+  dnsStatus?: string;
+  dnsLastError?: string | null;
+  dnsSyncedAt?: Date | null;
   workloadId: string;
   templateId: string;
   minecraftVersion: string;
@@ -28,6 +34,12 @@ export function createMinecraftServerRecord(input: CreateMinecraftServerRecordIn
     data: {
       name: input.name,
       slug: input.slug,
+      hostname: input.hostname,
+      hostnameSlug: input.hostnameSlug,
+      hostnameUpdatedAt: input.hostnameUpdatedAt ?? new Date(),
+      dnsStatus: input.dnsStatus ?? "disabled",
+      dnsLastError: input.dnsLastError ?? null,
+      dnsSyncedAt: input.dnsSyncedAt ?? null,
       workloadId: input.workloadId,
       templateId: input.templateId,
       minecraftVersion: input.minecraftVersion,
@@ -50,6 +62,10 @@ export function findMinecraftServerRecordById(id: string) {
 
 export function findMinecraftServerRecordBySlug(slug: string) {
   return db.minecraftServer.findUnique({ where: { slug } });
+}
+
+export function findMinecraftServerRecordByHostnameSlug(hostnameSlug: string) {
+  return db.minecraftServer.findUnique({ where: { hostnameSlug } });
 }
 
 export function findMinecraftServerRecordByWorkloadId(workloadId: string) {
@@ -113,6 +129,12 @@ export function updateMinecraftServerRecord(
     idleSince?: Date | null;
     sleepRequestedAt?: Date | null;
     sleepingAt?: Date | null;
+    hostname?: string;
+    hostnameSlug?: string;
+    hostnameUpdatedAt?: Date | null;
+    dnsStatus?: string;
+    dnsLastError?: string | null;
+    dnsSyncedAt?: Date | null;
   }
 ) {
   return db.minecraftServer.update({
@@ -140,7 +162,15 @@ export function updateMinecraftServerRecord(
       ...(updates.sleepRequestedAt !== undefined
         ? { sleepRequestedAt: updates.sleepRequestedAt }
         : {}),
-      ...(updates.sleepingAt !== undefined ? { sleepingAt: updates.sleepingAt } : {})
+      ...(updates.sleepingAt !== undefined ? { sleepingAt: updates.sleepingAt } : {}),
+      ...(updates.hostname !== undefined ? { hostname: updates.hostname } : {}),
+      ...(updates.hostnameSlug !== undefined ? { hostnameSlug: updates.hostnameSlug } : {}),
+      ...(updates.hostnameUpdatedAt !== undefined
+        ? { hostnameUpdatedAt: updates.hostnameUpdatedAt }
+        : {}),
+      ...(updates.dnsStatus !== undefined ? { dnsStatus: updates.dnsStatus } : {}),
+      ...(updates.dnsLastError !== undefined ? { dnsLastError: updates.dnsLastError } : {}),
+      ...(updates.dnsSyncedAt !== undefined ? { dnsSyncedAt: updates.dnsSyncedAt } : {})
     }
   });
 }

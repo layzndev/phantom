@@ -41,6 +41,11 @@ export const env = {
   autoSleepEnabled: (process.env.AUTO_SLEEP_ENABLED ?? "true").toLowerCase() !== "false",
   autoSleepIdleMinutes: Number(process.env.AUTO_SLEEP_IDLE_MINUTES ?? 10),
   autoSleepMonitorTickMs: Number(process.env.AUTO_SLEEP_MONITOR_TICK_MS ?? 30_000),
+  hostingRootDomain: process.env.HOSTING_ROOT_DOMAIN ?? "hosting.gg",
+  dnsProvider: (process.env.DNS_PROVIDER ?? "noop").toLowerCase(),
+  dnsRecordType: (process.env.DNS_RECORD_TYPE ?? "CNAME").toUpperCase(),
+  cloudflareApiToken: process.env.CLOUDFLARE_API_TOKEN ?? "",
+  cloudflareZoneId: process.env.CLOUDFLARE_ZONE_ID ?? "",
   workloadDeleteTimeoutMs: Number(process.env.WORKLOAD_DELETE_TIMEOUT_MS ?? 120_000),
   workloadDeleteMonitorTickMs: Number(process.env.WORKLOAD_DELETE_MONITOR_TICK_MS ?? 10_000),
   workloadDeleteMonitorEnabled:
@@ -91,5 +96,13 @@ export function assertRuntimeConfig() {
     throw new Error(
       "WORKLOAD_DELETE_MONITOR_TICK_MS must be smaller than WORKLOAD_DELETE_TIMEOUT_MS."
     );
+  }
+
+  if (!["noop", "cloudflare"].includes(env.dnsProvider)) {
+    throw new Error("DNS_PROVIDER must be one of: noop, cloudflare.");
+  }
+
+  if (!["A", "CNAME"].includes(env.dnsRecordType)) {
+    throw new Error("DNS_RECORD_TYPE must be one of: A, CNAME.");
   }
 }

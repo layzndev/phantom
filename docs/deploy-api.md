@@ -155,6 +155,23 @@ CORS_ORIGINS=https://admin.phantom.example.com
 COOKIE_SAMESITE=lax
 ```
 
+Hosting DNS settings:
+
+```env
+HOSTING_ROOT_DOMAIN=hosting.gg
+DNS_PROVIDER=noop
+DNS_RECORD_TYPE=CNAME
+CLOUDFLARE_API_TOKEN=
+CLOUDFLARE_ZONE_ID=
+```
+
+Notes:
+
+- `HOSTING_ROOT_DOMAIN` is the suffix used for Minecraft hostnames such as `survival.hosting.gg`
+- `DNS_PROVIDER=noop` keeps hostname allocation active without touching an external DNS provider
+- `DNS_PROVIDER=cloudflare` enables automatic DNS sync when `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ZONE_ID` are both set
+- DNS sync is best-effort and does not block Minecraft server creation
+
 Different subdomains strategy:
 
 ```env
