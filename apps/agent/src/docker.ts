@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
-import { access, lstat, mkdir, readdir, rm } from "node:fs/promises";
-import { resolve as resolvePath } from "node:path";
+import { access, chmod, chown, lstat, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { dirname, resolve as resolvePath } from "node:path";
 import { promisify } from "node:util";
 import { Logger } from "./logger.js";
 import type {
@@ -130,6 +130,7 @@ export class DockerRuntime {
     const runtimeConfig = parseRuntimeConfig(workload.config);
     const name = buildContainerName(workload.name, workload.id);
     const configFingerprint = buildWorkloadConfigFingerprint(workload);
+    await this.materializeMinecraftServerProperties(workload, runtimeConfig);
 
     if (await this.removeContainerByName(name, { force: true })) {
       this.logger.info("removed stale container with conflicting name before create", {
@@ -443,6 +444,45 @@ export class DockerRuntime {
     return resolvePath(this.dataDir, "workloads", workloadId, safeName);
   }
 
+  async materializeMinecraftServerProperties(
+    workload: AssignedWorkload,
+    runtimeConfig?: WorkloadRuntimeConfig
+  ) {
+    if (workload.type !== "minecraft") {
+      return;
+    }
+
+    const resolvedRuntimeConfig = runtimeConfig ?? parseRuntimeConfig(workload.config);
+    const minecraftConfig =
+      workload.config.minecraft && typeof workload.config.minecraft === "object"
+        ? (workload.config.minecraft as Record<string, unknown>)
+        : null;
+    const serverProperties =
+      minecraftConfig?.serverProperties && typeof minecraftConfig.serverProperties === "object"
+        ? (minecraftConfig.serverProperties as Record<string, unknown>)
+        : null;
+    if (!serverProperties) {
+      return;
+    }
+
+    const dataVolume = resolvedRuntimeConfig.volumes?.find((volume) => volume.name === "minecraft-data");
+    if (!dataVolume) {
+      this.logger.warn("minecraft workload missing minecraft-data volume for server.properties sync", {
+        workloadId: workload.id
+      });
+      return;
+    }
+
+    const volumePath = this.resolveVolumeHostPath(workload.id, dataVolume.name);
+    await mkdir(volumePath, { recursive: true });
+    const targetPath = resolvePath(volumePath, "server.properties");
+    const desiredOwnership = await resolveDesiredOwnership(targetPath);
+    const existingContent = await readExistingMinecraftProperties(targetPath);
+    const nextContent = mergeMinecraftServerProperties(existingContent, serverProperties);
+    await writeFile(targetPath, nextContent, "utf8");
+    await applyDesiredOwnership(this.logger, targetPath, desiredOwnership);
+  }
+
   private async inspectMany(containerIds: string[]) {
     if (containerIds.length === 0) {
       return [] as DockerInspectContainer[];
@@ -681,6 +721,114 @@ function parseMemoryMb(value: string | undefined) {
 
   const factor = multiplier[unit];
   return factor ? Math.round(amount * factor) : undefined;
+}
+
+async function resolveDesiredOwnership(targetPath: string) {
+  try {
+    const existing = await stat(targetPath);
+    return {
+      uid: existing.uid,
+      gid: existing.gid,
+      mode: existing.mode & 0o777
+    };
+  } catch {
+    const parentStats = await stat(dirname(targetPath));
+    return {
+      uid: parentStats.uid,
+      gid: parentStats.gid,
+      mode: 0o644
+    };
+  }
+}
+
+async function applyDesiredOwnership(
+  logger: Logger,
+  targetPath: string,
+  desired: { uid: number; gid: number; mode: number }
+) {
+  await chmod(targetPath, desired.mode);
+  try {
+    await chown(targetPath, desired.uid, desired.gid);
+  } catch (error) {
+    logger.warn("failed to restore server.properties ownership", {
+      path: targetPath,
+      uid: desired.uid,
+      gid: desired.gid,
+      error: error instanceof Error ? error.message : "unknown"
+    });
+  }
+}
+
+function renderMinecraftServerProperties(serverProperties: Record<string, unknown>) {
+  return `${Object.entries(serverProperties)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, value]) => `${key}=${formatMinecraftServerPropertyValue(value)}`)
+    .join("\n")}\n`;
+}
+
+async function readExistingMinecraftProperties(targetPath: string) {
+  try {
+    return await readFile(targetPath, "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return "";
+    }
+    throw error;
+  }
+}
+
+function mergeMinecraftServerProperties(
+  existingContent: string,
+  updates: Record<string, unknown>
+) {
+  if (!existingContent.trim()) {
+    return renderMinecraftServerProperties(updates);
+  }
+
+  const lines = existingContent.split(/\r?\n/);
+  const remaining = new Map(
+    Object.entries(updates).map(([key, value]) => [key, formatMinecraftServerPropertyValue(value)])
+  );
+
+  const nextLines = lines.map((line) => {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) {
+      return line;
+    }
+
+    const separatorIndex = line.indexOf("=");
+    if (separatorIndex === -1) {
+      return line;
+    }
+
+    const key = line.slice(0, separatorIndex).trim();
+    if (!remaining.has(key)) {
+      return line;
+    }
+
+    const value = remaining.get(key) ?? "";
+    remaining.delete(key);
+    return `${key}=${value}`;
+  });
+
+  for (const [key, value] of remaining.entries()) {
+    nextLines.push(`${key}=${value}`);
+  }
+
+  return `${nextLines.join("\n").replace(/\n+$/g, "")}\n`;
+}
+
+function formatMinecraftServerPropertyValue(value: unknown) {
+  if (typeof value === "boolean") {
+    return value ? "true" : "false";
+  }
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? String(value) : "";
+  }
+  if (value === null || value === undefined) {
+    return "";
+  }
+  return String(value);
 }
 
 function parseRuntimeConfig(config: Record<string, unknown>): WorkloadRuntimeConfig {

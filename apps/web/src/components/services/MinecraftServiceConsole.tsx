@@ -48,6 +48,7 @@ export function MinecraftServiceConsole({
   const lastRuntimeStartedAtRef = useRef<string | null>(entry.workload.runtimeStartedAt);
   const currentRuntimeStateRef = useRef(entry.server.runtimeState);
   const lineFingerprintsRef = useRef(new Set<string>());
+  const lifecycleDedupRef = useRef(new Map<string, number>());
   const linesRef = useRef<MinecraftConsoleLine[]>([]);
 
   const phantomIdentity = useMemo(() => {
@@ -66,6 +67,19 @@ export function MinecraftServiceConsole({
     ) => {
       const normalized = incoming
         .map((line) => toConsoleLine(line))
+        .filter((line) => {
+          if (line.channel !== "PHANTOM") {
+            return true;
+          }
+          const now = Date.parse(line.timestamp) || Date.now();
+          const key = line.text.trim().toLowerCase();
+          const lastSeenAt = lifecycleDedupRef.current.get(key) ?? 0;
+          if (now - lastSeenAt < 30_000) {
+            return false;
+          }
+          lifecycleDedupRef.current.set(key, now);
+          return true;
+        })
         .filter((line) => {
           const fingerprint = buildLineFingerprint(line);
           if (lineFingerprintsRef.current.has(fingerprint)) {
@@ -98,6 +112,11 @@ export function MinecraftServiceConsole({
   const replaceLines = useCallback((incoming: MinecraftConsoleLine[]) => {
     const next = incoming.slice(-MAX_CONSOLE_LINES);
     lineFingerprintsRef.current = new Set(next.map((line) => buildLineFingerprint(line)));
+    lifecycleDedupRef.current = new Map(
+      next
+        .filter((line) => line.channel === "PHANTOM")
+        .map((line) => [line.text.trim().toLowerCase(), Date.parse(line.timestamp) || Date.now()])
+    );
     linesRef.current = next;
     setLines(next);
   }, []);
@@ -127,24 +146,13 @@ export function MinecraftServiceConsole({
 
   useEffect(() => {
     if (lastRuntimeStartedAtRef.current !== entry.workload.runtimeStartedAt) {
-      const previousRuntimeStartedAt = lastRuntimeStartedAtRef.current;
       lastRuntimeStartedAtRef.current = entry.workload.runtimeStartedAt;
       lastStatusRef.current = null;
       commandHistoryRef.current.clear();
       lineFingerprintsRef.current.clear();
-      if (previousRuntimeStartedAt !== null || entry.workload.runtimeStartedAt !== null) {
-        replaceLines([
-          {
-            id: crypto.randomUUID(),
-            timestamp: new Date().toISOString(),
-            kind: "info",
-            channel: "PHANTOM",
-            text: "Runtime session changed. Streaming fresh console output..."
-          }
-        ]);
-      }
+      lifecycleDedupRef.current.clear();
     }
-  }, [entry.workload.runtimeStartedAt, replaceLines]);
+  }, [entry.workload.runtimeStartedAt]);
 
   useEffect(() => {
     shouldReconnectRef.current = true;
@@ -213,19 +221,8 @@ export function MinecraftServiceConsole({
                 : payload.status;
             if (lastStatusRef.current !== normalizedStatus) {
               lastStatusRef.current = normalizedStatus;
-              const description = describeStatusTransition(normalizedStatus);
-              if (description) {
-                appendLines([
-                  {
-                    timestamp,
-                    kind: "info",
-                    channel: "PHANTOM",
-                    text: description
-                  }
-                ]);
-              }
+              scheduleRefresh();
             }
-            scheduleRefresh();
           } else if (payload.type === "command_result") {
             const isAdminCommand = commandHistoryRef.current.has(payload.id);
             commandHistoryRef.current.delete(payload.id);
@@ -250,7 +247,6 @@ export function MinecraftServiceConsole({
       socket.addEventListener("open", () => {
         clearReconnectTimer();
         setConnectionState("connected");
-        scheduleRefresh();
       });
 
       socket.addEventListener("close", () => {
@@ -312,27 +308,12 @@ export function MinecraftServiceConsole({
   };
 
   const runStop = async () => {
-    appendLines([
-      {
-        timestamp: new Date().toISOString(),
-        kind: "info",
-        channel: "PHANTOM",
-        text: "Stopping server..."
-      }
-    ]);
+    lastStatusRef.current = "stopping";
     await onStop();
   };
 
   const runStart = async () => {
     lastStatusRef.current = "starting";
-    appendLines([
-      {
-        timestamp: new Date().toISOString(),
-        kind: "info",
-        channel: "PHANTOM",
-        text: "Starting Minecraft..."
-      }
-    ]);
     await onStart();
     manuallyClosedRef.current = false;
     shouldReconnectRef.current = true;
@@ -341,14 +322,6 @@ export function MinecraftServiceConsole({
 
   const runRestart = async () => {
     lastStatusRef.current = "restarting";
-    appendLines([
-      {
-        timestamp: new Date().toISOString(),
-        kind: "info",
-        channel: "PHANTOM",
-        text: "Restarting server..."
-      }
-    ]);
     await onRestart();
     manuallyClosedRef.current = false;
     shouldReconnectRef.current = true;
@@ -441,7 +414,6 @@ function renderHistory(
   pendingAdminIds: Set<string>
 ): MinecraftConsoleLine[] {
   const out: MinecraftConsoleLine[] = [];
-  let lastStatus: string | null = null;
   for (const event of events) {
     const timestamp = event.timestamp ?? new Date().toISOString();
     if (event.type === "log") {
@@ -449,18 +421,7 @@ function renderHistory(
         out.push(...normalizeConsoleLogLine(text, timestamp));
       }
     } else if (event.type === "status") {
-      if (lastStatus === event.status) continue;
-      lastStatus = event.status;
-      const description = describeStatusTransition(event.status);
-      if (description) {
-        out.push({
-          id: crypto.randomUUID(),
-          timestamp,
-          kind: "info",
-          channel: "PHANTOM",
-          text: description
-        });
-      }
+      continue;
     } else if (event.type === "command_result") {
       const isAdminCommand = pendingAdminIds.has(event.id);
       pendingAdminIds.delete(event.id);
@@ -499,6 +460,7 @@ function normalizeConsoleLogLine(
     ];
   }
 
+  const displayTimestamp = deriveDisplayTimestamp(line, timestamp);
   const cleaned = stripDockerAndMinecraftTimestamps(line);
   if (!cleaned) {
     return [];
@@ -512,7 +474,7 @@ function normalizeConsoleLogLine(
   return [
     {
       id: crypto.randomUUID(),
-      timestamp,
+      timestamp: displayTimestamp,
       kind: parsed.kind,
       channel: parsed.channel,
       text: parsed.text
@@ -548,12 +510,44 @@ function normalizeCommandResult(
     .filter((line) => !isHiddenRconNoise(line))
     .map((line) => ({
       id: crypto.randomUUID(),
-      timestamp,
+      timestamp: deriveDisplayTimestamp(line, timestamp),
       kind: "response" as const,
       channel: "RCON" as const,
       text: stripDockerAndMinecraftTimestamps(line)
     }))
     .filter((line) => Boolean(line.text));
+}
+
+function deriveDisplayTimestamp(rawLine: string, fallbackTimestamp: string) {
+  const embedded = extractEmbeddedMinecraftClock(rawLine);
+  if (!embedded) {
+    return fallbackTimestamp;
+  }
+
+  const base = new Date(fallbackTimestamp);
+  if (Number.isNaN(base.getTime())) {
+    return fallbackTimestamp;
+  }
+
+  base.setHours(embedded.hours, embedded.minutes, embedded.seconds, 0);
+  return base.toISOString();
+}
+
+function extractEmbeddedMinecraftClock(line: string) {
+  const withoutDockerIso = line.replace(
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})\s+/,
+    ""
+  );
+  const match = withoutDockerIso.match(/^\[(\d{2}):(\d{2}):(\d{2})\]/);
+  if (!match) {
+    return null;
+  }
+
+  return {
+    hours: Number.parseInt(match[1] ?? "0", 10),
+    minutes: Number.parseInt(match[2] ?? "0", 10),
+    seconds: Number.parseInt(match[3] ?? "0", 10)
+  };
 }
 
 function stripDockerAndMinecraftTimestamps(line: string) {
@@ -612,25 +606,4 @@ function isHiddenRconNoise(message: string) {
     /^Thread RCON Listener .* started$/i.test(message) ||
     /^RCON running on /.test(message)
   );
-}
-
-function describeStatusTransition(status: string) {
-  switch (status) {
-    case "running":
-      return null;
-    case "starting":
-      return "Starting Minecraft...";
-    case "restarting":
-      return "Restarting server...";
-    case "stopping":
-      return "Stopping server";
-    case "stopped":
-      return "Server marked as stopped";
-    case "creating":
-      return "Starting container";
-    case "crashed":
-      return "Server crashed";
-    default:
-      return `Status changed: ${status}`;
-  }
 }

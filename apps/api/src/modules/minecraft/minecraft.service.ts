@@ -334,7 +334,15 @@ export async function createMinecraftServer(
       version,
       gamePort: MINECRAFT_INTERNAL_GAME_PORT,
       rconPort: DEFAULT_RCON_PORT,
-      gracefulStopCommand: "stop"
+      gracefulStopCommand: "stop",
+      serverProperties: buildMinecraftServerPropertiesSnapshot({
+        motd: motd ?? `${input.name} — Phantom`,
+        difficulty,
+        gameMode,
+        maxPlayers,
+        onlineMode,
+        whitelistEnabled: false
+      })
     }
   };
 
@@ -1382,7 +1390,21 @@ function buildUpdatedMinecraftWorkloadConfig(
 
   return {
     ...currentConfig,
-    env: nextEnv
+    env: nextEnv,
+    minecraft: {
+      ...((currentConfig.minecraft as Record<string, unknown> | undefined) ?? {}),
+      version: input.version,
+      rconPort: DEFAULT_RCON_PORT,
+      gracefulStopCommand: "stop",
+      serverProperties: buildMinecraftServerPropertiesSnapshot({
+        motd: input.motd,
+        difficulty: input.difficulty,
+        gameMode: input.gameMode,
+        maxPlayers: input.maxPlayers,
+        onlineMode: input.onlineMode,
+        whitelistEnabled: input.whitelistEnabled
+      })
+    }
   };
 }
 

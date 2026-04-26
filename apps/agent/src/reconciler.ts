@@ -247,6 +247,7 @@ export class WorkloadReconciler {
       }
     }
 
+    await this.docker.materializeMinecraftServerProperties(workload);
     await this.docker.startContainer(container.id);
     await this.api.sendEvent(workload.id, {
       type: "started",
