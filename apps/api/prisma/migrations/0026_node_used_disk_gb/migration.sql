@@ -1,0 +1,2 @@
+ALTER TABLE "nodes"
+ADD COLUMN "used_disk_gb" INTEGER NOT NULL DEFAULT 0;

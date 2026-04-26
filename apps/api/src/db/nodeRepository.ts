@@ -135,6 +135,7 @@ export interface UpdateNodeHeartbeatRecordInput {
   health: string;
   usedRamMb?: number;
   usedCpu?: number;
+  usedDiskGb?: number;
   totalRamMb?: number;
   totalCpu?: number;
   totalDiskGb?: number;
@@ -166,6 +167,7 @@ export function updateNodeHeartbeatRecord(
       health: updates.health,
       ...(updates.usedRamMb !== undefined ? { usedRamMb: updates.usedRamMb } : {}),
       ...(updates.usedCpu !== undefined ? { usedCpu: updates.usedCpu } : {}),
+      ...(updates.usedDiskGb !== undefined ? { usedDiskGb: Math.round(updates.usedDiskGb) } : {}),
       ...(updates.totalRamMb !== undefined ? { totalRamMb: updates.totalRamMb } : {}),
       ...(updates.totalCpu !== undefined ? { totalCpu: updates.totalCpu } : {}),
       ...(updates.totalDiskGb !== undefined ? { totalDiskGb: updates.totalDiskGb } : {}),

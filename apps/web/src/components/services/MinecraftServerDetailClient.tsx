@@ -29,7 +29,7 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [hostnameSlug, setHostnameSlug] = useState("");
   const [optimisticRuntimeState, setOptimisticRuntimeState] = useState<MinecraftServerWithWorkload["server"]["runtimeState"] | null>(null);
-  const [activeTab, setActiveTab] = useState<"files" | "backups" | "plugins" | "settings">("files");
+  const [activeTab, setActiveTab] = useState<"console" | "files" | "settings">("console");
   const [globalSettings, setGlobalSettings] = useState<MinecraftGlobalSettings | null>(null);
 
   const refresh = useCallback(async () => {
@@ -66,7 +66,7 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
         setOptimisticRuntimeState(null);
         return;
       }
-      if (entry.server.runtimeState === "starting" || entry.server.runtimeState === "waking") {
+      if (entry.server.runtimeState === "starting") {
         setOptimisticRuntimeState("starting");
         return;
       }
@@ -78,7 +78,7 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
     }
 
     if (
-      (optimisticRuntimeState === "starting" || optimisticRuntimeState === "waking") &&
+      optimisticRuntimeState === "starting" &&
       entry.server.runtimeState === "running" &&
       entry.server.readyAt
     ) {
@@ -86,7 +86,7 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
       return;
     }
 
-    if (optimisticRuntimeState === "stopping" && ["stopped", "sleeping"].includes(entry.server.runtimeState)) {
+    if (optimisticRuntimeState === "stopping" && entry.server.runtimeState === "stopped") {
       setOptimisticRuntimeState(null);
       return;
     }
@@ -126,10 +126,7 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
       ...entry,
       server: {
         ...entry.server,
-        runtimeState:
-          optimisticRuntimeState === "starting" && entry.server.runtimeState === "waking"
-            ? "starting"
-            : optimisticRuntimeState,
+        runtimeState: optimisticRuntimeState,
         readyAt:
           optimisticRuntimeState === "running" || optimisticRuntimeState === null
             ? entry.server.readyAt
@@ -152,7 +149,7 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
     setBusy(action);
     try {
       if (action === "start") {
-        setOptimisticRuntimeState(entry.server.sleeping ? "waking" : "starting");
+        setOptimisticRuntimeState("starting");
         await adminApi.startMinecraftServer(entry.server.id);
       } else if (action === "stop") {
         setOptimisticRuntimeState("stopping");
@@ -232,17 +229,30 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <ActionButton
-              label={displayEntry.server.runtimeState === "sleeping" ? "Wake" : "Start"}
-              busy={busy === "start"}
-              onClick={() => void runAction("start")}
-            />
-            <ActionButton label="Stop" busy={busy === "stop"} onClick={() => void runAction("stop")} />
-            <ActionButton label="Restart" busy={busy === "restart"} onClick={() => void runAction("restart")} />
             <ActionButton label="Delete" busy={busy === "delete"} destructive onClick={() => void runAction("delete")} />
           </div>
         </div>
       </section>
+
+      <MinecraftServiceConsole
+        entry={displayEntry}
+        onRefresh={refresh}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+      />
+
+      {activeTab === "files" ? (
+        <MinecraftFilesManager entry={displayEntry} />
+      ) : activeTab === "settings" ? (
+        <MinecraftSettingsForm
+          entry={displayEntry}
+          globalSettings={globalSettings}
+          onSaved={(next) => {
+            setEntry(next);
+            setError(null);
+          }}
+        />
+      ) : null}
 
       <section className="grid grid-cols-1 gap-6 xl:grid-cols-3">
         <DetailCard title="Resources">
@@ -264,7 +274,10 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
             <MetricRow label="Restart count" value={String(entry.workload.restartCount)} />
             <MetricRow label="AutoSleep" value={displayEntry.server.autoSleepEnabled ? "Enabled" : "Disabled"} />
             <MetricRow label="AutoSleep delay" value={`${displayEntry.server.autoSleepIdleMinutes} min`} />
-            <MetricRow label="AutoSleep action" value={displayEntry.server.autoSleepAction} />
+            <MetricRow
+              label="AutoSleep action"
+              value={displayEntry.server.autoSleepAction === "sleep" ? "stop" : displayEntry.server.autoSleepAction}
+            />
             <MetricRow label="Players online" value={String(displayEntry.server.currentPlayerCount)} />
             <MetricRow label="Idle since" value={formatDateTime(displayEntry.server.idleSince)} />
             <MetricRow label="Last player seen" value={formatDateTime(displayEntry.server.lastPlayerSeenAt)} />
@@ -344,55 +357,6 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
         </DetailCard>
       </section>
 
-      <MinecraftServiceConsole entry={displayEntry} onRefresh={refresh} />
-
-      <section className="space-y-4">
-        <div className="flex flex-wrap gap-2">
-          {[
-            ["files", "Files"],
-            ["backups", "Backups"],
-            ["plugins", "Plugins"],
-            ["settings", "Settings"]
-          ].map(([value, label]) => (
-            <button
-              key={value}
-              type="button"
-              onClick={() => setActiveTab(value as "files" | "backups" | "plugins" | "settings")}
-              className={`rounded-full px-4 py-2 text-sm transition ${
-                activeTab === value
-                  ? "border border-accent/30 bg-accent/[0.12] text-white"
-                  : "border border-white/10 bg-white/[0.04] text-slate-400 hover:text-white"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
-        {activeTab === "files" ? (
-          <MinecraftFilesManager entry={displayEntry} />
-        ) : activeTab === "backups" ? (
-          <PlaceholderCard
-            title="Backups"
-            description="Backup orchestration will plug into this service detail without changing the files transport."
-          />
-        ) : activeTab === "plugins" ? (
-          <PlaceholderCard
-            title="Plugins"
-            description="Plugin inventory and install actions will be layered on top of the current admin service model."
-          />
-        ) : (
-          <MinecraftSettingsForm
-            entry={displayEntry}
-            globalSettings={globalSettings}
-            onSaved={(next) => {
-              setEntry(next);
-              setError(null);
-            }}
-          />
-        )}
-      </section>
-
       <DetailCard title="References">
         <div className="grid gap-3 text-sm md:grid-cols-2">
           <MetricRow label="Created" value={formatDateTime(entry.server.createdAt)} />
@@ -461,10 +425,6 @@ function StatePill({ label }: { label: string }) {
 
 function formatRuntimeState(value: MinecraftServerWithWorkload["server"]["runtimeState"]) {
   switch (value) {
-    case "sleeping":
-      return "Sleeping";
-    case "waking":
-      return "Waking";
     case "starting":
       return "Starting";
     case "restarting":
@@ -551,13 +511,5 @@ function ActionButton({
     >
       {busy ? `${label}...` : label}
     </button>
-  );
-}
-
-function PlaceholderCard({ title, description }: { title: string; description: string }) {
-  return (
-    <DetailCard title={title}>
-      <p className="text-sm text-slate-400">{description}</p>
-    </DetailCard>
   );
 }

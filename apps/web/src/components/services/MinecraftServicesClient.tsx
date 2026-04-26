@@ -161,20 +161,23 @@ export function MinecraftServicesClient() {
               <label className="grid gap-2 text-sm text-white">
                 <span>Action</span>
                 <select
-                  value={freeTierSettings.freeAutoSleepAction}
+                  value={
+                    freeTierSettings.freeAutoSleepAction === "sleep"
+                      ? "stop"
+                      : freeTierSettings.freeAutoSleepAction
+                  }
                   onChange={(event) =>
                     setFreeTierSettings((current) =>
                       current
                         ? {
                             ...current,
-                            freeAutoSleepAction: event.target.value as "sleep" | "stop"
+                            freeAutoSleepAction: event.target.value as "stop"
                           }
                         : current
                     )
                   }
                   className={inputClass}
                 >
-                  <option value="sleep">Sleep</option>
                   <option value="stop">Stop</option>
                 </select>
               </label>
@@ -334,10 +337,6 @@ function StatusChip({ label }: { label: string }) {
 
 function formatRuntimeState(value: MinecraftServerWithWorkload["server"]["runtimeState"]) {
   switch (value) {
-    case "sleeping":
-      return "Sleeping";
-    case "waking":
-      return "Waking";
     case "starting":
       return "Starting";
     case "restarting":

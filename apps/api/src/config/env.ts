@@ -41,6 +41,7 @@ export const env = {
   autoSleepEnabled: (process.env.AUTO_SLEEP_ENABLED ?? "true").toLowerCase() !== "false",
   autoSleepIdleMinutes: Number(process.env.AUTO_SLEEP_IDLE_MINUTES ?? 10),
   autoSleepMonitorTickMs: Number(process.env.AUTO_SLEEP_MONITOR_TICK_MS ?? 30_000),
+  incidentMonitorTickMs: Number(process.env.INCIDENT_MONITOR_TICK_MS ?? 5_000),
   hostingRootDomain: process.env.HOSTING_ROOT_DOMAIN ?? "nptnz.co.uk",
   dnsProvider: (process.env.DNS_PROVIDER ?? "noop").toLowerCase(),
   dnsRecordType: (process.env.DNS_RECORD_TYPE ?? "CNAME").toUpperCase(),
@@ -69,6 +70,7 @@ export function assertRuntimeConfig() {
     !Number.isFinite(env.queuedStartMonitorTickMs) ||
     !Number.isFinite(env.autoSleepIdleMinutes) ||
     !Number.isFinite(env.autoSleepMonitorTickMs) ||
+    !Number.isFinite(env.incidentMonitorTickMs) ||
     !Number.isFinite(env.workloadDeleteTimeoutMs) ||
     !Number.isFinite(env.workloadDeleteMonitorTickMs) ||
     env.nodeHeartbeatTimeoutMs <= 0 ||
@@ -80,6 +82,7 @@ export function assertRuntimeConfig() {
     env.queuedStartMonitorTickMs <= 0 ||
     env.autoSleepIdleMinutes <= 0 ||
     env.autoSleepMonitorTickMs <= 0 ||
+    env.incidentMonitorTickMs <= 0 ||
     env.workloadDeleteTimeoutMs <= 0 ||
     env.workloadDeleteMonitorTickMs <= 0
   ) {

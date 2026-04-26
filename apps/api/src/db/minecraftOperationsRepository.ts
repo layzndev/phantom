@@ -52,15 +52,23 @@ export function findMinecraftOperationById(id: string) {
   return db.minecraftOperation.findUnique({ where: { id } });
 }
 
-export async function listPendingMinecraftOperationsForNode(nodeId: string, limit = 5) {
-  return db.minecraftOperation.findMany({
+export async function listPendingMinecraftOperationsForNode(nodeId: string, limit = 25) {
+  const operations = await db.minecraftOperation.findMany({
     where: {
       status: "pending",
       workload: { nodeId }
     },
     orderBy: { createdAt: "asc" },
-    take: limit
+    take: Math.max(limit * 4, limit)
   });
+
+  return operations
+    .sort(
+      (left, right) =>
+        rankKind(left.kind as MinecraftOperationKind) -
+        rankKind(right.kind as MinecraftOperationKind)
+    )
+    .slice(0, limit);
 }
 
 export function markMinecraftOperationInProgress(id: string) {
@@ -98,4 +106,11 @@ export function findActiveMinecraftOperationByWorkloadAndKind(
     },
     orderBy: { createdAt: "desc" }
   });
+}
+
+function rankKind(kind: MinecraftOperationKind) {
+  if (kind.startsWith("files.")) return 0;
+  if (kind === "stop" || kind === "save" || kind === "command") return 1;
+  if (kind === "logs") return 2;
+  return 3;
 }

@@ -7,8 +7,6 @@ export type MinecraftDnsStatus = "wildcard" | "disabled" | "pending" | "active" 
 export type MinecraftFileAccessMode = "infra_admin" | "tenant_user";
 export type MinecraftAutoSleepAction = "sleep" | "stop";
 export type MinecraftRuntimeState =
-  | "sleeping"
-  | "waking"
   | "starting"
   | "running"
   | "stopping"
@@ -43,7 +41,6 @@ export interface MinecraftServer {
   onlineMode: boolean;
   whitelistEnabled: boolean;
   runtimeState: MinecraftRuntimeState;
-  sleeping: boolean;
   currentPlayerCount: number;
   idleSince: string | null;
   lastPlayerSeenAt: string | null;
@@ -52,7 +49,6 @@ export interface MinecraftServer {
   lastPlayerCheckError: string | null;
   lastConsoleCommandAt: string | null;
   sleepRequestedAt: string | null;
-  sleepingAt: string | null;
   wakeRequestedAt: string | null;
   readyAt: string | null;
   serverProperties: Record<string, unknown>;

@@ -9,10 +9,14 @@ const RECONNECT_DELAY_MS = 2_000;
 
 export function MinecraftServiceConsole({
   entry,
-  onRefresh
+  onRefresh,
+  activeTab,
+  onTabChange
 }: {
   entry: MinecraftServerWithWorkload;
   onRefresh: () => Promise<void> | void;
+  activeTab: "console" | "files" | "settings";
+  onTabChange: (tab: "console" | "files" | "settings") => void;
 }) {
   const [lines, setLines] = useState<MinecraftConsoleLine[]>([]);
   const [commandInput, setCommandInput] = useState("");
@@ -125,7 +129,7 @@ export function MinecraftServiceConsole({
             );
           } else if (payload.type === "status") {
             const normalizedStatus =
-              payload.status === "waking" && currentRuntimeStateRef.current === "restarting"
+              payload.status === "starting" && currentRuntimeStateRef.current === "restarting"
                 ? "starting"
                 : payload.status;
             if (lastStatusRef.current !== normalizedStatus) {
@@ -274,6 +278,30 @@ export function MinecraftServiceConsole({
     }
   };
 
+  const handleStart = async () => {
+    setBusy(true);
+    try {
+      lastStatusRef.current = "starting";
+      commandHistoryRef.current.clear();
+      setLines([
+        {
+          id: crypto.randomUUID(),
+          timestamp: new Date().toISOString(),
+          kind: "info",
+          channel: "PHANTOM",
+          text: "Starting Minecraft..."
+        }
+      ]);
+      await adminApi.startMinecraftServer(entry.server.id);
+      manuallyClosedRef.current = false;
+      shouldReconnectRef.current = true;
+      socketRef.current?.close();
+      await onRefresh();
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const handleRestart = async () => {
     setBusy(true);
     try {
@@ -316,6 +344,7 @@ export function MinecraftServiceConsole({
       commandInput={commandInput}
       onCommandInputChange={setCommandInput}
       onCommandSubmit={handleSubmit}
+      onStart={() => void handleStart()}
       onSave={handleSave}
       onFetchLogs={handleReconnectLogs}
       onRestart={() => void handleRestart()}
@@ -324,6 +353,8 @@ export function MinecraftServiceConsole({
       busy={derivedBusy}
       operatorLabel="admin"
       phantomIdentity={phantomIdentity}
+      activeTab={activeTab}
+      onTabChange={onTabChange}
     />
   );
 }
@@ -516,16 +547,12 @@ function describeStatusTransition(status: string) {
   switch (status) {
     case "running":
       return null;
-    case "waking":
-      return "Waking server...";
     case "starting":
       return "Starting Minecraft...";
     case "restarting":
       return "Restarting server...";
     case "stopping":
       return "Stopping server";
-    case "sleeping":
-      return null;
     case "stopped":
       return "Server marked as stopped";
     case "creating":

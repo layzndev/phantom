@@ -262,6 +262,7 @@ export async function acceptNodeHeartbeat(
     health: nextHealth,
     ...(payload.ramUsedMb !== undefined ? { usedRamMb: payload.ramUsedMb } : {}),
     ...(payload.cpuUsed !== undefined ? { usedCpu: payload.cpuUsed } : {}),
+    ...(payload.diskUsedGb !== undefined ? { usedDiskGb: payload.diskUsedGb } : {}),
     totalRamMb: payload.totalRamMb,
     totalCpu: payload.totalCpu,
     totalDiskGb: payload.totalDiskGb,

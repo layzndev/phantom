@@ -105,8 +105,8 @@ export class PhantomAgent {
         });
       }
 
-      await this.reconciler.reconcileOnce();
       await this.minecraftOps.processOnce();
+      await this.reconciler.reconcileOnce();
       await this.minecraftConsole.reconcileOnce();
 
       try {

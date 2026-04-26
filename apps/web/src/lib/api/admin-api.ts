@@ -11,6 +11,8 @@ import type {
   DeleteMinecraftServerResult,
   DeleteWorkloadOptions,
   DeleteWorkloadResult,
+  Incident,
+  IncidentSummary,
   MinecraftServerWithWorkload,
   MinecraftFilesListResult,
   MinecraftFileReadResult,
@@ -66,6 +68,56 @@ export const adminApi = {
     apiRequest<{ admin: AdminUser }>("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
   logout: () => apiRequest<void>("/auth/logout", { method: "POST" }),
   me: () => apiRequest<{ admin: AdminUser }>("/auth/me"),
+  incidents: (options?: {
+    status?: string;
+    severity?: string;
+    scope?: string;
+    sourceId?: string;
+    sourceType?: string;
+    window?: "24h" | "7d" | "all";
+    limit?: number;
+  }) =>
+    apiRequest<{ incidents: Incident[] }>(
+      `/incidents?${new URLSearchParams(
+        Object.entries({
+          status: options?.status,
+          severity: options?.severity,
+          scope: options?.scope,
+          sourceId: options?.sourceId,
+          sourceType: options?.sourceType,
+          window: options?.window,
+          limit: options?.limit !== undefined ? String(options.limit) : undefined
+        }).filter(([, value]) => typeof value === "string" && value.length > 0) as Array<
+          [string, string]
+        >
+      ).toString()}`
+    ),
+  incidentSummary: () => apiRequest<{ summary: IncidentSummary }>("/incidents/summary"),
+  incident: (id: string) =>
+    apiRequest<{ incident: Incident }>(`/incidents/${encodeURIComponent(id)}`),
+  acknowledgeIncident: (id: string) =>
+    apiRequest<{ incident: Incident }>(`/incidents/${encodeURIComponent(id)}/acknowledge`, {
+      method: "POST"
+    }),
+  assignIncidentToMe: (id: string) =>
+    apiRequest<{ incident: Incident }>(`/incidents/${encodeURIComponent(id)}/assign-to-me`, {
+      method: "POST"
+    }),
+  resolveIncident: (id: string, payload: { rootCause?: string; internalNotes?: string } = {}) =>
+    apiRequest<{ incident: Incident }>(`/incidents/${encodeURIComponent(id)}/resolve`, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
+  reopenIncident: (id: string, payload: { note?: string } = {}) =>
+    apiRequest<{ incident: Incident }>(`/incidents/${encodeURIComponent(id)}/reopen`, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
+  addIncidentNote: (id: string, note: string) =>
+    apiRequest<{ incident: Incident }>(`/incidents/${encodeURIComponent(id)}/note`, {
+      method: "POST",
+      body: JSON.stringify({ note })
+    }),
   nodeSummary: () => apiRequest<{ summary: NodeSummary }>("/nodes/summary"),
   clearNodeIncidents: () => apiRequest<{ clearedCount: number; clearedAt: string }>("/nodes/incidents/clear", { method: "POST" }),
   notifications: (options?: { includeDismissed?: boolean; limit?: number }) =>

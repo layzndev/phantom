@@ -27,6 +27,7 @@ interface MinecraftConsoleProps {
   commandInput: string;
   onCommandInputChange: (value: string) => void;
   onCommandSubmit: () => void;
+  onStart?: () => void;
   onSave: () => void;
   onFetchLogs: () => void;
   onRestart: () => void;
@@ -35,9 +36,15 @@ interface MinecraftConsoleProps {
   busy: boolean;
   operatorLabel?: string;
   phantomIdentity?: string;
+  activeTab?: "console" | "files" | "settings";
+  onTabChange?: (tab: "console" | "files" | "settings") => void;
 }
 
-const TABS = ["Console", "Files", "Upgrade", "Backups", "Plugins", "Monetise", "Settings"] as const;
+const TABS = [
+  { value: "console", label: "Console" },
+  { value: "files", label: "Files" },
+  { value: "settings", label: "Settings" }
+] as const;
 
 export function MinecraftConsole({
   entry,
@@ -48,6 +55,7 @@ export function MinecraftConsole({
   commandInput,
   onCommandInputChange,
   onCommandSubmit,
+  onStart,
   onSave,
   onFetchLogs,
   onRestart,
@@ -55,7 +63,9 @@ export function MinecraftConsole({
   onClear,
   busy,
   operatorLabel = "operator",
-  phantomIdentity = "phantom@system~"
+  phantomIdentity = "phantom@system~",
+  activeTab = "console",
+  onTabChange
 }: MinecraftConsoleProps) {
   const consoleReady = entry?.server.runtimeState === "running" && Boolean(entry?.server.readyAt);
   const singleServerView = servers.length <= 1;
@@ -81,6 +91,13 @@ export function MinecraftConsole({
   const cpuLabel = entry ? `${entry.workload.requestedCpu} vCPU` : "— vCPU";
   const ramLabel = entry ? `${entry.workload.requestedRamMb} MB` : "— MB";
   const addressLabel = externalPort ? `:${externalPort}` : "—";
+  const canSwitchTabs = Boolean(onTabChange);
+  const canStart =
+    !!entry && Boolean(onStart) && ["stopped", "crashed"].includes(entry.server.runtimeState);
+  const canRestart =
+    !!entry && ["running", "starting", "restarting"].includes(entry.server.runtimeState);
+  const canStop =
+    !!entry && ["running", "starting", "restarting", "stopping"].includes(entry.server.runtimeState);
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -172,8 +189,16 @@ export function MinecraftConsole({
             ) : null}
             <button
               type="button"
+              onClick={onStart}
+              disabled={!canStart || busy}
+              className="inline-flex h-9 items-center gap-2 rounded-md border border-emerald-500/25 bg-emerald-500/[0.06] px-4 text-sm font-bold text-emerald-200 transition hover:border-emerald-400/40 hover:bg-emerald-500/[0.1] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <PowerIcon className="h-[15px] w-[15px]" /> Start
+            </button>
+            <button
+              type="button"
               onClick={onRestart}
-              disabled={!entry || busy}
+              disabled={!canRestart || busy}
               className="inline-flex h-9 items-center gap-2 rounded-md border border-white/10 bg-white/[0.025] px-4 text-sm font-bold text-slate-100 transition hover:border-white/20 hover:bg-white/[0.05] disabled:cursor-not-allowed disabled:opacity-40"
             >
               <RestartIcon className="h-[15px] w-[15px]" /> Restart
@@ -181,7 +206,7 @@ export function MinecraftConsole({
             <button
               type="button"
               onClick={onStop}
-              disabled={!entry || busy || entry.workload.desiredStatus === "stopped"}
+              disabled={!canStop || busy}
               className="inline-flex h-9 items-center gap-2 rounded-md border border-red-500/25 bg-red-500/[0.06] px-4 text-sm font-bold text-red-300 transition hover:border-red-400/40 hover:bg-red-500/[0.1] disabled:cursor-not-allowed disabled:opacity-40"
             >
               <PowerIcon className="h-[15px] w-[15px]" /> Stop
@@ -193,16 +218,17 @@ export function MinecraftConsole({
       <nav className="mt-4 flex gap-6 border-b border-white/10 text-sm font-semibold text-slate-500">
         {TABS.map((tab) => (
           <button
-            key={tab}
+            key={tab.value}
             type="button"
-            disabled={tab !== "Console"}
-            className={`relative pb-3 transition disabled:cursor-not-allowed ${
-              tab === "Console"
+            onClick={() => onTabChange?.(tab.value)}
+            disabled={!canSwitchTabs}
+            className={`relative pb-3 transition disabled:cursor-not-allowed disabled:opacity-60 ${
+              activeTab === tab.value
                 ? "text-white after:absolute after:bottom-[-1px] after:left-0 after:h-0.5 after:w-full after:rounded-full after:bg-white"
                 : "hover:text-slate-300"
             }`}
           >
-            {tab}
+            {tab.label}
           </button>
         ))}
       </nav>

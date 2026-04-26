@@ -14,6 +14,10 @@ import {
   type MinecraftAutoSleepMonitorHandle
 } from "./modules/minecraft/minecraft.autosleep.monitor.js";
 import {
+  startIncidentMonitor,
+  type IncidentMonitorHandle
+} from "./modules/incidents/incidents.monitor.js";
+import {
   startNodeRuntimeMonitor,
   type NodeRuntimeMonitorHandle
 } from "./modules/nodes/nodes.runtime.monitor.js";
@@ -70,6 +74,7 @@ const workloadQueuedStartMonitor: WorkloadQueuedStartMonitorHandle | null =
 const minecraftAutoSleepMonitor: MinecraftAutoSleepMonitorHandle | null = env.autoSleepEnabled
   ? startMinecraftAutoSleepMonitor()
   : null;
+const incidentMonitor: IncidentMonitorHandle = startIncidentMonitor();
 
 let shuttingDown = false;
 
@@ -105,6 +110,12 @@ async function shutdown(signal: string, exitCode = 0) {
     if (minecraftAutoSleepMonitor) await minecraftAutoSleepMonitor.stop();
   } catch (err) {
     console.error("[server] error while stopping minecraft autosleep monitor", err);
+  }
+
+  try {
+    await incidentMonitor.stop();
+  } catch (err) {
+    console.error("[server] error while stopping incident monitor", err);
   }
 
   try {

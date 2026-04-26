@@ -38,6 +38,9 @@ model Admin {
   auditLogs                 AuditLog[]
   notificationsRead         SystemNotification[] @relation("NotificationReadBy")
   notificationsDismissed    SystemNotification[] @relation("NotificationDismissedBy")
+  acknowledgedIncidents     Incident[]           @relation("IncidentAcknowledgedBy")
+  assignedIncidents         Incident[]           @relation("IncidentAssignedTo")
+  incidentEvents            IncidentEvent[]
 
   @@index([roleId])
   @@index([status])
@@ -96,6 +99,7 @@ model Node {
   usedRamMb       Int               @default(0) @map("used_ram_mb")
   totalCpu        Float?            @map("total_cpu")
   usedCpu         Float             @default(0) @map("used_cpu")
+  usedDiskGb      Int               @default(0) @map("used_disk_gb")
   lastHeartbeatAt DateTime?         @map("last_heartbeat_at")
   portRangeStart       Int?         @map("port_range_start")
   portRangeEnd         Int?         @map("port_range_end")
@@ -122,6 +126,7 @@ model Node {
   tokens          NodeToken[]
   statusEvents    NodeStatusEvent[]
   notifications   SystemNotification[]
+  incidents       Incident[]
   workloads       Workload[]
 
   @@index([status])
@@ -130,6 +135,60 @@ model Node {
   @@index([pool])
   @@index([lastHeartbeatAt])
   @@map("nodes")
+}
+
+model Incident {
+  id               String        @id @default(uuid())
+  title            String
+  description      String?
+  severity         String
+  status           String        @default("open")
+  scope            String
+  sourceType       String?       @map("source_type")
+  sourceId         String?       @map("source_id")
+  dedupeKey        String        @map("dedupe_key")
+  startedAt        DateTime      @default(now()) @map("started_at")
+  lastSeenAt       DateTime      @default(now()) @map("last_seen_at")
+  resolvedAt       DateTime?     @map("resolved_at")
+  acknowledgedAt   DateTime?     @map("acknowledged_at")
+  acknowledgedById String?       @map("acknowledged_by_id")
+  acknowledgedBy   Admin?        @relation("IncidentAcknowledgedBy", fields: [acknowledgedById], references: [id], onDelete: SetNull)
+  assignedToId     String?       @map("assigned_to_id")
+  assignedTo       Admin?        @relation("IncidentAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
+  resolutionType   String?       @map("resolution_type")
+  rootCause        String?       @map("root_cause")
+  internalNotes    String?       @map("internal_notes")
+  metadata         Json?
+  nodeId           String?       @map("node_id")
+  node             Node?         @relation(fields: [nodeId], references: [id], onDelete: SetNull)
+  createdAt        DateTime      @default(now()) @map("created_at")
+  updatedAt        DateTime      @updatedAt @map("updated_at")
+  events           IncidentEvent[]
+
+  @@index([dedupeKey])
+  @@index([status])
+  @@index([severity])
+  @@index([scope])
+  @@index([sourceType, sourceId])
+  @@index([nodeId])
+  @@index([createdAt])
+  @@map("incidents")
+}
+
+model IncidentEvent {
+  id         String   @id @default(uuid())
+  incidentId String   @map("incident_id")
+  incident   Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  type       String
+  message    String
+  metadata   Json?
+  actorId    String?  @map("actor_id")
+  actor      Admin?   @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([incidentId])
+  @@index([createdAt])
+  @@map("incident_events")
 }
 
 model SystemNotification {

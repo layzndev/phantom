@@ -14,7 +14,7 @@ type SettingsState = {
   autoSleepUseGlobalDefaults: boolean;
   autoSleepEnabled: boolean;
   autoSleepIdleMinutes: number;
-  autoSleepAction: "sleep" | "stop";
+  autoSleepAction: "stop";
   maxPlayers: number;
   onlineMode: boolean;
   difficulty: MinecraftDifficulty;
@@ -93,7 +93,8 @@ export function MinecraftSettingsForm({
           {form.autoSleepUseGlobalDefaults && globalSettings ? (
             <div className="rounded-2xl bg-white/[0.04] px-4 py-3 text-xs text-slate-400">
               Global defaults: {globalSettings.freeAutoSleepEnabled ? "Enabled" : "Disabled"} ·{" "}
-              {globalSettings.freeAutoSleepIdleMinutes} min · {globalSettings.freeAutoSleepAction}
+              {globalSettings.freeAutoSleepIdleMinutes} min ·{" "}
+              {globalSettings.freeAutoSleepAction === "sleep" ? "stop" : globalSettings.freeAutoSleepAction}
             </div>
           ) : null}
           <ToggleRow
@@ -119,19 +120,18 @@ export function MinecraftSettingsForm({
               className={inputClass}
             />
           </Field>
-          <Field label="Action" hint="Sleep can wake automatically from the panel. Stop requires a manual start.">
+          <Field label="Action" hint="AutoSleep now performs a real Minecraft stop. Starting again is manual.">
             <select
               value={form.autoSleepAction}
               onChange={(event) =>
                 setForm((current) => ({
                   ...current,
-                  autoSleepAction: event.target.value as "sleep" | "stop"
+                  autoSleepAction: event.target.value as "stop"
                 }))
               }
               disabled={form.autoSleepUseGlobalDefaults}
               className={inputClass}
             >
-              <option value="sleep">Sleep</option>
               <option value="stop">Stop</option>
             </select>
           </Field>
@@ -257,7 +257,7 @@ function toFormState(entry: MinecraftServerWithWorkload): SettingsState {
     autoSleepUseGlobalDefaults: entry.server.autoSleepUseGlobalDefaults,
     autoSleepEnabled: entry.server.autoSleepEnabled,
     autoSleepIdleMinutes: entry.server.autoSleepIdleMinutes,
-    autoSleepAction: entry.server.autoSleepAction,
+    autoSleepAction: "stop",
     maxPlayers: entry.server.maxPlayers,
     onlineMode: entry.server.onlineMode,
     difficulty: entry.server.difficulty,

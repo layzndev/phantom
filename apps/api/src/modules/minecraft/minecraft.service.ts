@@ -93,7 +93,9 @@ const JVM_HEADROOM_MB = 512;
 const MINECRAFT_STOP_TIMEOUT_SECONDS = 60;
 const MINECRAFT_VOLUME_NAME = "minecraft-data";
 const MINECRAFT_VOLUME_CONTAINER_PATH = "/data";
-const OPERATION_WAIT_TIMEOUT_MS = 5_000;
+const OPERATION_WAIT_TIMEOUT_MS = 8_000;
+const FILE_READ_OPERATION_WAIT_TIMEOUT_MS = 20_000;
+const FILE_MUTATION_OPERATION_WAIT_TIMEOUT_MS = 30_000;
 const OPERATION_POLL_INTERVAL_MS = 250;
 
 export async function getMinecraftTemplates() {
@@ -366,7 +368,7 @@ export async function createMinecraftServer(
       autoSleepUseGlobalDefaults: planTier === "free",
       autoSleepEnabled: planTier === "free",
       autoSleepIdleMinutes: planTier === "free" ? env.autoSleepIdleMinutes : 10,
-      autoSleepAction: "sleep",
+      autoSleepAction: "stop",
       onlineMode: true,
       whitelistEnabled: false,
       serverProperties: buildMinecraftServerPropertiesSnapshot({
@@ -404,8 +406,8 @@ export async function startMinecraftServer(id: string) {
     lastActivityAt: new Date()
   });
   const workload = await startWorkload(record.workloadId);
-  publishPhantomConsoleLifecycle(record.id, "Waking server...");
-  minecraftConsoleGateway.publishStatus(record.id, "waking");
+  publishPhantomConsoleLifecycle(record.id, "Starting server...");
+  minecraftConsoleGateway.publishStatus(record.id, "starting");
   return { server: toMinecraftServer(updatedServer), workload };
 }
 
@@ -558,7 +560,7 @@ export async function enqueueMinecraftOperation(
     );
   }
 
-  if (kind === "stop" && !["running", "starting", "waking", "stopping"].includes(runtimeState)) {
+  if (kind === "stop" && !["running", "starting", "stopping"].includes(runtimeState)) {
     throw new AppError(
       409,
       "Minecraft server is not running.",
@@ -584,7 +586,10 @@ export async function enqueueMinecraftOperation(
     });
   }
 
-  const finalRecord = await waitForMinecraftOperation(operation.id);
+  const finalRecord = await waitForMinecraftOperation(
+    operation.id,
+    getOperationWaitTimeoutMs(kind)
+  );
   const isPending = isOperationPending(finalRecord);
   return {
     operation: toMinecraftOperation(finalRecord),
@@ -861,7 +866,7 @@ export async function wakeRuntimeMinecraftServer(
   const workload = await getWorkload(record.workloadId);
   const status = deriveMinecraftRuntimeState(record, workload);
 
-  if (status === "running" || status === "starting" || status === "waking") {
+  if (status === "running" || status === "starting") {
     return { ok: true, serverId: record.id, status, triggered: false };
   }
 
@@ -1009,7 +1014,7 @@ export async function runMinecraftAutoSleepTick() {
       continue;
     }
 
-    if (record.sleepRequestedAt !== null || record.sleepingAt !== null) {
+    if (record.sleepRequestedAt !== null) {
       continue;
     }
 
@@ -1051,7 +1056,7 @@ export async function runMinecraftAutoSleepTick() {
       continue;
     }
 
-    console.info("[autosleep] sleeping", {
+    console.info("[autosleep] stopping", {
       serverId: record.id,
       planTier: record.planTier,
       source: effectiveConfig.source,
@@ -1078,7 +1083,7 @@ export async function runMinecraftAutoSleepTick() {
         planTier: record.planTier,
         source: effectiveConfig.source,
         playersOnline: record.currentPlayerCount,
-        autoSleepAction: effectiveConfig.action,
+        autoSleepAction: "stop",
         thresholdMinutes: idleThresholdMinutes
       }
     });
@@ -1102,7 +1107,7 @@ export async function runMinecraftAutoSleepTick() {
 
     await updateMinecraftServerRecord(record.id, {
       sleepRequestedAt: new Date(),
-      autoSleepAction: effectiveConfig.action
+      autoSleepAction: "stop"
     });
     minecraftConsoleGateway.publishStatus(record.id, "stopping");
     await stopWorkload(record.workloadId);
@@ -1181,8 +1186,8 @@ export async function getMinecraftConsoleSession(id: string) {
   return detail;
 }
 
-async function waitForMinecraftOperation(operationId: string) {
-  const deadline = Date.now() + OPERATION_WAIT_TIMEOUT_MS;
+async function waitForMinecraftOperation(operationId: string, timeoutMs: number) {
+  const deadline = Date.now() + timeoutMs;
   let current = await findMinecraftOperationById(operationId);
   while (current && isOperationPending(current) && Date.now() < deadline) {
     await sleep(OPERATION_POLL_INTERVAL_MS);
@@ -1451,8 +1456,7 @@ function toMinecraftServer(record: MinecraftServerRecord): MinecraftServer {
     autoSleepAction: record.autoSleepAction as MinecraftAutoSleepAction,
     onlineMode: record.onlineMode,
     whitelistEnabled: record.whitelistEnabled,
-    runtimeState: record.sleepingAt !== null ? "sleeping" : "stopped",
-    sleeping: record.sleepingAt !== null,
+    runtimeState: "stopped",
     currentPlayerCount: record.currentPlayerCount,
     idleSince: record.idleSince?.toISOString() ?? null,
     lastPlayerSeenAt: record.lastPlayerSeenAt?.toISOString() ?? null,
@@ -1461,7 +1465,6 @@ function toMinecraftServer(record: MinecraftServerRecord): MinecraftServer {
     lastPlayerCheckError: record.lastPlayerCheckError ?? null,
     lastConsoleCommandAt: record.lastConsoleCommandAt?.toISOString() ?? null,
     sleepRequestedAt: record.sleepRequestedAt?.toISOString() ?? null,
-    sleepingAt: record.sleepingAt?.toISOString() ?? null,
     wakeRequestedAt: record.wakeRequestedAt?.toISOString() ?? null,
     readyAt: record.readyAt?.toISOString() ?? null,
     serverProperties: (record.serverProperties as Record<string, unknown>) ?? {},
@@ -1586,7 +1589,7 @@ async function processMinecraftOperationSideEffects(
           ? null
           : server.idleSince ?? server.lastActivityAt ?? server.lastConsoleCommandAt ?? now,
       sleepRequestedAt: sample.currentPlayers > 0 ? null : undefined,
-      sleepingAt: sample.currentPlayers > 0 ? null : undefined
+      sleepingAt: null
     });
     return;
   }
@@ -1702,9 +1705,6 @@ function deriveMinecraftRuntimeState(
   record: MinecraftServerRecord,
   workload: CompanyWorkload
 ): MinecraftServer["runtimeState"] {
-  if (record.sleepingAt !== null) {
-    return "sleeping";
-  }
   if (record.sleepRequestedAt !== null) {
     return "stopping";
   }
@@ -1715,16 +1715,16 @@ function deriveMinecraftRuntimeState(
     return "stopped";
   }
   if (workload.status === "queued_start" || workload.status === "pending") {
-    return "waking";
+    return "stopped";
   }
   if (workload.status === "creating") {
-    return record.wakeRequestedAt !== null ? "waking" : "starting";
+    return "starting";
   }
   if (workload.status === "running") {
     if (record.readyAt !== null) {
       return "running";
     }
-    return record.wakeRequestedAt !== null ? "waking" : "starting";
+    return "starting";
   }
   return "starting";
 }
@@ -1750,8 +1750,12 @@ async function prepareMinecraftServerForDelete(record: MinecraftServerRecord) {
 }
 
 function parsePlayerSample(result: Record<string, unknown> | null, maxPlayers: number) {
-  const output = typeof result?.output === "string" ? result.output : "";
-  const match = output.match(/There are\s+(\d+)\s+of a max(?:imum)?\s+(\d+)\s+players online/i);
+  const output = formatMinecraftOperationOutput(result);
+  const match =
+    output.match(
+      /There are\s+(\d+)\s+of(?:\s+a)?(?:\s+max(?:imum)?)?(?:\s+of)?\s+(\d+)\s+players online/i
+    ) ??
+    output.match(/There are\s+(\d+)\s*\/\s*(\d+)\s+players online/i);
   if (!match) {
     return { ok: false as const, currentPlayers: 0, maxPlayers, reason: "unparseable_player_count" };
   }
@@ -1783,6 +1787,16 @@ function evaluateAutoSleepPlayerCheck(record: MinecraftServerRecord) {
   }
 
   return { ok: true as const };
+}
+
+function getOperationWaitTimeoutMs(kind: MinecraftOperationKind) {
+  if (kind === "files.list" || kind === "files.read") {
+    return FILE_READ_OPERATION_WAIT_TIMEOUT_MS;
+  }
+  if (kind.startsWith("files.")) {
+    return FILE_MUTATION_OPERATION_WAIT_TIMEOUT_MS;
+  }
+  return OPERATION_WAIT_TIMEOUT_MS;
 }
 
 function resolveEffectiveAutoSleepConfig(

@@ -171,6 +171,79 @@ export interface SystemNotification {
   createdAt: string;
 }
 
+export type IncidentSeverity = "critical" | "high" | "medium" | "low";
+export type IncidentStatus = "open" | "acknowledged" | "resolved";
+export type IncidentScope =
+  | "global"
+  | "node"
+  | "proxy"
+  | "api"
+  | "database"
+  | "minecraft_server"
+  | "billing";
+export type IncidentEventType =
+  | "detected"
+  | "updated"
+  | "acknowledged"
+  | "assigned"
+  | "auto_resolved"
+  | "manually_resolved"
+  | "reopened"
+  | "note";
+
+export interface IncidentEvent {
+  id: string;
+  incidentId: string;
+  type: IncidentEventType;
+  message: string;
+  metadata: Record<string, unknown> | null;
+  actorId: string | null;
+  actorEmail: string | null;
+  actorDisplayName: string | null;
+  createdAt: string;
+}
+
+export interface Incident {
+  id: string;
+  title: string;
+  description: string | null;
+  severity: IncidentSeverity;
+  status: IncidentStatus;
+  scope: IncidentScope;
+  sourceType: string | null;
+  sourceId: string | null;
+  dedupeKey: string;
+  startedAt: string;
+  lastSeenAt: string;
+  resolvedAt: string | null;
+  acknowledgedAt: string | null;
+  acknowledgedBy: {
+    id: string;
+    email: string;
+    displayName: string;
+  } | null;
+  assignedTo: {
+    id: string;
+    email: string;
+    displayName: string;
+  } | null;
+  resolutionType: "auto" | "manual" | null;
+  rootCause: string | null;
+  internalNotes: string | null;
+  metadata: Record<string, unknown> | null;
+  nodeId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  events: IncidentEvent[];
+}
+
+export interface IncidentSummary {
+  openCritical: number;
+  openTotal: number;
+  acknowledged: number;
+  autoResolvedLast24h: number;
+}
+
 export interface AuditLogEntry {
   id: string;
   action: string;
@@ -289,8 +362,6 @@ export type PlanTier = "free" | "premium";
 export type MinecraftDnsStatus = "wildcard" | "pending" | "active" | "failed" | "disabled";
 export type MinecraftAutoSleepAction = "sleep" | "stop";
 export type MinecraftRuntimeState =
-  | "sleeping"
-  | "waking"
   | "starting"
   | "restarting"
   | "running"
@@ -345,7 +416,6 @@ export interface MinecraftServer {
   onlineMode: boolean;
   whitelistEnabled: boolean;
   runtimeState: MinecraftRuntimeState;
-  sleeping: boolean;
   currentPlayerCount: number;
   idleSince: string | null;
   lastPlayerSeenAt: string | null;
@@ -354,7 +424,6 @@ export interface MinecraftServer {
   lastPlayerCheckError: string | null;
   lastConsoleCommandAt: string | null;
   sleepRequestedAt: string | null;
-  sleepingAt: string | null;
   wakeRequestedAt: string | null;
   readyAt: string | null;
   serverProperties: Record<string, unknown>;
