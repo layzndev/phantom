@@ -12,6 +12,17 @@ type HistoryEntry =
   | { type: "command_result"; id: string; output: string; timestamp: string }
   | { type: "error"; message: string; timestamp: string };
 
+type ActiveWorkloadsSnapshot = {
+  version: number;
+  entries: Array<{ workloadId: string; serverId: string }>;
+};
+
+type ActiveWorkloadWaiter = {
+  afterVersion: number;
+  resolve: (snapshot: ActiveWorkloadsSnapshot) => void;
+  timer: NodeJS.Timeout;
+};
+
 const HISTORY_LIMIT_LINES = 500;
 const HISTORY_RETENTION_MS = 30 * 60_000; // keep at most ~30 minutes of recent events
 
@@ -22,6 +33,8 @@ class MinecraftConsoleGateway {
   private readonly lastStatusByServerId = new Map<string, string>();
   private readonly historyByServerId = new Map<string, HistoryEntry[]>();
   private readonly workloadIdByServerId = new Map<string, string>();
+  private readonly activeWaiters = new Set<ActiveWorkloadWaiter>();
+  private activeVersion = 0;
   private static readonly LIFECYCLE_DEDUP_MS = 30_000;
 
   attach(connection: WebSocketConnection, serverId: string, workloadId: string) {
@@ -29,6 +42,7 @@ class MinecraftConsoleGateway {
     this.add(this.byServerId, serverId, entry);
     this.add(this.byWorkloadId, workloadId, entry);
     this.workloadIdByServerId.set(serverId, workloadId);
+    this.bumpActiveVersion();
 
     const history = this.historyByServerId.get(serverId);
     if (history && history.length > 0) {
@@ -38,11 +52,39 @@ class MinecraftConsoleGateway {
     return () => this.detach(entry);
   }
 
-  listActiveWorkloads() {
-    return Array.from(this.byWorkloadId.entries()).map(([workloadId, entries]) => ({
-      workloadId,
-      serverId: entries.values().next().value?.serverId as string | undefined
-    })).filter((entry): entry is { workloadId: string; serverId: string } => Boolean(entry.serverId));
+  listActiveWorkloads(): ActiveWorkloadsSnapshot {
+    const entries = Array.from(this.byWorkloadId.entries())
+      .map(([workloadId, entries]) => ({
+        workloadId,
+        serverId: entries.values().next().value?.serverId as string | undefined
+      }))
+      .filter((entry): entry is { workloadId: string; serverId: string } => Boolean(entry.serverId));
+    return {
+      version: this.activeVersion,
+      entries
+    };
+  }
+
+  waitForActiveWorkloadsChange(afterVersion: number, timeoutMs: number) {
+    if (this.activeVersion > afterVersion) {
+      return Promise.resolve(this.listActiveWorkloads());
+    }
+
+    return new Promise<ActiveWorkloadsSnapshot>((resolve) => {
+      const waiter: ActiveWorkloadWaiter = {
+        afterVersion,
+        resolve: (snapshot) => {
+          clearTimeout(waiter.timer);
+          this.activeWaiters.delete(waiter);
+          resolve(snapshot);
+        },
+        timer: setTimeout(() => {
+          this.activeWaiters.delete(waiter);
+          resolve(this.listActiveWorkloads());
+        }, timeoutMs)
+      };
+      this.activeWaiters.add(waiter);
+    });
   }
 
   publishStatus(serverId: string, status: string) {
@@ -151,6 +193,7 @@ class MinecraftConsoleGateway {
   private detach(entry: ConnectionEntry) {
     this.remove(this.byServerId, entry.serverId, entry);
     this.remove(this.byWorkloadId, entry.workloadId, entry);
+    this.bumpActiveVersion();
   }
 
   private add(
@@ -177,6 +220,16 @@ class MinecraftConsoleGateway {
       bucket.delete(key);
       if (bucket === this.byServerId) {
         this.lastStatusByServerId.delete(key);
+      }
+    }
+  }
+
+  private bumpActiveVersion() {
+    this.activeVersion += 1;
+    const snapshot = this.listActiveWorkloads();
+    for (const waiter of Array.from(this.activeWaiters)) {
+      if (snapshot.version > waiter.afterVersion) {
+        waiter.resolve(snapshot);
       }
     }
   }

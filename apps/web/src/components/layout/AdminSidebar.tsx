@@ -7,6 +7,8 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { adminApi } from "@/lib/api/admin-api";
 
+const MINECRAFT_SIDEBAR_REFRESH_MS = 3_000;
+
 const links = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/incidents", label: "Incidents", icon: Siren },
@@ -41,7 +43,7 @@ export function AdminSidebar() {
     void refresh();
     const timer = window.setInterval(() => {
       void refresh();
-    }, 10_000);
+    }, MINECRAFT_SIDEBAR_REFRESH_MS);
 
     return () => {
       active = false;

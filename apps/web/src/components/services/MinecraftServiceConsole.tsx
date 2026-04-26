@@ -13,6 +13,7 @@ const REFRESH_DEBOUNCE_MS = 300;
 export function MinecraftServiceConsole({
   entry,
   onRefresh,
+  onLiveActivity,
   activeTab,
   onTabChange,
   onStart,
@@ -24,6 +25,7 @@ export function MinecraftServiceConsole({
 }: {
   entry: MinecraftServerWithWorkload;
   onRefresh: () => Promise<void> | void;
+  onLiveActivity?: () => Promise<void> | void;
   activeTab: "console" | "files" | "settings";
   onTabChange: (tab: "console" | "files" | "settings") => void;
   onStart: () => Promise<void> | void;
@@ -132,6 +134,10 @@ export function MinecraftServiceConsole({
     }, REFRESH_DEBOUNCE_MS);
   }, [onRefresh]);
 
+  const scheduleLiveActivityRefresh = useCallback(() => {
+    void onLiveActivity?.();
+  }, [onLiveActivity]);
+
   const wsUrl = useMemo(() => {
     const base = new URL(ADMIN_API_BASE_URL);
     base.protocol = base.protocol === "https:" ? "wss:" : "ws:";
@@ -209,11 +215,17 @@ export function MinecraftServiceConsole({
 
           const timestamp = payload.timestamp ?? new Date().toISOString();
           if (payload.type === "log") {
+            const hasPlayerActivity = payload.line
+              .split(/\r?\n/)
+              .some((text) => isPlayerActivityLine(text));
             appendLines(
               payload.line
                 .split(/\r?\n/)
                 .flatMap((text) => normalizeConsoleLogLine(text, timestamp))
             );
+            if (hasPlayerActivity) {
+              scheduleLiveActivityRefresh();
+            }
           } else if (payload.type === "status") {
             const normalizedStatus =
               payload.status === "starting" && currentRuntimeStateRef.current === "restarting"
@@ -529,7 +541,7 @@ function deriveDisplayTimestamp(rawLine: string, fallbackTimestamp: string) {
     return fallbackTimestamp;
   }
 
-  base.setHours(embedded.hours, embedded.minutes, embedded.seconds, 0);
+  base.setUTCHours(embedded.hours, embedded.minutes, embedded.seconds, 0);
   return base.toISOString();
 }
 
@@ -606,4 +618,9 @@ function isHiddenRconNoise(message: string) {
     /^Thread RCON Listener .* started$/i.test(message) ||
     /^RCON running on /.test(message)
   );
+}
+
+function isPlayerActivityLine(message: string) {
+  const sanitized = stripDockerAndMinecraftTimestamps(message);
+  return / joined the game$/i.test(sanitized) || / left the game$/i.test(sanitized);
 }

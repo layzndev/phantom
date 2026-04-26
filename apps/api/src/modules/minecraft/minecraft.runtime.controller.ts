@@ -11,6 +11,7 @@ import {
   listRuntimeMinecraftConsoleStreams,
   listRuntimeMinecraftOperations,
   publishRuntimeMinecraftConsoleLogs,
+  waitForRuntimeMinecraftConsoleStreams,
   wakeRuntimeMinecraftServer
 } from "./minecraft.service.js";
 
@@ -20,6 +21,10 @@ const runtimeOpParamsSchema = z.object({ opId: z.string().uuid() });
 const runtimeConsoleParamsSchema = z.object({ id: z.string().uuid() });
 const runtimeServerParamsSchema = z.object({ serverId: z.string().uuid() });
 const runtimeRoutingQuerySchema = z.object({ hostname: z.string().min(1).max(255) });
+const runtimeConsoleWatchQuerySchema = z.object({
+  cursor: z.coerce.number().int().min(0).default(0),
+  timeoutMs: z.coerce.number().int().min(250).max(30_000).default(30_000)
+});
 
 const runtimeCompleteSchema = z.object({
   status: z.enum(["succeeded", "failed"]),
@@ -81,6 +86,23 @@ minecraftRuntimeController.get(
   asyncHandler(async (req, res) => {
     const token = extractBearerToken(req.headers.authorization);
     const result = await listRuntimeMinecraftConsoleStreams(token);
+    res.json(result);
+  })
+);
+
+minecraftRuntimeController.get(
+  "/consoles/watch",
+  asyncHandler(async (req, res) => {
+    const token = extractBearerToken(req.headers.authorization);
+    const parsed = runtimeConsoleWatchQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      throw new AppError(400, "Invalid query parameters.", "VALIDATION_ERROR", parsed.error.flatten());
+    }
+    const result = await waitForRuntimeMinecraftConsoleStreams(
+      token,
+      parsed.data.cursor,
+      parsed.data.timeoutMs
+    );
     res.json(result);
   })
 );

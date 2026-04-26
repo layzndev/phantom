@@ -31,6 +31,7 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
   const [optimisticRuntimeState, setOptimisticRuntimeState] = useState<MinecraftServerWithWorkload["server"]["runtimeState"] | null>(null);
   const [activeTab, setActiveTab] = useState<"console" | "files" | "settings">("console");
   const [globalSettings, setGlobalSettings] = useState<MinecraftGlobalSettings | null>(null);
+  const [liveRefreshAt, setLiveRefreshAt] = useState(0);
 
   const refresh = useCallback(async () => {
     try {
@@ -47,6 +48,20 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
       setError(detailError instanceof Error ? detailError.message : "Unable to load Minecraft server");
     }
   }, [id]);
+
+  const triggerLiveRefresh = useCallback(() => {
+    setLiveRefreshAt((current) => {
+      const now = Date.now();
+      return now - current >= 750 ? now : current;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (liveRefreshAt === 0) {
+      return;
+    }
+    void refresh();
+  }, [liveRefreshAt, refresh]);
 
   useEffect(() => {
     void refresh();
@@ -199,7 +214,20 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
   const liveDiskLabel = isWorkloadRunning
     ? formatRuntimeResource(entry.workload.runtimeDiskGb, entry.workload.requestedDiskGb, formatDisk)
     : "—";
-  const uptimeLabel = isWorkloadRunning ? formatHms(runtime.uptimeSeconds) : "00:00:00";
+  const effectiveAutoSleep = displayEntry.server.planTier === "free" && displayEntry.server.autoSleepUseGlobalDefaults && globalSettings
+    ? {
+        enabled: globalSettings.freeAutoSleepEnabled,
+        idleMinutes: globalSettings.freeAutoSleepIdleMinutes,
+        action: globalSettings.freeAutoSleepAction,
+        source: "global" as const
+      }
+    : {
+        enabled: displayEntry.server.autoSleepEnabled,
+        idleMinutes: displayEntry.server.autoSleepIdleMinutes,
+        action: displayEntry.server.autoSleepAction,
+        source: "override" as const
+      };
+  const uptimeLabel = isWorkloadRunning ? formatHms(runtime.uptimeSeconds) : "—";
   const templateLabel = templateFamilyLabel(displayEntry.server.templateId);
 
   return (
@@ -246,6 +274,7 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
       <MinecraftServiceConsole
         entry={displayEntry}
         onRefresh={refresh}
+        onLiveActivity={triggerLiveRefresh}
         activeTab={activeTab}
         onTabChange={setActiveTab}
         actionInFlight={consoleAction}
@@ -283,11 +312,14 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
             <MetricRow label="Started at" value={formatDateTime(runtime.startedAt)} />
             <MetricRow label="Finished at" value={formatDateTime(runtime.finishedAt)} />
             <MetricRow label="Restart count" value={String(entry.workload.restartCount)} />
-            <MetricRow label="AutoSleep" value={displayEntry.server.autoSleepEnabled ? "Enabled" : "Disabled"} />
-            <MetricRow label="AutoSleep delay" value={`${displayEntry.server.autoSleepIdleMinutes} min`} />
+            <MetricRow
+              label="AutoSleep"
+              value={`${effectiveAutoSleep.enabled ? "Enabled" : "Disabled"}${effectiveAutoSleep.source === "global" ? " (global)" : ""}`}
+            />
+            <MetricRow label="AutoSleep delay" value={`${effectiveAutoSleep.idleMinutes} min`} />
             <MetricRow
               label="AutoSleep action"
-              value={displayEntry.server.autoSleepAction === "sleep" ? "stop" : displayEntry.server.autoSleepAction}
+              value={`${effectiveAutoSleep.action === "sleep" ? "stop" : effectiveAutoSleep.action}${effectiveAutoSleep.source === "global" ? " (global)" : ""}`}
             />
             <MetricRow label="Players online" value={String(displayEntry.server.currentPlayerCount)} />
             <MetricRow label="Idle since" value={formatDateTime(displayEntry.server.idleSince)} />

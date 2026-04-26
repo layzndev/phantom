@@ -810,7 +810,7 @@ export async function listRuntimeMinecraftConsoleStreams(rawToken: string) {
   const active = minecraftConsoleGateway.listActiveWorkloads();
   const streams: RuntimeMinecraftConsoleStream[] = [];
 
-  for (const entry of active) {
+  for (const entry of active.entries) {
     const workload = await findWorkloadFromRegistry(entry.workloadId);
     if (!workload || workload.nodeId !== node.id || workload.type !== "minecraft") {
       continue;
@@ -824,7 +824,36 @@ export async function listRuntimeMinecraftConsoleStreams(rawToken: string) {
     });
   }
 
-  return { nodeId: node.id, streams };
+  return { nodeId: node.id, streams, cursor: active.version };
+}
+
+export async function waitForRuntimeMinecraftConsoleStreams(
+  rawToken: string,
+  afterCursor: number,
+  timeoutMs: number
+) {
+  const node = await authenticateRuntimeNode(rawToken);
+  const snapshot = await minecraftConsoleGateway.waitForActiveWorkloadsChange(
+    afterCursor,
+    Math.max(250, Math.min(timeoutMs, 30_000))
+  );
+  const streams: RuntimeMinecraftConsoleStream[] = [];
+
+  for (const entry of snapshot.entries) {
+    const workload = await findWorkloadFromRegistry(entry.workloadId);
+    if (!workload || workload.nodeId !== node.id || workload.type !== "minecraft") {
+      continue;
+    }
+
+    streams.push({
+      serverId: entry.serverId,
+      workloadId: workload.id,
+      containerId: workload.containerId,
+      runtimeStartedAt: workload.runtimeStartedAt?.toISOString() ?? null
+    });
+  }
+
+  return { nodeId: node.id, streams, cursor: snapshot.version };
 }
 
 export async function getRuntimeMinecraftRouting(rawToken: string, hostname: string) {
@@ -1171,6 +1200,25 @@ export async function publishRuntimeMinecraftConsoleLogs(
       }
       break;
     }
+  }
+
+  const playerCountDelta = lines.reduce(
+    (sum, line) => sum + parsePlayerCountDeltaFromLog(line),
+    0
+  );
+  if (playerCountDelta !== 0) {
+    const now = new Date();
+    record = await updateMinecraftServerRecord(record.id, {
+      currentPlayerCount: Math.max(0, record.currentPlayerCount + playerCountDelta),
+      lastPlayerSampleAt: now,
+      lastPlayerCheckFailedAt: null,
+      lastPlayerCheckError: null,
+      lastPlayerSeenAt:
+        playerCountDelta > 0 ? now : record.lastPlayerSeenAt ?? undefined,
+      lastActivityAt: now,
+      idleSince: record.currentPlayerCount + playerCountDelta > 0 ? null : now,
+      sleepRequestedAt: playerCountDelta > 0 ? null : undefined
+    });
   }
 
   if (lines.length > 0) {
@@ -1791,6 +1839,17 @@ function parsePlayerSample(result: Record<string, unknown> | null, maxPlayers: n
     currentPlayers: Number.parseInt(match[1] ?? "0", 10) || 0,
     maxPlayers: Number.parseInt(match[2] ?? String(maxPlayers), 10) || maxPlayers
   };
+}
+
+function parsePlayerCountDeltaFromLog(line: string) {
+  const sanitized = sanitizeConsoleLogLine(line);
+  if (/ joined the game$/i.test(sanitized)) {
+    return 1;
+  }
+  if (/ left the game$/i.test(sanitized)) {
+    return -1;
+  }
+  return 0;
 }
 
 function evaluateAutoSleepPlayerCheck(record: MinecraftServerRecord) {

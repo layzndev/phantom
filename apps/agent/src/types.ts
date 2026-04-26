@@ -194,6 +194,7 @@ export interface RuntimeMinecraftConsoleStream {
 export interface RuntimeMinecraftConsoleStreamsResponse {
   nodeId: string;
   streams: RuntimeMinecraftConsoleStream[];
+  cursor: number;
 }
 
 export interface MinecraftOperationCompletePayload {

@@ -65,6 +65,16 @@ export class PhantomApiClient {
     );
   }
 
+  async waitMinecraftConsoleStreams(cursor: number, timeoutMs: number) {
+    const params = new URLSearchParams({
+      cursor: String(cursor),
+      timeoutMs: String(timeoutMs)
+    });
+    return this.request<RuntimeMinecraftConsoleStreamsResponse>(
+      `/runtime/minecraft/consoles/watch?${params.toString()}`
+    );
+  }
+
   async publishMinecraftConsoleLogs(serverId: string, payload: { lines: string[] }) {
     return this.request<{ ok: true }>(
       `/runtime/minecraft/servers/${encodeURIComponent(serverId)}/console/logs`,

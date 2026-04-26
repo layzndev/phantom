@@ -47,6 +47,7 @@ export class PhantomAgent {
       fullGcIntervalMs: this.fullGcIntervalMs
     });
 
+    this.minecraftConsole.start();
     await this.tick();
   }
 
@@ -69,8 +70,6 @@ export class PhantomAgent {
     try {
       await this.minecraftOps.processOnce();
       await this.reconciler.reconcileOnce();
-      await this.minecraftConsole.reconcileOnce();
-
       try {
         const systemInfo = await this.getSystemInfo();
         const liveMetrics = await this.liveMetrics.collect();
