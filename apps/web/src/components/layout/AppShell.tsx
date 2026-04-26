@@ -1,10 +1,12 @@
 import { AdminProtectedRoute } from "@/components/auth/AdminProtectedRoute";
 import { AdminSidebar } from "./AdminSidebar";
+import { NodeOfflineNotifier } from "./NodeOfflineNotifier";
 import { AdminTopbar } from "./AdminTopbar";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <AdminProtectedRoute>
+      <NodeOfflineNotifier />
       <div className="min-h-screen lg:flex">
         <AdminSidebar />
         <div className="min-w-0 flex-1">

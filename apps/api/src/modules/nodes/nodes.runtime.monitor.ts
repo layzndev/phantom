@@ -125,6 +125,16 @@ async function runMonitorTick(options: NodeRuntimeMonitorOptions): Promise<numbe
       options.logger.warn(
         `[node-monitor] ${stale.length} node(s) transitioned to offline: ${ids.join(", ")}`
       );
+      for (const node of stale) {
+        options.logger.warn("[node-monitor] offline transition", {
+          nodeId: node.id,
+          previousStatus: node.status,
+          newStatus: "offline",
+          lastHeartbeatAt: node.lastHeartbeatAt?.toISOString() ?? null,
+          heartbeatTimeoutMs: options.heartbeatTimeoutMs,
+          reason: describeStaleReason(node.lastHeartbeatAt, options.heartbeatTimeoutMs)
+        });
+      }
 
       return stale.length;
     },
