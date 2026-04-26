@@ -67,6 +67,10 @@ export class PhantomAgent {
 
     this.running = true;
     try {
+      await this.minecraftOps.processOnce();
+      await this.reconciler.reconcileOnce();
+      await this.minecraftConsole.reconcileOnce();
+
       try {
         const systemInfo = await this.getSystemInfo();
         const liveMetrics = await this.liveMetrics.collect();
@@ -104,10 +108,6 @@ export class PhantomAgent {
           error: error instanceof Error ? error.message : "unknown"
         });
       }
-
-      await this.minecraftOps.processOnce();
-      await this.reconciler.reconcileOnce();
-      await this.minecraftConsole.reconcileOnce();
 
       try {
         await this.cleanup.purgeOrphanedManaged();
