@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { adminApi } from "@/lib/api/admin-api";
 import { formatCpu, formatDisk, formatRam, formatWorkloadType } from "@/lib/utils/format";
 import type {
@@ -27,6 +27,7 @@ const WORKLOADS_REFRESH_MS = 15_000;
 
 export function WorkloadsTableClient() {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [workloads, setWorkloads] = useState<CompanyWorkload[]>([]);
   const [nodes, setNodes] = useState<CompanyNode[]>([]);
@@ -35,6 +36,31 @@ export function WorkloadsTableClient() {
   const [status, setStatus] = useState<WorkloadStatus | "all">("all");
   const [desiredStatus, setDesiredStatus] = useState<WorkloadDesiredStatus | "all">("all");
   const [adminRole, setAdminRole] = useState<AdminRole | null>(null);
+
+  useEffect(() => {
+    const nextQuery = searchParams.get("q") ?? "";
+    const nextStatus = searchParams.get("status");
+    const nextDesiredStatus = searchParams.get("desiredStatus");
+
+    setQuery(nextQuery);
+    setStatus(
+      nextStatus === "pending" ||
+        nextStatus === "queued_start" ||
+        nextStatus === "creating" ||
+        nextStatus === "running" ||
+        nextStatus === "stopped" ||
+        nextStatus === "crashed" ||
+        nextStatus === "deleting" ||
+        nextStatus === "deleted"
+        ? nextStatus
+        : "all"
+    );
+    setDesiredStatus(
+      nextDesiredStatus === "running" || nextDesiredStatus === "stopped"
+        ? nextDesiredStatus
+        : "all"
+    );
+  }, [searchParams]);
 
   useEffect(() => {
     let active = true;

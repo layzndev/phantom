@@ -85,22 +85,22 @@ export function DashboardClient() {
   return (
     <div className="space-y-6">
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Total nodes" value={summary.totalNodes} caption="registered" />
-        <StatCard label="Healthy nodes" value={summary.healthyNodes} caption="green health" tone="good" />
-        <StatCard label="Offline nodes" value={summary.offlineNodes} caption="requires attention" tone={summary.offlineNodes > 0 ? "bad" : "neutral"} />
-        <StatCard label="Hosted servers" value={summary.totalHostedServers} caption="minecraft nodes" />
+        <StatCard label="Total nodes" value={summary.totalNodes} caption="registered" href="/nodes" />
+        <StatCard label="Healthy nodes" value={summary.healthyNodes} caption="green health" tone="good" href="/nodes?status=healthy" />
+        <StatCard label="Offline nodes" value={summary.offlineNodes} caption="requires attention" tone={summary.offlineNodes > 0 ? "bad" : "neutral"} href="/nodes?status=offline" />
+        <StatCard label="Hosted servers" value={summary.totalHostedServers} caption="minecraft nodes" href="/services/minecraft" />
       </section>
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Workloads total" value={summary.totalWorkloads} caption="cluster-wide" />
-        <StatCard label="Workloads running" value={summary.runningWorkloads} caption="live runtime" tone="good" />
-        <StatCard label="Workloads stopped" value={summary.stoppedWorkloads} caption="idle, pending or crashed" />
-        <StatCard label="Workloads stopping" value={summary.deletingWorkloads} caption="deleting" tone={summary.deletingWorkloads > 0 ? "warn" : "neutral"} />
+        <StatCard label="Workloads total" value={summary.totalWorkloads} caption="cluster-wide" href="/workloads" />
+        <StatCard label="Workloads running" value={summary.runningWorkloads} caption="live runtime" tone="good" href="/workloads?status=running" />
+        <StatCard label="Workloads stopped" value={summary.stoppedWorkloads} caption="idle, pending or crashed" href="/workloads?status=stopped" />
+        <StatCard label="Workloads stopping" value={summary.deletingWorkloads} caption="deleting" tone={summary.deletingWorkloads > 0 ? "warn" : "neutral"} href="/workloads?status=deleting" />
       </section>
 
       <section className="grid gap-4 lg:grid-cols-2">
-        <StatCard label="Global RAM load" value={`${percent(summary.usedRamMb, summary.totalRamMb)}%`} caption={`${formatRam(summary.usedRamMb)} / ${formatRam(summary.totalRamMb)}`} tone="warn" />
-        <StatCard label="Global CPU load" value={`${percent(summary.usedCpu, summary.totalCpu)}%`} caption={`${summary.usedCpu.toFixed(1)} / ${summary.totalCpu} cores`} tone="neutral" />
+        <StatCard label="Global RAM load" value={`${percent(summary.usedRamMb, summary.totalRamMb)}%`} caption={`${formatRam(summary.usedRamMb)} / ${formatRam(summary.totalRamMb)}`} tone="warn" href="/nodes" />
+        <StatCard label="Global CPU load" value={`${percent(summary.usedCpu, summary.totalCpu)}%`} caption={`${summary.usedCpu.toFixed(1)} / ${summary.totalCpu} cores`} tone="neutral" href="/nodes" />
       </section>
 
       <section className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">

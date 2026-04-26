@@ -4,6 +4,8 @@ import clsx from "clsx";
 import { Activity, Boxes, FileClock, LayoutDashboard, Layers3, ServerCog, Settings, Siren } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
+import { adminApi } from "@/lib/api/admin-api";
 
 const links = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -17,6 +19,35 @@ const links = [
 
 export function AdminSidebar() {
   const pathname = usePathname();
+  const [hostedServers, setHostedServers] = useState(0);
+  const [totalPlayers, setTotalPlayers] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+
+    const refresh = async () => {
+      try {
+        const { servers } = await adminApi.minecraftServers();
+        if (!active) return;
+        setHostedServers(servers.length);
+        setTotalPlayers(
+          servers.reduce((sum, entry) => sum + entry.server.currentPlayerCount, 0)
+        );
+      } catch {
+        // keep last snapshot
+      }
+    };
+
+    void refresh();
+    const timer = window.setInterval(() => {
+      void refresh();
+    }, 10_000);
+
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, []);
 
   return (
     <aside className="hidden min-h-screen w-64 border-r border-line bg-obsidian/75 p-4 backdrop-blur-xl lg:block">
@@ -51,6 +82,34 @@ export function AdminSidebar() {
           );
         })}
       </nav>
+
+      <div className="mt-7 rounded-2xl border border-white/10 bg-white/[0.035] p-4">
+        <p className="text-[10px] uppercase tracking-[0.24em] text-slate-500">Minecraft</p>
+        <div className="mt-4 space-y-3">
+          <Link
+            href="/services/minecraft"
+            className="block rounded-xl border border-white/5 bg-white/[0.02] px-3.5 py-3 transition hover:border-white/10 hover:bg-white/[0.04]"
+          >
+            <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
+              Hosted Servers
+            </p>
+            <p className="mt-2 font-display text-2xl font-semibold text-white">
+              {hostedServers}
+            </p>
+          </Link>
+          <Link
+            href="/services/minecraft"
+            className="block rounded-xl border border-white/5 bg-white/[0.02] px-3.5 py-3 transition hover:border-white/10 hover:bg-white/[0.04]"
+          >
+            <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
+              Total Players
+            </p>
+            <p className="mt-2 font-display text-2xl font-semibold text-white">
+              {totalPlayers}
+            </p>
+          </Link>
+        </div>
+      </div>
     </aside>
   );
 }

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { adminApi } from "@/lib/api/admin-api";
 import { formatRam, percent } from "@/lib/utils/format";
 import type { AdminRole, CompanyNode, NodeHealth, NodePool, NodeStatus } from "@/types/admin";
@@ -18,6 +18,7 @@ const NODES_REFRESH_MS = 15_000;
 
 export function NodesTableClient() {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [nodes, setNodes] = useState<CompanyNode[]>([]);
   const [loading, setLoading] = useState(true);
@@ -26,6 +27,33 @@ export function NodesTableClient() {
   const [health, setHealth] = useState<NodeHealth | "all">("all");
   const [pool, setPool] = useState<NodePool | "all">("all");
   const [adminRole, setAdminRole] = useState<AdminRole | null>(null);
+
+  useEffect(() => {
+    const nextQuery = searchParams.get("q") ?? "";
+    const nextStatus = searchParams.get("status");
+    const nextHealth = searchParams.get("health");
+    const nextPool = searchParams.get("pool");
+
+    setQuery(nextQuery);
+    setStatus(
+      nextStatus === "healthy" || nextStatus === "maintenance" || nextStatus === "offline"
+        ? nextStatus
+        : "all"
+    );
+    setHealth(
+      nextHealth === "healthy" ||
+        nextHealth === "degraded" ||
+        nextHealth === "unreachable" ||
+        nextHealth === "unknown"
+        ? nextHealth
+        : "all"
+    );
+    setPool(
+      nextPool === "free" || nextPool === "premium" || nextPool === "internal"
+        ? nextPool
+        : "all"
+    );
+  }, [searchParams]);
 
   useEffect(() => {
     let active = true;
