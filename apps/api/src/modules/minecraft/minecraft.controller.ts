@@ -12,6 +12,7 @@ import {
   enqueueMinecraftOperation,
   extractMinecraftArchive,
   getMinecraftOperation,
+  getMinecraftGlobalSettings,
   getMinecraftServer,
   getMinecraftTemplates,
   listMinecraftFiles,
@@ -23,6 +24,7 @@ import {
   startMinecraftServer,
   stopMinecraftServer,
   uploadMinecraftFile,
+  updateMinecraftGlobalSettings,
   updateMinecraftServerSettings,
   updateMinecraftServerHostname,
   writeMinecraftFile
@@ -42,6 +44,7 @@ import {
   minecraftLogsQuerySchema,
   minecraftOperationParamsSchema,
   minecraftServerParamsSchema,
+  updateMinecraftGlobalSettingsSchema,
   updateMinecraftServerSettingsSchema,
   updateMinecraftHostnameSchema
 } from "./minecraft.schema.js";
@@ -49,6 +52,34 @@ import {
 export const minecraftController = Router();
 
 minecraftController.use(requireAdmin);
+
+minecraftController.get(
+  "/settings/free-tier",
+  requireRole(["superadmin", "ops"]),
+  asyncHandler(async (_req, res) => {
+    const settings = await getMinecraftGlobalSettings();
+    res.json({ settings });
+  })
+);
+
+minecraftController.patch(
+  "/settings/free-tier",
+  requireRole(["superadmin", "ops"]),
+  validateBody(updateMinecraftGlobalSettingsSchema),
+  asyncHandler(async (req, res) => {
+    const actor = req.session.admin!;
+    const settings = await updateMinecraftGlobalSettings(req.body);
+    await writeAuditLog(req, {
+      action: "minecraft.server.settings",
+      actorId: actor.id,
+      actorEmail: actor.email,
+      targetType: "system",
+      targetId: "free-tier-defaults",
+      metadata: settings
+    });
+    res.json({ settings });
+  })
+);
 
 minecraftController.get(
   "/templates",

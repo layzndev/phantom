@@ -4,12 +4,14 @@ import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { adminApi } from "@/lib/api/admin-api";
 import type {
+  MinecraftGlobalSettings,
   MinecraftDifficulty,
   MinecraftGameMode,
   MinecraftServerWithWorkload
 } from "@/types/admin";
 
 type SettingsState = {
+  autoSleepUseGlobalDefaults: boolean;
   autoSleepEnabled: boolean;
   autoSleepIdleMinutes: number;
   autoSleepAction: "sleep" | "stop";
@@ -23,9 +25,11 @@ type SettingsState = {
 
 export function MinecraftSettingsForm({
   entry,
+  globalSettings,
   onSaved
 }: {
   entry: MinecraftServerWithWorkload;
+  globalSettings: MinecraftGlobalSettings | null;
   onSaved: (next: MinecraftServerWithWorkload) => void;
 }) {
   const [form, setForm] = useState<SettingsState>(() => toFormState(entry));
@@ -53,6 +57,7 @@ export function MinecraftSettingsForm({
     setSaved(null);
     try {
       const next = await adminApi.updateMinecraftServerSettings(entry.server.id, {
+        autoSleepUseGlobalDefaults: form.autoSleepUseGlobalDefaults,
         autoSleepEnabled: form.autoSleepEnabled,
         autoSleepIdleMinutes: form.autoSleepIdleMinutes,
         autoSleepAction: form.autoSleepAction,
@@ -78,10 +83,25 @@ export function MinecraftSettingsForm({
         <h3 className="text-sm font-semibold text-white">AutoSleep</h3>
         <div className="mt-4 grid gap-4">
           <ToggleRow
+            label="Use global defaults"
+            description="Applies the Free Tier defaults from /services/minecraft to this server."
+            checked={form.autoSleepUseGlobalDefaults}
+            onChange={(checked) =>
+              setForm((current) => ({ ...current, autoSleepUseGlobalDefaults: checked }))
+            }
+          />
+          {form.autoSleepUseGlobalDefaults && globalSettings ? (
+            <div className="rounded-2xl bg-white/[0.04] px-4 py-3 text-xs text-slate-400">
+              Global defaults: {globalSettings.freeAutoSleepEnabled ? "Enabled" : "Disabled"} ·{" "}
+              {globalSettings.freeAutoSleepIdleMinutes} min · {globalSettings.freeAutoSleepAction}
+            </div>
+          ) : null}
+          <ToggleRow
             label="AutoSleep enabled"
             description="Disable this to keep the server running until an admin stops it."
             checked={form.autoSleepEnabled}
             onChange={(checked) => setForm((current) => ({ ...current, autoSleepEnabled: checked }))}
+            disabled={form.autoSleepUseGlobalDefaults}
           />
           <Field label="Idle delay (minutes)" hint="Used only when AutoSleep is enabled.">
             <input
@@ -95,6 +115,7 @@ export function MinecraftSettingsForm({
                   autoSleepIdleMinutes: Number(event.target.value || 1)
                 }))
               }
+              disabled={form.autoSleepUseGlobalDefaults}
               className={inputClass}
             />
           </Field>
@@ -107,6 +128,7 @@ export function MinecraftSettingsForm({
                   autoSleepAction: event.target.value as "sleep" | "stop"
                 }))
               }
+              disabled={form.autoSleepUseGlobalDefaults}
               className={inputClass}
             >
               <option value="sleep">Sleep</option>
@@ -232,6 +254,7 @@ export function MinecraftSettingsForm({
 
 function toFormState(entry: MinecraftServerWithWorkload): SettingsState {
   return {
+    autoSleepUseGlobalDefaults: entry.server.autoSleepUseGlobalDefaults,
     autoSleepEnabled: entry.server.autoSleepEnabled,
     autoSleepIdleMinutes: entry.server.autoSleepIdleMinutes,
     autoSleepAction: entry.server.autoSleepAction,
@@ -266,12 +289,14 @@ function ToggleRow({
   label,
   description,
   checked,
-  onChange
+  onChange,
+  disabled
 }: {
   label: string;
   description: string;
   checked: boolean;
   onChange: (checked: boolean) => void;
+  disabled?: boolean;
 }) {
   return (
     <label className="flex items-start justify-between gap-4 rounded-2xl bg-white/[0.04] px-4 py-3">
@@ -283,7 +308,8 @@ function ToggleRow({
         type="checkbox"
         checked={checked}
         onChange={(event) => onChange(event.target.checked)}
-        className="mt-1 h-4 w-4 rounded border-white/20 bg-transparent"
+        disabled={disabled}
+        className="mt-1 h-4 w-4 rounded border-white/20 bg-transparent disabled:opacity-40"
       />
     </label>
   );

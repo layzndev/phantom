@@ -9,7 +9,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { SkeletonBlock } from "@/components/ui/SkeletonBlock";
 import { formatCpu, formatDisk, formatRam } from "@/lib/utils/format";
-import type { MinecraftServerWithWorkload } from "@/types/admin";
+import type { MinecraftGlobalSettings, MinecraftServerWithWorkload } from "@/types/admin";
 
 const REFRESH_MS = 10_000;
 
@@ -19,15 +19,21 @@ export function MinecraftServicesClient() {
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [freeTierSettings, setFreeTierSettings] = useState<MinecraftGlobalSettings | null>(null);
+  const [settingsBusy, setSettingsBusy] = useState(false);
 
   useEffect(() => {
     let active = true;
 
     const refresh = async () => {
       try {
-        const { servers: next } = await adminApi.minecraftServers();
+        const [{ servers: next }, { settings }] = await Promise.all([
+          adminApi.minecraftServers(),
+          adminApi.minecraftFreeTierSettings()
+        ]);
         if (active) {
           setServers(next);
+          setFreeTierSettings(settings);
         }
       } finally {
         if (active) {
@@ -77,6 +83,16 @@ export function MinecraftServicesClient() {
     return <SkeletonBlock label="Loading Minecraft services..." />;
   }
 
+  const saveFreeTierSettings = async (next: MinecraftGlobalSettings) => {
+    setSettingsBusy(true);
+    try {
+      const response = await adminApi.updateMinecraftFreeTierSettings(next);
+      setFreeTierSettings(response.settings);
+    } finally {
+      setSettingsBusy(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <section className="rounded-3xl border border-line bg-panel/70 p-6 shadow-soft">
@@ -94,6 +110,87 @@ export function MinecraftServicesClient() {
             className="w-full rounded-2xl border border-white/10 bg-white/[0.035] px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-accent/40"
           />
         </div>
+
+        {freeTierSettings ? (
+          <div className="mt-6 rounded-2xl border border-white/10 bg-white/[0.035] p-5">
+            <h3 className="text-sm font-semibold text-white">Free Tier Defaults</h3>
+            <p className="mt-1 text-xs text-slate-500">
+              Applies to Free servers without per-server override.
+            </p>
+            <div className="mt-4 grid gap-4 md:grid-cols-3">
+              <label className="grid gap-2 text-sm text-white">
+                <span>AutoSleep enabled</span>
+                <select
+                  value={String(freeTierSettings.freeAutoSleepEnabled)}
+                  onChange={(event) =>
+                    setFreeTierSettings((current) =>
+                      current
+                        ? {
+                            ...current,
+                            freeAutoSleepEnabled: event.target.value === "true"
+                          }
+                        : current
+                    )
+                  }
+                  className={inputClass}
+                >
+                  <option value="true">Enabled</option>
+                  <option value="false">Disabled</option>
+                </select>
+              </label>
+              <label className="grid gap-2 text-sm text-white">
+                <span>Idle delay (minutes)</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={240}
+                  value={freeTierSettings.freeAutoSleepIdleMinutes}
+                  onChange={(event) =>
+                    setFreeTierSettings((current) =>
+                      current
+                        ? {
+                            ...current,
+                            freeAutoSleepIdleMinutes: Number(event.target.value || 1)
+                          }
+                        : current
+                    )
+                  }
+                  className={inputClass}
+                />
+              </label>
+              <label className="grid gap-2 text-sm text-white">
+                <span>Action</span>
+                <select
+                  value={freeTierSettings.freeAutoSleepAction}
+                  onChange={(event) =>
+                    setFreeTierSettings((current) =>
+                      current
+                        ? {
+                            ...current,
+                            freeAutoSleepAction: event.target.value as "sleep" | "stop"
+                          }
+                        : current
+                    )
+                  }
+                  className={inputClass}
+                >
+                  <option value="sleep">Sleep</option>
+                  <option value="stop">Stop</option>
+                </select>
+              </label>
+            </div>
+            <div className="mt-4">
+              <button
+                type="button"
+                disabled={settingsBusy}
+                onClick={() => freeTierSettings && void saveFreeTierSettings(freeTierSettings)}
+                className="rounded-xl border border-white/10 bg-white/[0.05] px-4 py-2 text-sm text-white transition hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {settingsBusy ? "Saving..." : "Save Free Tier Defaults"}
+              </button>
+            </div>
+          </div>
+        ) : null}
       </section>
 
       <div className="overflow-hidden rounded-2xl border border-line bg-panel/78 shadow-soft">
@@ -223,6 +320,9 @@ export function MinecraftServicesClient() {
     </div>
   );
 }
+
+const inputClass =
+  "h-11 rounded-xl border border-white/10 bg-white/[0.03] px-3 text-sm text-white outline-none focus:border-accent/40";
 
 function StatusChip({ label }: { label: string }) {
   return (

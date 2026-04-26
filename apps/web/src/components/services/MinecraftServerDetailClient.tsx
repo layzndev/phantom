@@ -17,7 +17,7 @@ import {
 import { MinecraftServiceConsole } from "./MinecraftServiceConsole";
 import { MinecraftFilesManager } from "./MinecraftFilesManager";
 import { MinecraftSettingsForm } from "./MinecraftSettingsForm";
-import type { MinecraftServerWithWorkload } from "@/types/admin";
+import type { MinecraftGlobalSettings, MinecraftServerWithWorkload } from "@/types/admin";
 
 const REFRESH_MS = 10_000;
 
@@ -30,11 +30,16 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
   const [hostnameSlug, setHostnameSlug] = useState("");
   const [optimisticRuntimeState, setOptimisticRuntimeState] = useState<MinecraftServerWithWorkload["server"]["runtimeState"] | null>(null);
   const [activeTab, setActiveTab] = useState<"files" | "backups" | "plugins" | "settings">("files");
+  const [globalSettings, setGlobalSettings] = useState<MinecraftGlobalSettings | null>(null);
 
   const refresh = useCallback(async () => {
     try {
-      const next = await adminApi.minecraftServer(id);
+      const [next, globalResponse] = await Promise.all([
+        adminApi.minecraftServer(id),
+        adminApi.minecraftFreeTierSettings()
+      ]);
       setEntry(next);
+      setGlobalSettings(globalResponse.settings);
       setHostnameSlug(next.server.hostnameSlug);
       setHostnameError(null);
       setError(null);
@@ -379,6 +384,7 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
         ) : (
           <MinecraftSettingsForm
             entry={displayEntry}
+            globalSettings={globalSettings}
             onSaved={(next) => {
               setEntry(next);
               setError(null);

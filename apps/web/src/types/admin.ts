@@ -314,6 +314,7 @@ export interface MinecraftServer {
   maxPlayers: number;
   eula: boolean;
   planTier: PlanTier;
+  autoSleepUseGlobalDefaults: boolean;
   autoSleepEnabled: boolean;
   autoSleepIdleMinutes: number;
   autoSleepAction: MinecraftAutoSleepAction;
@@ -336,6 +337,12 @@ export interface MinecraftServer {
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
+}
+
+export interface MinecraftGlobalSettings {
+  freeAutoSleepEnabled: boolean;
+  freeAutoSleepIdleMinutes: number;
+  freeAutoSleepAction: MinecraftAutoSleepAction;
 }
 
 export interface MinecraftServerWithWorkload {
@@ -379,6 +386,7 @@ export interface DeleteMinecraftServerOptions {
 }
 
 export interface UpdateMinecraftServerSettingsPayload {
+  autoSleepUseGlobalDefaults: boolean;
   autoSleepEnabled: boolean;
   autoSleepIdleMinutes: number;
   autoSleepAction: MinecraftAutoSleepAction;

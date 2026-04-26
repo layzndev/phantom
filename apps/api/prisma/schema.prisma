@@ -251,6 +251,7 @@ model MinecraftServer {
   maxPlayers       Int       @default(20) @map("max_players")
   eula             Boolean   @default(false)
   planTier         String    @default("free") @map("plan_tier")
+  autoSleepUseGlobalDefaults Boolean @default(true) @map("auto_sleep_use_global_defaults")
   autoSleepEnabled Boolean   @default(true) @map("auto_sleep_enabled")
   autoSleepIdleMinutes Int   @default(10) @map("auto_sleep_idle_minutes")
   autoSleepAction String     @default("sleep") @map("auto_sleep_action")
@@ -280,6 +281,17 @@ model MinecraftServer {
   @@index([hostnameSlug])
   @@index([dnsStatus])
   @@map("minecraft_servers")
+}
+
+model MinecraftGlobalSettings {
+  id                     String   @id
+  freeAutoSleepEnabled   Boolean  @default(true) @map("free_auto_sleep_enabled")
+  freeAutoSleepIdleMinutes Int    @default(10) @map("free_auto_sleep_idle_minutes")
+  freeAutoSleepAction    String   @default("sleep") @map("free_auto_sleep_action")
+  createdAt              DateTime @default(now()) @map("created_at")
+  updatedAt              DateTime @updatedAt @map("updated_at")
+
+  @@map("minecraft_global_settings")
 }
 
 model MinecraftOperation {

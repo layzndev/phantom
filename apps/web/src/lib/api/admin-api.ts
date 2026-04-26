@@ -14,6 +14,7 @@ import type {
   MinecraftServerWithWorkload,
   MinecraftFilesListResult,
   MinecraftFileReadResult,
+  MinecraftGlobalSettings,
   UpdateMinecraftServerSettingsPayload,
   NodeSummary,
   UpdateNodePayload,
@@ -111,6 +112,13 @@ export const adminApi = {
     ),
   minecraftServers: () =>
     apiRequest<{ servers: MinecraftServerWithWorkload[] }>("/minecraft/servers"),
+  minecraftFreeTierSettings: () =>
+    apiRequest<{ settings: MinecraftGlobalSettings }>("/minecraft/settings/free-tier"),
+  updateMinecraftFreeTierSettings: (payload: MinecraftGlobalSettings) =>
+    apiRequest<{ settings: MinecraftGlobalSettings }>("/minecraft/settings/free-tier", {
+      method: "PATCH",
+      body: JSON.stringify(payload)
+    }),
   createMinecraftServer: (payload: CreateMinecraftServerPayload) =>
     apiRequest<{
       server: MinecraftServerWithWorkload["server"];

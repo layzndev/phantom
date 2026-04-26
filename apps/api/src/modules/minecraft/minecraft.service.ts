@@ -10,8 +10,10 @@ import {
   findMinecraftServerRecordByHostnameSlug,
   findMinecraftServerRecordBySlug,
   findMinecraftServerRecordByWorkloadId,
+  getMinecraftGlobalSettingsRecord,
   listAutoSleepCandidateServers,
   listMinecraftServerRecords,
+  updateMinecraftGlobalSettingsRecord,
   updateMinecraftServerRecord
 } from "../../db/minecraftRepository.js";
 import {
@@ -57,6 +59,7 @@ import {
 import type {
   CreateMinecraftServerResult,
   DeleteMinecraftServerResult,
+  MinecraftGlobalSettings,
   MinecraftDifficulty,
   MinecraftFileAccessMode,
   MinecraftFileReadResult,
@@ -106,6 +109,15 @@ export async function listMinecraftServers(): Promise<MinecraftServerWithWorkloa
     })
   );
   return servers;
+}
+
+export async function getMinecraftGlobalSettings(): Promise<MinecraftGlobalSettings> {
+  const record = await getMinecraftGlobalSettingsRecord();
+  return {
+    freeAutoSleepEnabled: record.freeAutoSleepEnabled,
+    freeAutoSleepIdleMinutes: record.freeAutoSleepIdleMinutes,
+    freeAutoSleepAction: record.freeAutoSleepAction as MinecraftAutoSleepAction
+  };
 }
 
 export async function getMinecraftServer(id: string): Promise<MinecraftServerWithWorkload> {
@@ -351,6 +363,7 @@ export async function createMinecraftServer(
       maxPlayers,
       eula: true,
       planTier,
+      autoSleepUseGlobalDefaults: planTier === "free",
       autoSleepEnabled: planTier === "free",
       autoSleepIdleMinutes: planTier === "free" ? env.autoSleepIdleMinutes : 10,
       autoSleepAction: "sleep",
@@ -469,6 +482,7 @@ export async function updateMinecraftServerSettings(
   });
 
   const updatedServer = await updateMinecraftServerRecord(record.id, {
+    autoSleepUseGlobalDefaults: input.autoSleepUseGlobalDefaults,
     autoSleepEnabled: input.autoSleepEnabled,
     autoSleepIdleMinutes: input.autoSleepIdleMinutes,
     autoSleepAction: input.autoSleepAction,
@@ -493,6 +507,19 @@ export async function updateMinecraftServerSettings(
   });
 
   return toMinecraftServerWithRuntime(updatedServer, updatedWorkload);
+}
+
+export async function updateMinecraftGlobalSettings(input: {
+  freeAutoSleepEnabled: boolean;
+  freeAutoSleepIdleMinutes: number;
+  freeAutoSleepAction: MinecraftAutoSleepAction;
+}) {
+  const record = await updateMinecraftGlobalSettingsRecord(input);
+  return {
+    freeAutoSleepEnabled: record.freeAutoSleepEnabled,
+    freeAutoSleepIdleMinutes: record.freeAutoSleepIdleMinutes,
+    freeAutoSleepAction: record.freeAutoSleepAction as MinecraftAutoSleepAction
+  } satisfies MinecraftGlobalSettings;
 }
 
 export async function deleteMinecraftServer(
@@ -913,6 +940,7 @@ export async function runMinecraftAutoSleepTick() {
   }
 
   const candidates = await listAutoSleepCandidateServers();
+  const globalSettings = await getMinecraftGlobalSettingsRecord();
   let slept = 0;
 
   for (const record of candidates) {
@@ -929,10 +957,16 @@ export async function runMinecraftAutoSleepTick() {
       });
     }
 
+    const effectiveConfig = resolveEffectiveAutoSleepConfig(record, globalSettings);
     const playerCheckState = evaluateAutoSleepPlayerCheck(record);
     if (!playerCheckState.ok) {
       console.info("[autosleep] skipped", {
         serverId: record.id,
+        planTier: record.planTier,
+        source: effectiveConfig.source,
+        enabled: effectiveConfig.enabled,
+        idleMinutes: effectiveConfig.idleMinutes,
+        action: effectiveConfig.action,
         workloadId: record.workloadId,
         playersOnline: record.currentPlayerCount,
         idleSince: record.idleSince?.toISOString() ?? null,
@@ -941,9 +975,30 @@ export async function runMinecraftAutoSleepTick() {
       continue;
     }
 
+    if (!effectiveConfig.enabled) {
+      console.info("[autosleep] skipped", {
+        serverId: record.id,
+        planTier: record.planTier,
+        source: effectiveConfig.source,
+        enabled: effectiveConfig.enabled,
+        idleMinutes: effectiveConfig.idleMinutes,
+        action: effectiveConfig.action,
+        workloadId: record.workloadId,
+        playersOnline: record.currentPlayerCount,
+        idleSince: record.idleSince?.toISOString() ?? null,
+        reason: "autosleep_disabled"
+      });
+      continue;
+    }
+
     if (record.currentPlayerCount > 0 || record.idleSince === null) {
       console.info("[autosleep] skipped", {
         serverId: record.id,
+        planTier: record.planTier,
+        source: effectiveConfig.source,
+        enabled: effectiveConfig.enabled,
+        idleMinutes: effectiveConfig.idleMinutes,
+        action: effectiveConfig.action,
         workloadId: record.workloadId,
         playersOnline: record.currentPlayerCount,
         idleSince: record.idleSince?.toISOString() ?? null,
@@ -961,6 +1016,11 @@ export async function runMinecraftAutoSleepTick() {
     if (activeSave || activeStop) {
       console.info("[autosleep] skipped", {
         serverId: record.id,
+        planTier: record.planTier,
+        source: effectiveConfig.source,
+        enabled: effectiveConfig.enabled,
+        idleMinutes: effectiveConfig.idleMinutes,
+        action: effectiveConfig.action,
         workloadId: record.workloadId,
         playersOnline: record.currentPlayerCount,
         idleSince: record.idleSince?.toISOString() ?? null,
@@ -970,15 +1030,20 @@ export async function runMinecraftAutoSleepTick() {
     }
 
     const idleMs = Date.now() - record.idleSince.getTime();
-    const idleThresholdMinutes = record.autoSleepIdleMinutes ?? env.autoSleepIdleMinutes;
+    const idleThresholdMinutes = effectiveConfig.idleMinutes;
     if (idleMs < idleThresholdMinutes * 60_000) {
       console.info("[autosleep] skipped", {
         serverId: record.id,
+        planTier: record.planTier,
+        source: effectiveConfig.source,
+        enabled: effectiveConfig.enabled,
+        idleMinutes: effectiveConfig.idleMinutes,
+        action: effectiveConfig.action,
         workloadId: record.workloadId,
         playersOnline: record.currentPlayerCount,
         idleSince: record.idleSince.toISOString(),
         reason: "below_idle_threshold",
-        idleMinutes: Math.floor(idleMs / 60_000),
+        currentIdleMinutes: Math.floor(idleMs / 60_000),
         thresholdMinutes: idleThresholdMinutes
       });
       continue;
@@ -995,8 +1060,9 @@ export async function runMinecraftAutoSleepTick() {
         idleSince: record.idleSince.toISOString(),
         idleMinutes: Math.floor(idleMs / 60_000),
         planTier: record.planTier,
+        source: effectiveConfig.source,
         playersOnline: record.currentPlayerCount,
-        autoSleepAction: record.autoSleepAction,
+        autoSleepAction: effectiveConfig.action,
         thresholdMinutes: idleThresholdMinutes
       }
     });
@@ -1019,7 +1085,8 @@ export async function runMinecraftAutoSleepTick() {
     });
 
     await updateMinecraftServerRecord(record.id, {
-      sleepRequestedAt: new Date()
+      sleepRequestedAt: new Date(),
+      autoSleepAction: effectiveConfig.action
     });
     minecraftConsoleGateway.publishStatus(record.id, "stopping");
     await stopWorkload(record.workloadId);
@@ -1031,8 +1098,8 @@ export async function runMinecraftAutoSleepTick() {
       metadata: {
         phase: "stop_requested",
         workloadId: record.workloadId,
-        source: "autosleep",
-        autoSleepAction: record.autoSleepAction
+        source: effectiveConfig.source,
+        autoSleepAction: effectiveConfig.action
       }
     });
     slept += 1;
@@ -1362,6 +1429,7 @@ function toMinecraftServer(record: MinecraftServerRecord): MinecraftServer {
     maxPlayers: record.maxPlayers,
     eula: record.eula,
     planTier: record.planTier as PlanTier,
+    autoSleepUseGlobalDefaults: record.autoSleepUseGlobalDefaults,
     autoSleepEnabled: record.autoSleepEnabled,
     autoSleepIdleMinutes: record.autoSleepIdleMinutes,
     autoSleepAction: record.autoSleepAction as MinecraftAutoSleepAction,
@@ -1699,4 +1767,34 @@ function evaluateAutoSleepPlayerCheck(record: MinecraftServerRecord) {
   }
 
   return { ok: true as const };
+}
+
+function resolveEffectiveAutoSleepConfig(
+  record: MinecraftServerRecord,
+  globalSettings: Awaited<ReturnType<typeof getMinecraftGlobalSettingsRecord>>
+) {
+  if (record.planTier !== "free") {
+    return {
+      source: "override" as const,
+      enabled: record.autoSleepEnabled,
+      idleMinutes: record.autoSleepIdleMinutes,
+      action: record.autoSleepAction as MinecraftAutoSleepAction
+    };
+  }
+
+  if (record.autoSleepUseGlobalDefaults) {
+    return {
+      source: "global" as const,
+      enabled: globalSettings.freeAutoSleepEnabled,
+      idleMinutes: globalSettings.freeAutoSleepIdleMinutes,
+      action: globalSettings.freeAutoSleepAction as MinecraftAutoSleepAction
+    };
+  }
+
+  return {
+    source: "override" as const,
+    enabled: record.autoSleepEnabled,
+    idleMinutes: record.autoSleepIdleMinutes,
+    action: record.autoSleepAction as MinecraftAutoSleepAction
+  };
 }

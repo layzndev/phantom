@@ -21,6 +21,7 @@ export interface CreateMinecraftServerRecordInput {
   planTier: string;
   serverProperties: Prisma.InputJsonValue;
   rconPassword: string;
+  autoSleepUseGlobalDefaults?: boolean;
   autoSleepEnabled?: boolean;
   autoSleepIdleMinutes?: number;
   autoSleepAction?: string;
@@ -53,6 +54,7 @@ export function createMinecraftServerRecord(input: CreateMinecraftServerRecordIn
       maxPlayers: input.maxPlayers,
       eula: input.eula,
       planTier: input.planTier,
+      autoSleepUseGlobalDefaults: input.autoSleepUseGlobalDefaults ?? true,
       autoSleepEnabled: input.autoSleepEnabled ?? true,
       autoSleepIdleMinutes: input.autoSleepIdleMinutes ?? 10,
       autoSleepAction: input.autoSleepAction ?? "sleep",
@@ -137,6 +139,7 @@ export function updateMinecraftServerRecord(
     gameMode?: string;
     maxPlayers?: number;
     serverProperties?: Prisma.InputJsonValue;
+    autoSleepUseGlobalDefaults?: boolean;
     autoSleepEnabled?: boolean;
     autoSleepIdleMinutes?: number;
     autoSleepAction?: string;
@@ -170,6 +173,9 @@ export function updateMinecraftServerRecord(
       ...(updates.gameMode !== undefined ? { gameMode: updates.gameMode } : {}),
       ...(updates.maxPlayers !== undefined ? { maxPlayers: updates.maxPlayers } : {}),
       ...(updates.serverProperties !== undefined ? { serverProperties: updates.serverProperties } : {}),
+      ...(updates.autoSleepUseGlobalDefaults !== undefined
+        ? { autoSleepUseGlobalDefaults: updates.autoSleepUseGlobalDefaults }
+        : {}),
       ...(updates.autoSleepEnabled !== undefined
         ? { autoSleepEnabled: updates.autoSleepEnabled }
         : {}),
@@ -230,7 +236,6 @@ export function listAutoSleepCandidateServers() {
     where: {
       deletedAt: null,
       planTier: "free",
-      autoSleepEnabled: true,
       workload: {
         deletedAt: null,
         status: "running",
@@ -247,5 +252,42 @@ export function listAutoSleepCandidateServers() {
       workload: true
     },
     orderBy: { createdAt: "asc" }
+  });
+}
+
+export function getMinecraftGlobalSettingsRecord() {
+  return db.minecraftGlobalSettings.upsert({
+    where: { id: "default" },
+    create: {
+      id: "default"
+    },
+    update: {}
+  });
+}
+
+export function updateMinecraftGlobalSettingsRecord(updates: {
+  freeAutoSleepEnabled?: boolean;
+  freeAutoSleepIdleMinutes?: number;
+  freeAutoSleepAction?: string;
+}) {
+  return db.minecraftGlobalSettings.upsert({
+    where: { id: "default" },
+    create: {
+      id: "default",
+      freeAutoSleepEnabled: updates.freeAutoSleepEnabled ?? true,
+      freeAutoSleepIdleMinutes: updates.freeAutoSleepIdleMinutes ?? 10,
+      freeAutoSleepAction: updates.freeAutoSleepAction ?? "sleep"
+    },
+    update: {
+      ...(updates.freeAutoSleepEnabled !== undefined
+        ? { freeAutoSleepEnabled: updates.freeAutoSleepEnabled }
+        : {}),
+      ...(updates.freeAutoSleepIdleMinutes !== undefined
+        ? { freeAutoSleepIdleMinutes: updates.freeAutoSleepIdleMinutes }
+        : {}),
+      ...(updates.freeAutoSleepAction !== undefined
+        ? { freeAutoSleepAction: updates.freeAutoSleepAction }
+        : {})
+    }
   });
 }
