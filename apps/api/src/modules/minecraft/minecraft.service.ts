@@ -86,7 +86,7 @@ const MINECRAFT_VOLUME_CONTAINER_PATH = "/data";
 const OPERATION_WAIT_TIMEOUT_MS = 5_000;
 const OPERATION_POLL_INTERVAL_MS = 250;
 
-export function getMinecraftTemplates() {
+export async function getMinecraftTemplates() {
   return listMinecraftTemplates();
 }
 
@@ -258,7 +258,7 @@ export async function createMinecraftServer(
   input: CreateMinecraftServerInput,
   actor?: { email?: string | null }
 ): Promise<CreateMinecraftServerResult> {
-  const template = findMinecraftTemplate(input.templateId);
+  const template = await findMinecraftTemplate(input.templateId);
   if (!template) {
     throw new AppError(400, "Unknown Minecraft template.", "MINECRAFT_TEMPLATE_UNKNOWN");
   }

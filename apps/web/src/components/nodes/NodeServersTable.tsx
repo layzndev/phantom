@@ -1,10 +1,15 @@
+"use client";
+
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { formatRam } from "@/lib/utils/format";
 import type { HostedServer } from "@/types/admin";
 import { DetailCard } from "@/components/ui/DetailCard";
 import { EmptyState } from "@/components/ui/EmptyState";
 
 export function NodeServersTable({ servers = [] }: { servers?: HostedServer[] }) {
+  const router = useRouter();
+
   return (
     <DetailCard title={`Hosted Servers (${servers.length})`}>
       {servers.length === 0 ? (
@@ -27,9 +32,23 @@ export function NodeServersTable({ servers = [] }: { servers?: HostedServer[] })
             </thead>
             <tbody className="divide-y divide-line">
               {servers.map((server) => (
-                <tr key={server.id} className="hover:bg-white/[0.02]">
+                <tr
+                  key={server.id}
+                  className="cursor-pointer hover:bg-white/[0.02]"
+                  onClick={() => {
+                    if (server.kind === "minecraft") {
+                      router.push(`/services/minecraft/${server.id}`);
+                    }
+                  }}
+                >
                   <td className="px-4 py-4">
-                    <p className="font-medium text-white">{server.name}</p>
+                    <Link
+                      href={server.kind === "minecraft" ? `/services/minecraft/${server.id}` : "#"}
+                      className="font-medium text-white transition hover:text-accent"
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      {server.name}
+                    </Link>
                     {server.version ? (
                       <p className="font-mono text-[11px] text-slate-500">
                         {server.templateId ?? ""} v{server.version}
@@ -57,7 +76,8 @@ export function NodeServersTable({ servers = [] }: { servers?: HostedServer[] })
                   <td className="px-4 py-4 text-right">
                     {server.kind === "minecraft" ? (
                       <Link
-                        href={`/services/playground?server=${encodeURIComponent(server.id)}`}
+                        href={`/services/minecraft/${server.id}`}
+                        onClick={(event) => event.stopPropagation()}
                         className="inline-flex h-8 items-center rounded-md border border-white/10 bg-white/[0.035] px-3 text-xs font-semibold text-slate-200 transition hover:border-white/20 hover:bg-white/[0.07]"
                       >
                         Open

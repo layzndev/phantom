@@ -1,15 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { ADMIN_API_BASE_URL } from "@/lib/api/admin-api";
-import { MinecraftConsole, type MinecraftConsoleLine } from "@/components/playground/MinecraftConsole";
 import type {
   CreateMinecraftServerPayload,
   CreateMinecraftServerResult,
   MinecraftDifficulty,
   MinecraftGameMode,
-  MinecraftOperationResponse,
   MinecraftServerWithWorkload,
   MinecraftTemplate,
   PlanTier
@@ -51,8 +49,7 @@ const DIFFICULTIES: MinecraftDifficulty[] = ["peaceful", "easy", "normal", "hard
 const GAME_MODES: MinecraftGameMode[] = ["survival", "creative", "adventure", "spectator"];
 
 export function PlaygroundClient() {
-  const searchParams = useSearchParams();
-  const initialServerId = searchParams.get("server");
+  const router = useRouter();
 
   const [templates, setTemplates] = useState<MinecraftTemplate[]>([]);
   const [servers, setServers] = useState<MinecraftServerWithWorkload[]>([]);
@@ -62,11 +59,6 @@ export function PlaygroundClient() {
   const [form, setForm] = useState<CreateFormState>(emptyForm());
   const [actionPending, setActionPending] = useState<Record<string, boolean>>({});
   const [hardDeleteData, setHardDeleteData] = useState(false);
-  const [consoleServerId, setConsoleServerId] = useState<string | null>(initialServerId);
-  const [commandInput, setCommandInput] = useState("");
-  const [consoleOutput, setConsoleOutput] = useState<MinecraftConsoleLine[]>([]);
-  const [consoleBusy, setConsoleBusy] = useState(false);
-  const latestOpId = useRef<string | null>(null);
 
   const callApi = useCallback(
     async <T,>(method: HttpMethod, path: string, payload?: unknown): Promise<T | null> => {
@@ -126,7 +118,6 @@ export function PlaygroundClient() {
           error,
           durationMs
         };
-        latestOpId.current = opId;
         setOperations((current) => [op, ...current].slice(0, MAX_OPERATIONS));
       }
     },
@@ -239,154 +230,6 @@ export function PlaygroundClient() {
 
   const errorOps = operations.filter((op) => op.error !== null);
   const latestOp = operations[0] ?? null;
-
-  const consoleServer = useMemo(
-    () => servers.find((entry) => entry.server.id === consoleServerId) ?? null,
-    [servers, consoleServerId]
-  );
-  const consoleReady = consoleServer?.workload.status === "running";
-
-  const appendConsoleLines = useCallback(
-    (lines: Array<Omit<MinecraftConsoleLine, "id" | "timestamp">>) => {
-      const ts = new Date().toISOString();
-      setConsoleOutput((current) => {
-        const next = [
-          ...current,
-          ...lines.map((line, idx) => ({
-            id: `${ts}-${idx}-${Math.random().toString(16).slice(2, 8)}`,
-            timestamp: ts,
-            ...line
-          }))
-        ];
-        return next.slice(-500);
-      });
-    },
-    []
-  );
-
-  const handleConsoleCommand = async () => {
-    if (!consoleServerId || !commandInput.trim() || !consoleReady) return;
-    const command = commandInput.trim();
-    setCommandInput("");
-    appendConsoleLines([{ kind: "command", text: `> ${command}` }]);
-    setConsoleBusy(true);
-    try {
-      const result = await callApi<MinecraftOperationResponse>(
-        "POST",
-        `/minecraft/servers/${consoleServerId}/command`,
-        { command }
-      );
-      if (!result) {
-        appendConsoleLines([{ kind: "error", text: "Command request failed." }]);
-        return;
-      }
-      const final = await waitForOperation(consoleServerId, result);
-      handleOperationResult(final, "command");
-    } finally {
-      setConsoleBusy(false);
-    }
-  };
-
-  const handleConsoleSave = async () => {
-    if (!consoleServerId || !consoleReady) return;
-    appendConsoleLines([{ kind: "command", text: "> save-all flush" }]);
-    setConsoleBusy(true);
-    try {
-      const result = await callApi<MinecraftOperationResponse>(
-        "POST",
-        `/minecraft/servers/${consoleServerId}/save`
-      );
-      if (!result) {
-        appendConsoleLines([{ kind: "error", text: "Save request failed." }]);
-        return;
-      }
-      const final = await waitForOperation(consoleServerId, result);
-      handleOperationResult(final, "save");
-    } finally {
-      setConsoleBusy(false);
-    }
-  };
-
-  const handleConsoleLogs = async () => {
-    if (!consoleServerId || !consoleReady) return;
-    appendConsoleLines([{ kind: "info", text: "fetching last 200 log lines..." }]);
-    setConsoleBusy(true);
-    try {
-      const result = await callApi<MinecraftOperationResponse>(
-        "GET",
-        `/minecraft/servers/${consoleServerId}/logs?tail=200`
-      );
-      if (!result) {
-        appendConsoleLines([{ kind: "error", text: "Logs request failed." }]);
-        return;
-      }
-      const final = await waitForOperation(consoleServerId, result);
-      handleOperationResult(final, "logs");
-    } finally {
-      setConsoleBusy(false);
-    }
-  };
-
-  const waitForOperation = async (
-    serverId: string,
-    initial: MinecraftOperationResponse
-  ): Promise<MinecraftOperationResponse> => {
-    let current = initial;
-    const deadline = Date.now() + 30_000;
-    while (current.pending && Date.now() < deadline) {
-      await new Promise((resolve) => setTimeout(resolve, 1_000));
-      const next = await callApi<MinecraftOperationResponse>(
-        "GET",
-        `/minecraft/servers/${serverId}/operations/${current.operation.id}`
-      );
-      if (!next) break;
-      current = next;
-    }
-    return current;
-  };
-
-  const handleOperationResult = (
-    response: MinecraftOperationResponse,
-    kind: "command" | "save" | "logs"
-  ) => {
-    const op = response.operation;
-    if (response.pending) {
-      appendConsoleLines([{ kind: "info", text: "operation still pending after timeout." }]);
-      return;
-    }
-    if (op.status === "failed") {
-      appendConsoleLines([
-        { kind: "error", text: op.error ?? "operation failed" }
-      ]);
-      return;
-    }
-    if (kind === "logs") {
-      const rawLines = (op.result?.lines as string[] | undefined) ?? [];
-      if (rawLines.length === 0) {
-        appendConsoleLines([{ kind: "info", text: "(no log output)" }]);
-        return;
-      }
-      appendConsoleLines(rawLines.map((text) => ({ kind: "logs", text })));
-      return;
-    }
-    const output = (op.result?.output as string | undefined) ?? "";
-    const stderr = (op.result?.stderr as string | undefined) ?? "";
-    const lines: Array<{ kind: MinecraftConsoleLine["kind"]; text: string }> = [];
-    if (output.trim()) {
-      for (const line of output.split(/\r?\n/)) {
-        if (line.length > 0) lines.push({ kind: "response", text: line });
-      }
-    }
-    if (stderr.trim()) {
-      for (const line of stderr.split(/\r?\n/)) {
-        if (line.length > 0) lines.push({ kind: "error", text: line });
-      }
-    }
-    if (lines.length === 0) {
-      lines.push({ kind: "info", text: "(no output)" });
-    }
-    appendConsoleLines(lines);
-  };
 
   return (
     <div className="space-y-6">
@@ -643,7 +486,11 @@ export function PlaygroundClient() {
                   const port = workload.ports.find((p) => p.internalPort === 25565);
                   const pending = actionPending[server.id] ?? false;
                   return (
-                    <tr key={server.id} className="border-t border-white/5">
+                    <tr
+                      key={server.id}
+                      className="cursor-pointer border-t border-white/5 transition hover:bg-white/[0.03]"
+                      onClick={() => router.push(`/services/minecraft/${server.id}`)}
+                    >
                       <td className="px-5 py-3">
                         <p className="font-semibold text-white">{server.name}</p>
                         <p className="font-mono text-[11px] text-slate-500">{server.slug}</p>
@@ -670,7 +517,10 @@ export function PlaygroundClient() {
                         <div className="inline-flex gap-1.5">
                           <ActionButton
                             label="Start"
-                            onClick={() => void handleAction(server.id, "start")}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              void handleAction(server.id, "start");
+                            }}
                             disabled={
                               pending ||
                               workload.desiredStatus === "running" ||
@@ -679,7 +529,10 @@ export function PlaygroundClient() {
                           />
                           <ActionButton
                             label="Stop"
-                            onClick={() => void handleAction(server.id, "stop")}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              void handleAction(server.id, "stop");
+                            }}
                             disabled={
                               pending ||
                               workload.desiredStatus === "stopped" ||
@@ -688,18 +541,27 @@ export function PlaygroundClient() {
                           />
                           <ActionButton
                             label="Restart"
-                            onClick={() => void handleAction(server.id, "restart")}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              void handleAction(server.id, "restart");
+                            }}
                             disabled={pending || workload.status === "deleting"}
                           />
                           <ActionButton
                             label="Refresh"
-                            onClick={() => void refreshServers()}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              void refreshServers();
+                            }}
                             disabled={pending}
                           />
                           <ActionButton
                             label="Delete"
                             tone="danger"
-                            onClick={() => void handleDelete(server.id, server.name)}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              void handleDelete(server.id, server.name);
+                            }}
                             disabled={pending || workload.status === "deleting"}
                           />
                         </div>
@@ -712,31 +574,6 @@ export function PlaygroundClient() {
           </div>
         )}
       </section>
-
-      <MinecraftConsole
-        entry={consoleServer}
-        servers={servers}
-        selectedServerId={consoleServerId}
-        onSelectServer={(id) => {
-          setConsoleServerId(id);
-          setConsoleOutput([]);
-        }}
-        lines={consoleOutput}
-        commandInput={commandInput}
-        onCommandInputChange={setCommandInput}
-        onCommandSubmit={() => void handleConsoleCommand()}
-        onSave={() => void handleConsoleSave()}
-        onFetchLogs={() => void handleConsoleLogs()}
-        onRestart={() => {
-          if (consoleServerId) void handleAction(consoleServerId, "restart");
-        }}
-        onStop={() => {
-          if (consoleServerId) void handleAction(consoleServerId, "stop");
-        }}
-        onClear={() => setConsoleOutput([])}
-        busy={consoleBusy || (consoleServerId ? actionPending[consoleServerId] === true : false)}
-        operatorLabel="operator"
-      />
 
       <div className="grid gap-6 lg:grid-cols-2">
         <section className="rounded-2xl border border-line bg-panel/78 p-5 shadow-soft">
@@ -867,7 +704,7 @@ function ActionButton({
   tone = "neutral"
 }: {
   label: string;
-  onClick: () => void;
+  onClick: React.MouseEventHandler<HTMLButtonElement>;
   disabled?: boolean;
   tone?: "neutral" | "danger";
 }) {

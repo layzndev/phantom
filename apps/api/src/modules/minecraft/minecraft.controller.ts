@@ -35,7 +35,7 @@ minecraftController.get(
   "/templates",
   asyncHandler(async (req, res) => {
     const actor = req.session.admin!;
-    const templates = getMinecraftTemplates();
+    const templates = await getMinecraftTemplates();
     await writeAuditLog(req, {
       action: "minecraft.template.list",
       actorId: actor.id,
