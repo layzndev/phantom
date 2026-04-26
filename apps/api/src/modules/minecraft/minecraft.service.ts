@@ -55,6 +55,8 @@ import type {
   CreateMinecraftServerResult,
   DeleteMinecraftServerResult,
   MinecraftDifficulty,
+  MinecraftFileReadResult,
+  MinecraftFilesListResult,
   MinecraftGameMode,
   MinecraftOperation,
   MinecraftOperationKind,
@@ -515,6 +517,91 @@ export async function getMinecraftOperation(
   };
 }
 
+export async function listMinecraftFiles(
+  serverId: string,
+  path: string,
+  actor: { id: string; email: string }
+): Promise<MinecraftFilesListResult> {
+  const result = await enqueueMinecraftOperation(serverId, "files.list", { path }, actor);
+  return unwrapMinecraftFileOperation<MinecraftFilesListResult>(
+    result,
+    "MINECRAFT_FILES_LIST_FAILED",
+    "Unable to list files."
+  );
+}
+
+export async function readMinecraftFile(
+  serverId: string,
+  path: string,
+  actor: { id: string; email: string }
+): Promise<MinecraftFileReadResult> {
+  const result = await enqueueMinecraftOperation(serverId, "files.read", { path }, actor);
+  return unwrapMinecraftFileOperation<MinecraftFileReadResult>(
+    result,
+    "MINECRAFT_FILE_READ_FAILED",
+    "Unable to read file."
+  );
+}
+
+export async function writeMinecraftFile(
+  serverId: string,
+  path: string,
+  content: string,
+  actor: { id: string; email: string }
+) {
+  return enqueueMinecraftOperation(serverId, "files.write", { path, content }, actor);
+}
+
+export async function uploadMinecraftFile(
+  serverId: string,
+  path: string,
+  contentBase64: string,
+  actor: { id: string; email: string }
+) {
+  return enqueueMinecraftOperation(serverId, "files.upload", { path, contentBase64 }, actor);
+}
+
+export async function mkdirMinecraftFilePath(
+  serverId: string,
+  path: string,
+  actor: { id: string; email: string }
+) {
+  return enqueueMinecraftOperation(serverId, "files.mkdir", { path }, actor);
+}
+
+export async function renameMinecraftFilePath(
+  serverId: string,
+  from: string,
+  to: string,
+  actor: { id: string; email: string }
+) {
+  return enqueueMinecraftOperation(serverId, "files.rename", { from, to }, actor);
+}
+
+export async function deleteMinecraftFilePath(
+  serverId: string,
+  path: string,
+  actor: { id: string; email: string }
+) {
+  return enqueueMinecraftOperation(serverId, "files.delete", { path }, actor);
+}
+
+export async function archiveMinecraftFilePath(
+  serverId: string,
+  path: string,
+  actor: { id: string; email: string }
+) {
+  return enqueueMinecraftOperation(serverId, "files.archive", { path }, actor);
+}
+
+export async function extractMinecraftArchive(
+  serverId: string,
+  path: string,
+  actor: { id: string; email: string }
+) {
+  return enqueueMinecraftOperation(serverId, "files.extract", { path }, actor);
+}
+
 export interface RuntimeMinecraftOperation {
   id: string;
   workloadId: string;
@@ -879,6 +966,24 @@ async function waitForMinecraftOperation(operationId: string) {
 
 function isOperationPending(record: MinecraftOperationRecord) {
   return record.status === "pending" || record.status === "in_progress";
+}
+
+function unwrapMinecraftFileOperation<T>(
+  response: MinecraftOperationResponse,
+  errorCode: string,
+  fallbackMessage: string
+) {
+  if (response.pending) {
+    throw new AppError(504, "Minecraft file operation timed out.", "MINECRAFT_FILES_TIMEOUT");
+  }
+  if (response.operation.status === "failed") {
+    throw new AppError(
+      400,
+      response.operation.error ?? fallbackMessage,
+      errorCode
+    );
+  }
+  return (response.operation.result ?? {}) as T;
 }
 
 function sleep(ms: number) {

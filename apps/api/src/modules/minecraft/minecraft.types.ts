@@ -79,7 +79,21 @@ export interface DeleteMinecraftServerResult {
   finalized: boolean;
 }
 
-export type MinecraftOperationKind = "command" | "save" | "logs" | "stop" | "players";
+export type MinecraftOperationKind =
+  | "command"
+  | "save"
+  | "logs"
+  | "stop"
+  | "players"
+  | "files.list"
+  | "files.read"
+  | "files.write"
+  | "files.upload"
+  | "files.mkdir"
+  | "files.rename"
+  | "files.delete"
+  | "files.archive"
+  | "files.extract";
 export type MinecraftOperationStatus =
   | "pending"
   | "in_progress"
@@ -107,4 +121,26 @@ export interface MinecraftOperationResponse {
 
 export interface MinecraftLogsResult {
   lines: string[];
+}
+
+export interface MinecraftFileEntry {
+  name: string;
+  path: string;
+  type: "file" | "directory";
+  sizeBytes: number;
+  modifiedAt: string;
+}
+
+export interface MinecraftFilesListResult {
+  path: string;
+  parentPath: string | null;
+  entries: MinecraftFileEntry[];
+}
+
+export interface MinecraftFileReadResult {
+  path: string;
+  content: string;
+  modifiedAt: string;
+  sizeBytes: number;
+  encoding: "utf-8";
 }

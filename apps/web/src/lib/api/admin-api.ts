@@ -12,6 +12,8 @@ import type {
   DeleteWorkloadOptions,
   DeleteWorkloadResult,
   MinecraftServerWithWorkload,
+  MinecraftFilesListResult,
+  MinecraftFileReadResult,
   NodeSummary,
   UpdateNodePayload,
   UpdateWorkloadPayload
@@ -120,6 +122,63 @@ export const adminApi = {
     }),
   minecraftServer: (id: string) =>
     apiRequest<MinecraftServerWithWorkload>(`/minecraft/servers/${encodeURIComponent(id)}`),
+  minecraftFiles: (id: string, path = "/") =>
+    apiRequest<MinecraftFilesListResult>(
+      `/minecraft/servers/${encodeURIComponent(id)}/files?path=${encodeURIComponent(path)}`
+    ),
+  readMinecraftFile: (id: string, path: string) =>
+    apiRequest<MinecraftFileReadResult>(
+      `/minecraft/servers/${encodeURIComponent(id)}/files/read?path=${encodeURIComponent(path)}`
+    ),
+  writeMinecraftFile: (id: string, path: string, content: string) =>
+    apiRequest(`/minecraft/servers/${encodeURIComponent(id)}/files/write`, {
+      method: "PUT",
+      body: JSON.stringify({ path, content })
+    }),
+  uploadMinecraftFile: async (id: string, path: string, file: File) => {
+    const formData = new FormData();
+    formData.append("path", path);
+    formData.append("file", file);
+    const response = await fetch(
+      `${API_BASE_URL}/minecraft/servers/${encodeURIComponent(id)}/files/upload`,
+      {
+        method: "POST",
+        cache: "no-store",
+        credentials: "include",
+        body: formData
+      }
+    );
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({ error: "Request failed." }));
+      throw new Error(payload.error ?? "Request failed.");
+    }
+    return response.json();
+  },
+  mkdirMinecraftFile: (id: string, path: string) =>
+    apiRequest(`/minecraft/servers/${encodeURIComponent(id)}/files/mkdir`, {
+      method: "POST",
+      body: JSON.stringify({ path })
+    }),
+  renameMinecraftFile: (id: string, from: string, to: string) =>
+    apiRequest(`/minecraft/servers/${encodeURIComponent(id)}/files/rename`, {
+      method: "POST",
+      body: JSON.stringify({ from, to })
+    }),
+  deleteMinecraftFile: (id: string, path: string) =>
+    apiRequest(`/minecraft/servers/${encodeURIComponent(id)}/files`, {
+      method: "DELETE",
+      body: JSON.stringify({ path })
+    }),
+  archiveMinecraftFile: (id: string, path: string) =>
+    apiRequest(`/minecraft/servers/${encodeURIComponent(id)}/files/archive`, {
+      method: "POST",
+      body: JSON.stringify({ path })
+    }),
+  extractMinecraftFile: (id: string, path: string) =>
+    apiRequest(`/minecraft/servers/${encodeURIComponent(id)}/files/extract`, {
+      method: "POST",
+      body: JSON.stringify({ path })
+    }),
   startMinecraftServer: (id: string) =>
     apiRequest<{ server: MinecraftServerWithWorkload["server"]; workload: CompanyWorkload }>(
       `/minecraft/servers/${encodeURIComponent(id)}/start`,

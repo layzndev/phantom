@@ -64,6 +64,46 @@ export const minecraftLogsQuerySchema = z.object({
   tail: z.coerce.number().int().min(1).max(2_000).optional()
 });
 
+const relativeFilePathSchema = z
+  .string()
+  .min(1)
+  .max(512)
+  .refine((value) => !value.includes("\0"), { message: "Path contains invalid characters." });
+
+export const minecraftFilesListQuerySchema = z.object({
+  path: relativeFilePathSchema.optional().default("/")
+});
+
+export const minecraftFilesReadQuerySchema = z.object({
+  path: relativeFilePathSchema
+});
+
+export const minecraftFilesWriteSchema = z.object({
+  path: relativeFilePathSchema,
+  content: z.string().max(2_000_000)
+});
+
+export const minecraftFilesMkdirSchema = z.object({
+  path: relativeFilePathSchema
+});
+
+export const minecraftFilesRenameSchema = z.object({
+  from: relativeFilePathSchema,
+  to: relativeFilePathSchema
+});
+
+export const minecraftFilesDeleteSchema = z.object({
+  path: relativeFilePathSchema
+});
+
+export const minecraftFilesArchiveSchema = z.object({
+  path: relativeFilePathSchema
+});
+
+export const minecraftFilesExtractSchema = z.object({
+  path: relativeFilePathSchema
+});
+
 export const minecraftOperationParamsSchema = z.object({
   id: z.string().uuid(),
   opId: z.string().uuid()
@@ -79,3 +119,11 @@ export type DeleteMinecraftServerQuery = z.infer<typeof deleteMinecraftServerQue
 export type MinecraftCommandInput = z.infer<typeof minecraftCommandSchema>;
 export type MinecraftLogsQuery = z.infer<typeof minecraftLogsQuerySchema>;
 export type UpdateMinecraftHostnameInput = z.infer<typeof updateMinecraftHostnameSchema>;
+export type MinecraftFilesListQuery = z.infer<typeof minecraftFilesListQuerySchema>;
+export type MinecraftFilesReadQuery = z.infer<typeof minecraftFilesReadQuerySchema>;
+export type MinecraftFilesWriteInput = z.infer<typeof minecraftFilesWriteSchema>;
+export type MinecraftFilesMkdirInput = z.infer<typeof minecraftFilesMkdirSchema>;
+export type MinecraftFilesRenameInput = z.infer<typeof minecraftFilesRenameSchema>;
+export type MinecraftFilesDeleteInput = z.infer<typeof minecraftFilesDeleteSchema>;
+export type MinecraftFilesArchiveInput = z.infer<typeof minecraftFilesArchiveSchema>;
+export type MinecraftFilesExtractInput = z.infer<typeof minecraftFilesExtractSchema>;

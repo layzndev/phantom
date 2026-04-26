@@ -4,6 +4,7 @@ import {
   DockerMinecraftManagementTransport,
   type MinecraftManagementTransport
 } from "./minecraft-management.js";
+import { MinecraftFilesManager } from "./minecraft-files.js";
 import { PhantomApiClient } from "./phantom-api.js";
 import type {
   MinecraftOperationCompletePayload,
@@ -14,6 +15,7 @@ import type {
 export class MinecraftOperationsProcessor {
   private readonly logger: Logger;
   private readonly transport: MinecraftManagementTransport;
+  private readonly files: MinecraftFilesManager;
   private running = false;
 
   constructor(
@@ -23,6 +25,7 @@ export class MinecraftOperationsProcessor {
   ) {
     this.logger = logger.child("minecraft-ops");
     this.transport = new DockerMinecraftManagementTransport(this.docker, logger);
+    this.files = new MinecraftFilesManager(logger);
   }
 
   async processOnce() {
@@ -107,6 +110,63 @@ export class MinecraftOperationsProcessor {
       }
       case "players": {
         return this.transport.sendCommand(target, "list");
+      }
+      case "files.list": {
+        return this.files.list(
+          this.docker.getWorkloadVolumePath(workloadId, "minecraft-data"),
+          typeof payload.path === "string" ? payload.path : "/"
+        );
+      }
+      case "files.read": {
+        return this.files.readText(
+          this.docker.getWorkloadVolumePath(workloadId, "minecraft-data"),
+          typeof payload.path === "string" ? payload.path : "/"
+        );
+      }
+      case "files.write": {
+        return this.files.writeText(
+          this.docker.getWorkloadVolumePath(workloadId, "minecraft-data"),
+          typeof payload.path === "string" ? payload.path : "/",
+          typeof payload.content === "string" ? payload.content : ""
+        );
+      }
+      case "files.upload": {
+        return this.files.upload(
+          this.docker.getWorkloadVolumePath(workloadId, "minecraft-data"),
+          typeof payload.path === "string" ? payload.path : "/",
+          typeof payload.contentBase64 === "string" ? payload.contentBase64 : ""
+        );
+      }
+      case "files.mkdir": {
+        return this.files.mkdir(
+          this.docker.getWorkloadVolumePath(workloadId, "minecraft-data"),
+          typeof payload.path === "string" ? payload.path : "/"
+        );
+      }
+      case "files.rename": {
+        return this.files.rename(
+          this.docker.getWorkloadVolumePath(workloadId, "minecraft-data"),
+          typeof payload.from === "string" ? payload.from : "/",
+          typeof payload.to === "string" ? payload.to : "/"
+        );
+      }
+      case "files.delete": {
+        return this.files.delete(
+          this.docker.getWorkloadVolumePath(workloadId, "minecraft-data"),
+          typeof payload.path === "string" ? payload.path : "/"
+        );
+      }
+      case "files.archive": {
+        return this.files.archive(
+          this.docker.getWorkloadVolumePath(workloadId, "minecraft-data"),
+          typeof payload.path === "string" ? payload.path : "/"
+        );
+      }
+      case "files.extract": {
+        return this.files.extract(
+          this.docker.getWorkloadVolumePath(workloadId, "minecraft-data"),
+          typeof payload.path === "string" ? payload.path : "/"
+        );
       }
       default:
         throw new Error(`unsupported operation kind: ${kind}`);

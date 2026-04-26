@@ -391,6 +391,10 @@ export class DockerRuntime {
     }
   }
 
+  getWorkloadVolumePath(workloadId: string, volumeName: string) {
+    return this.resolveVolumeHostPath(workloadId, volumeName);
+  }
+
   isManagedContainer(
     container: DockerContainerSummary,
     nodeId: string,

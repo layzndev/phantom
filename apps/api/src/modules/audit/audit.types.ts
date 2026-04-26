@@ -37,6 +37,13 @@ export type AuditAction =
   | "minecraft.server.command"
   | "minecraft.server.save"
   | "minecraft.server.logs"
+  | "minecraft.server.file.write"
+  | "minecraft.server.file.upload"
+  | "minecraft.server.file.mkdir"
+  | "minecraft.server.file.rename"
+  | "minecraft.server.file.delete"
+  | "minecraft.server.file.archive"
+  | "minecraft.server.file.extract"
   | "system.critical_error";
 
 export interface AuditLogEntry {

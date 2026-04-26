@@ -15,6 +15,7 @@ import {
   formatRelativeDurationSince
 } from "@/lib/utils/format";
 import { MinecraftServiceConsole } from "./MinecraftServiceConsole";
+import { MinecraftFilesManager } from "./MinecraftFilesManager";
 import type { MinecraftServerWithWorkload } from "@/types/admin";
 
 const REFRESH_MS = 10_000;
@@ -27,6 +28,7 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [hostnameSlug, setHostnameSlug] = useState("");
   const [optimisticRuntimeState, setOptimisticRuntimeState] = useState<MinecraftServerWithWorkload["server"]["runtimeState"] | null>(null);
+  const [activeTab, setActiveTab] = useState<"files" | "backups" | "plugins" | "settings">("files");
 
   const refresh = useCallback(async () => {
     try {
@@ -329,23 +331,47 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
 
       <MinecraftServiceConsole entry={displayEntry} onRefresh={refresh} />
 
-      <section className="grid gap-6 xl:grid-cols-4">
-        <PlaceholderCard
-          title="Files"
-          description="Future file browser and editor will reuse the same Minecraft service API surface."
-        />
-        <PlaceholderCard
-          title="Backups"
-          description="Backup orchestration will plug into this service detail without changing the console transport."
-        />
-        <PlaceholderCard
-          title="Plugins"
-          description="Plugin inventory and install actions will be layered on top of the current admin service model."
-        />
-        <PlaceholderCard
-          title="Settings"
-          description="Server properties and template-specific settings will be exposed here next."
-        />
+      <section className="space-y-4">
+        <div className="flex flex-wrap gap-2">
+          {[
+            ["files", "Files"],
+            ["backups", "Backups"],
+            ["plugins", "Plugins"],
+            ["settings", "Settings"]
+          ].map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setActiveTab(value as "files" | "backups" | "plugins" | "settings")}
+              className={`rounded-full px-4 py-2 text-sm transition ${
+                activeTab === value
+                  ? "border border-accent/30 bg-accent/[0.12] text-white"
+                  : "border border-white/10 bg-white/[0.04] text-slate-400 hover:text-white"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {activeTab === "files" ? (
+          <MinecraftFilesManager entry={displayEntry} />
+        ) : activeTab === "backups" ? (
+          <PlaceholderCard
+            title="Backups"
+            description="Backup orchestration will plug into this service detail without changing the files transport."
+          />
+        ) : activeTab === "plugins" ? (
+          <PlaceholderCard
+            title="Plugins"
+            description="Plugin inventory and install actions will be layered on top of the current admin service model."
+          />
+        ) : (
+          <PlaceholderCard
+            title="Settings"
+            description="Server properties and template-specific settings will be exposed here next."
+          />
+        )}
       </section>
 
       <DetailCard title="References">

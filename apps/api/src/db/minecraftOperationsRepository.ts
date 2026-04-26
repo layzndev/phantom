@@ -1,7 +1,21 @@
 import { Prisma } from "@prisma/client";
 import { db } from "./client.js";
 
-export type MinecraftOperationKind = "command" | "save" | "logs" | "stop" | "players";
+export type MinecraftOperationKind =
+  | "command"
+  | "save"
+  | "logs"
+  | "stop"
+  | "players"
+  | "files.list"
+  | "files.read"
+  | "files.write"
+  | "files.upload"
+  | "files.mkdir"
+  | "files.rename"
+  | "files.delete"
+  | "files.archive"
+  | "files.extract";
 export type MinecraftOperationStatus =
   | "pending"
   | "in_progress"

@@ -151,7 +151,21 @@ export interface DockerCreateOptions {
   nodeId: string;
 }
 
-export type MinecraftOperationKind = "command" | "save" | "logs" | "stop" | "players";
+export type MinecraftOperationKind =
+  | "command"
+  | "save"
+  | "logs"
+  | "stop"
+  | "players"
+  | "files.list"
+  | "files.read"
+  | "files.write"
+  | "files.upload"
+  | "files.mkdir"
+  | "files.rename"
+  | "files.delete"
+  | "files.archive"
+  | "files.extract";
 
 export interface MinecraftRuntimeOperation {
   id: string;
