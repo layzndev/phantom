@@ -11,6 +11,7 @@ import {
   updateNodeHeartbeatRecord,
   updateNodeRecord,
   createNodeStatusEventRecord,
+  acknowledgeRecentNodeIncidentRecords,
   type CreateNodeRecordInput,
   type UpdateNodeHeartbeatRecordInput,
   type UpdateNodeRecordInput
@@ -71,4 +72,8 @@ export function createNodeStatusEventInRegistry(input: {
   reason?: string;
 }) {
   return createNodeStatusEventRecord(input);
+}
+
+export function acknowledgeRecentNodeIncidentsInRegistry() {
+  return acknowledgeRecentNodeIncidentRecords();
 }

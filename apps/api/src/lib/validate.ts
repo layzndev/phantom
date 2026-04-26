@@ -34,3 +34,16 @@ export function validateParams<T>(schema: ZodSchema<T>) {
     next();
   };
 }
+
+export function validateQuery<T>(schema: ZodSchema<T>) {
+  return (req: Request, _res: Response, next: NextFunction) => {
+    const parsed = schema.safeParse(req.query);
+    if (!parsed.success) {
+      next(new AppError(400, "Invalid query parameters.", "VALIDATION_ERROR", parsed.error.flatten()));
+      return;
+    }
+
+    req.query = parsed.data as Request["query"];
+    next();
+  };
+}

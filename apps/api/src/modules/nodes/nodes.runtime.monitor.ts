@@ -94,7 +94,7 @@ async function runMonitorTick(options: NodeRuntimeMonitorOptions): Promise<numbe
           status: { not: "offline" },
           OR: [{ lastHeartbeatAt: null }, { lastHeartbeatAt: { lt: cutoff } }]
         },
-        select: { id: true, status: true, lastHeartbeatAt: true },
+        select: { id: true, name: true, publicHost: true, status: true, lastHeartbeatAt: true },
         orderBy: { lastHeartbeatAt: { sort: "asc", nulls: "first" } },
         take: options.maxStalePerTick
       });
@@ -119,6 +119,28 @@ async function runMonitorTick(options: NodeRuntimeMonitorOptions): Promise<numbe
           previousStatus: node.status,
           newStatus: "offline",
           reason: describeStaleReason(node.lastHeartbeatAt, options.heartbeatTimeoutMs)
+        }))
+      });
+
+      await tx.systemNotification.createMany({
+        data: stale.map((node) => ({
+          kind: "node_offline",
+          severity: "critical",
+          title: "Node offline",
+          body: `${node.name} (${node.publicHost}) is offline. ${describeStaleReason(
+            node.lastHeartbeatAt,
+            options.heartbeatTimeoutMs
+          )}`.trim(),
+          resourceType: "node",
+          resourceId: node.id,
+          nodeId: node.id,
+          metadata: {
+            previousStatus: node.status,
+            newStatus: "offline",
+            reason: describeStaleReason(node.lastHeartbeatAt, options.heartbeatTimeoutMs),
+            nodeName: node.name,
+            nodePublicHost: node.publicHost
+          } as Prisma.InputJsonValue
         }))
       });
 

@@ -1,13 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { AlertTriangle, Zap } from "lucide-react";
 import { adminApi } from "@/lib/api/admin-api";
 import { formatRam, percent } from "@/lib/utils/format";
 import type { NodeSummary } from "@/types/admin";
 import { StatCard } from "@/components/ui/StatCard";
 import { ActionButton } from "@/components/ui/ActionButton";
-import { SectionHeader } from "@/components/ui/SectionHeader";
 import { DetailCard } from "@/components/ui/DetailCard";
 import { SkeletonBlock } from "@/components/ui/SkeletonBlock";
 
@@ -16,6 +16,7 @@ const DASHBOARD_REFRESH_MS = 5_000;
 export function DashboardClient() {
   const [summary, setSummary] = useState<NodeSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [clearingIncidents, setClearingIncidents] = useState(false);
   const loadedOnceRef = useRef(false);
 
   useEffect(() => {
@@ -63,22 +64,26 @@ export function DashboardClient() {
     return <SkeletonBlock label="Loading infrastructure telemetry..." />;
   }
 
+  async function handleClearIncidents() {
+    try {
+      setClearingIncidents(true);
+      await adminApi.clearNodeIncidents();
+      const { summary: nextSummary } = await adminApi.nodeSummary();
+      setSummary(nextSummary);
+      setError(null);
+    } catch (clearError) {
+      setError(
+        clearError instanceof Error
+          ? clearError.message
+          : "Unable to clear recent incidents"
+      );
+    } finally {
+      setClearingIncidents(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
-      <section className="rounded-3xl border border-line bg-panel/70 p-6 shadow-soft">
-        <SectionHeader
-          eyebrow="Nodes only V1"
-          title="Company infrastructure cockpit"
-          description="Supervision et actions admin sur les nodes via la Phantom API, sans dependance UI avec le panel client."
-          actions={
-            <>
-              <ActionButton onClick={() => location.assign("/nodes")}>Open nodes</ActionButton>
-              <ActionButton onClick={() => location.assign("/audit-logs")}>Audit trail</ActionButton>
-            </>
-          }
-        />
-      </section>
-
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <StatCard label="Total nodes" value={summary.totalNodes} caption="registered" />
         <StatCard label="Healthy nodes" value={summary.healthyNodes} caption="green health" tone="good" />
@@ -99,18 +104,47 @@ export function DashboardClient() {
       </section>
 
       <section className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
-        <DetailCard title="Incidents recents" actions={<AlertTriangle className="text-amber" size={20} />}>
+        <DetailCard
+          title="Incidents recents"
+          actions={
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="text-amber" size={20} />
+              <ActionButton
+                onClick={() => void handleClearIncidents()}
+                disabled={summary.recentIncidents.length === 0 || clearingIncidents}
+              >
+                {clearingIncidents ? "Clearing..." : "Clear"}
+              </ActionButton>
+            </div>
+          }
+        >
           <div className="space-y-3">
             {summary.recentIncidents.length === 0 ? (
               <p className="text-slate-400">Aucun incident recent remonte par la Hosting API.</p>
             ) : (
-              summary.recentIncidents.map((incident) => (
+              summary.recentIncidents.slice(0, 3).map((incident) => (
                 <div key={incident.id} className="rounded-2xl bg-white/[0.04] p-4">
-                  <p className="font-medium text-white">{incident.message}</p>
+                  <div className="flex flex-wrap items-start gap-2">
+                    {incident.nodeId ? (
+                      <Link
+                        href={`/nodes/${encodeURIComponent(incident.nodeId)}`}
+                        className="font-medium text-white transition hover:text-accent"
+                        title={`Open ${incident.nodeName ?? incident.nodeId}`}
+                      >
+                        {incident.nodeName ?? incident.nodeId}
+                      </Link>
+                    ) : null}
+                    <p className="min-w-0 flex-1 text-slate-200">{incident.message}</p>
+                  </div>
                   <p className="mt-1 text-sm text-slate-500">{new Date(incident.createdAt).toLocaleString("fr-FR")}</p>
                 </div>
               ))
             )}
+            <div className="pt-1">
+              <Link href="/incidents" className="text-sm text-accent transition hover:text-accent/80">
+                View all incidents
+              </Link>
+            </div>
           </div>
         </DetailCard>
         <DetailCard title="Actions rapides" actions={<Zap className="text-accent" size={20} />}>

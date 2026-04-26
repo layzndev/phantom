@@ -11,6 +11,7 @@ export interface NodeStatusEvent {
   previousStatus: NodeStatus | null;
   newStatus: NodeStatus;
   reason: string | null;
+  acknowledgedAt?: string | null;
   createdAt: string;
 }
 
@@ -113,7 +114,14 @@ export interface NodeSummary {
   usedRamMb: number;
   totalCpu: number;
   usedCpu: number;
-  recentIncidents: Array<{ id: string; type: string; message: string; createdAt: string }>;
+  recentIncidents: Array<{
+    id: string;
+    type: string;
+    nodeId: string;
+    nodeName: string;
+    message: string;
+    createdAt: string;
+  }>;
 }
 
 export interface CreateNodeResult {

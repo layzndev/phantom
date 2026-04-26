@@ -257,3 +257,15 @@ export function createNodeStatusEventRecord(input: {
     }
   });
 }
+
+export function acknowledgeRecentNodeIncidentRecords() {
+  return db.nodeStatusEvent.updateMany({
+    where: {
+      newStatus: "offline",
+      acknowledgedAt: null
+    },
+    data: {
+      acknowledgedAt: new Date()
+    }
+  });
+}

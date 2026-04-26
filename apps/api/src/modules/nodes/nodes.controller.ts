@@ -3,7 +3,7 @@ import { asyncHandler } from "../../lib/asyncHandler.js";
 import { validateBody, validateParams } from "../../lib/validate.js";
 import { requireAdmin, requireRole } from "../../middleware/authMiddleware.js";
 import { writeAuditLog } from "../audit/audit.service.js";
-import { createNode, deleteNode, getNode, getNodeSummary, listNodes, rotateNodeToken, setNodeMaintenance, updateNode } from "./nodes.service.js";
+import { clearRecentNodeIncidents, createNode, deleteNode, getNode, getNodeSummary, listNodes, rotateNodeToken, setNodeMaintenance, updateNode } from "./nodes.service.js";
 import { createNodeSchema, maintenanceSchema, nodeParamsSchema, updateNodeSchema } from "./nodes.schema.js";
 
 export const nodesController = Router();
@@ -14,6 +14,23 @@ nodesController.get(
   "/summary",
   asyncHandler(async (_req, res) => {
     res.json({ summary: await getNodeSummary() });
+  })
+);
+
+nodesController.post(
+  "/incidents/clear",
+  requireRole(["superadmin", "ops"]),
+  asyncHandler(async (req, res) => {
+    const actor = req.session.admin!;
+    const result = await clearRecentNodeIncidents();
+    await writeAuditLog(req, {
+      action: "node.incidents.clear",
+      actorId: actor.id,
+      actorEmail: actor.email,
+      targetType: "node",
+      metadata: result
+    });
+    res.json(result);
   })
 );
 

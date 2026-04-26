@@ -15,6 +15,7 @@ import type {
   MinecraftFilesListResult,
   MinecraftFileReadResult,
   MinecraftGlobalSettings,
+  SystemNotification,
   UpdateMinecraftServerSettingsPayload,
   NodeSummary,
   UpdateNodePayload,
@@ -66,6 +67,25 @@ export const adminApi = {
   logout: () => apiRequest<void>("/auth/logout", { method: "POST" }),
   me: () => apiRequest<{ admin: AdminUser }>("/auth/me"),
   nodeSummary: () => apiRequest<{ summary: NodeSummary }>("/nodes/summary"),
+  clearNodeIncidents: () => apiRequest<{ clearedCount: number; clearedAt: string }>("/nodes/incidents/clear", { method: "POST" }),
+  notifications: (options?: { includeDismissed?: boolean; limit?: number }) =>
+    apiRequest<{ notifications: SystemNotification[] }>(
+      `/notifications?includeDismissed=${options?.includeDismissed === true}&limit=${options?.limit ?? 100}`
+    ),
+  readNotification: (id: string) =>
+    apiRequest<{ notification: SystemNotification }>(
+      `/notifications/${encodeURIComponent(id)}/read`,
+      { method: "POST" }
+    ),
+  readAllNotifications: () =>
+    apiRequest<{ updatedCount: number; updatedAt: string }>("/notifications/read-all", {
+      method: "POST"
+    }),
+  dismissNotification: (id: string) =>
+    apiRequest<{ notification: SystemNotification }>(
+      `/notifications/${encodeURIComponent(id)}/dismiss`,
+      { method: "POST" }
+    ),
   nodes: () => apiRequest<{ nodes: CompanyNode[] }>("/nodes"),
   node: (id: string) => apiRequest<{ node: CompanyNode }>(`/nodes/${encodeURIComponent(id)}`),
   createNode: (payload: CreateNodePayload) =>

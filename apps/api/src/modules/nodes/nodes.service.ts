@@ -26,8 +26,10 @@ import {
   setNodeMaintenanceInRegistry,
   updateNodeHeartbeatInRegistry,
   updateNodeInRegistry,
-  createNodeStatusEventInRegistry
+  createNodeStatusEventInRegistry,
+  acknowledgeRecentNodeIncidentsInRegistry
 } from "./nodes.repository.js";
+import { createNodeStatusNotification } from "../notifications/notifications.service.js";
 import type { createNodeSchema, updateNodeSchema } from "./nodes.schema.js";
 import type { z } from "zod";
 
@@ -120,16 +122,27 @@ export async function getNodeSummary() {
     recentIncidents: nodes
       .flatMap((node) =>
         (node.statusEvents ?? [])
-          .filter((event) => event.newStatus === "offline")
+          .filter((event) => event.newStatus === "offline" && event.acknowledgedAt === null)
           .map((event) => ({
             id: event.id,
             type: "node_offline",
-            message: `${node.name} went offline${event.reason ? `: ${event.reason}` : ""}`,
+            nodeId: node.id,
+            nodeName: node.name,
+            message: `went offline${event.reason ? `: ${event.reason}` : ""}`,
             createdAt: event.createdAt
           }))
       )
       .sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime())
       .slice(0, 10)
+  };
+}
+
+export async function clearRecentNodeIncidents() {
+  const result = await acknowledgeRecentNodeIncidentsInRegistry();
+
+  return {
+    clearedCount: result.count,
+    clearedAt: new Date().toISOString()
   };
 }
 
@@ -148,6 +161,14 @@ export async function setNodeMaintenance(
     maintenanceMode,
     reason ?? (maintenanceMode ? "maintenance enabled" : "maintenance disabled")
   );
+  await createNodeStatusNotification({
+    nodeId: updated.id,
+    nodeName: updated.name,
+    nodePublicHost: updated.publicHost,
+    previousStatus: node.status,
+    newStatus: updated.status,
+    reason: reason ?? (maintenanceMode ? "maintenance enabled" : "maintenance disabled")
+  });
 
   return toCompanyNode(updated);
 }
@@ -264,6 +285,14 @@ export async function acceptNodeHeartbeat(
   if (node.status !== nextStatus) {
     await createNodeStatusEventInRegistry({
       nodeId,
+      previousStatus: node.status,
+      newStatus: nextStatus,
+      reason: `heartbeat cpu=${payload.cpuUsed ?? "n/a"} ramMb=${payload.ramUsedMb ?? "n/a"} diskGb=${payload.diskUsedGb ?? "n/a"}`
+    });
+    await createNodeStatusNotification({
+      nodeId,
+      nodeName: node.name,
+      nodePublicHost: node.publicHost,
       previousStatus: node.status,
       newStatus: nextStatus,
       reason: `heartbeat cpu=${payload.cpuUsed ?? "n/a"} ramMb=${payload.ramUsedMb ?? "n/a"} diskGb=${payload.diskUsedGb ?? "n/a"}`
@@ -466,6 +495,7 @@ function toCompanyNode(
       previousStatus: event.previousStatus as NodeStatus | null,
       newStatus: event.newStatus as NodeStatus,
       reason: event.reason,
+      acknowledgedAt: event.acknowledgedAt?.toISOString() ?? null,
       createdAt: event.createdAt.toISOString()
     })),
     logs: node.statusEvents

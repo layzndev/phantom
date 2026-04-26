@@ -36,6 +36,8 @@ model Admin {
   updatedAt                 DateTime       @updatedAt @map("updated_at")
   sessions                  AdminSession[]
   auditLogs                 AuditLog[]
+  notificationsRead         SystemNotification[] @relation("NotificationReadBy")
+  notificationsDismissed    SystemNotification[] @relation("NotificationDismissedBy")
 
   @@index([roleId])
   @@index([status])
@@ -119,6 +121,7 @@ model Node {
   updatedAt       DateTime          @updatedAt @map("updated_at")
   tokens          NodeToken[]
   statusEvents    NodeStatusEvent[]
+  notifications   SystemNotification[]
   workloads       Workload[]
 
   @@index([status])
@@ -127,6 +130,34 @@ model Node {
   @@index([pool])
   @@index([lastHeartbeatAt])
   @@map("nodes")
+}
+
+model SystemNotification {
+  id             String   @id @default(uuid())
+  kind           String
+  severity       String
+  title          String
+  body           String
+  resourceType   String?  @map("resource_type")
+  resourceId     String?  @map("resource_id")
+  nodeId         String?  @map("node_id")
+  node           Node?    @relation(fields: [nodeId], references: [id], onDelete: SetNull)
+  metadata       Json?
+  readAt         DateTime? @map("read_at")
+  readByAdminId  String?   @map("read_by_admin_id")
+  readByAdmin    Admin?    @relation("NotificationReadBy", fields: [readByAdminId], references: [id], onDelete: SetNull)
+  dismissedAt    DateTime? @map("dismissed_at")
+  dismissedByAdminId String? @map("dismissed_by_admin_id")
+  dismissedByAdmin   Admin?  @relation("NotificationDismissedBy", fields: [dismissedByAdminId], references: [id], onDelete: SetNull)
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@index([severity])
+  @@index([kind])
+  @@index([readAt])
+  @@index([dismissedAt])
+  @@index([nodeId])
+  @@map("system_notifications")
 }
 
 model NodeToken {
@@ -149,10 +180,12 @@ model NodeStatusEvent {
   previousStatus String?  @map("previous_status")
   newStatus      String   @map("new_status")
   reason         String?
+  acknowledgedAt DateTime? @map("acknowledged_at")
   createdAt      DateTime @default(now()) @map("created_at")
 
   @@index([nodeId])
   @@index([createdAt])
+  @@index([acknowledgedAt])
   @@map("node_status_events")
 }
 

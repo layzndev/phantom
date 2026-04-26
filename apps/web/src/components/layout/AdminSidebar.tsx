@@ -1,12 +1,13 @@
 "use client";
 
 import clsx from "clsx";
-import { Activity, Boxes, FileClock, LayoutDashboard, Layers3, ServerCog, Settings } from "lucide-react";
+import { Activity, Boxes, FileClock, LayoutDashboard, Layers3, ServerCog, Settings, Siren } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const links = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/incidents", label: "Incidents", icon: Siren },
   { href: "/nodes", label: "Nodes", icon: ServerCog },
   { href: "/workloads", label: "Workloads", icon: Boxes },
   { href: "/services", label: "Services", icon: Layers3 },

@@ -12,6 +12,7 @@ export type AuditAction =
   | "node.reconcile"
   | "node.refresh"
   | "node.rotate-token"
+  | "node.incidents.clear"
   | "workload.list"
   | "workload.create"
   | "workload.detail"

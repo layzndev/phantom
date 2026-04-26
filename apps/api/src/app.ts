@@ -7,6 +7,7 @@ import { minecraftController } from "./modules/minecraft/minecraft.controller.js
 import { minecraftRuntimeController } from "./modules/minecraft/minecraft.runtime.controller.js";
 import { nodesController } from "./modules/nodes/nodes.controller.js";
 import { nodesRuntimeController } from "./modules/nodes/nodes.runtime.controller.js";
+import { notificationsController } from "./modules/notifications/notifications.controller.js";
 import { workloadsController } from "./modules/workloads/workloads.controller.js";
 import { workloadsRuntimeController } from "./modules/workloads/workloads.runtime.controller.js";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
@@ -35,6 +36,7 @@ export function createApp() {
   app.use("/nodes", nodesController);
   app.use("/workloads", workloadsController);
   app.use("/minecraft", minecraftController);
+  app.use("/notifications", notificationsController);
   app.use("/runtime/nodes", nodesRuntimeController);
   app.use("/runtime/workloads", workloadsRuntimeController);
   app.use("/runtime/minecraft", minecraftRuntimeController);
