@@ -311,100 +311,10 @@ export function MinecraftServiceConsole({
     }
   };
 
-<<<<<<< HEAD
   const derivedBusy =
     actionInFlight !== null ||
     connectionState === "connecting" ||
     connectionState === "reconnecting";
-=======
-  const handleSave = () => {
-    appendLines([
-      {
-        timestamp: new Date().toISOString(),
-        kind: "info",
-        channel: "PHANTOM",
-        text: "Saving world..."
-      }
-    ]);
-    sendMessage({ type: "action", action: "save-all" });
-  };
-
-  const handleStop = async () => {
-    setBusy(true);
-    try {
-      lastStatusRef.current = "stopping";
-      commandHistoryRef.current.clear();
-      appendLines([
-        {
-          timestamp: new Date().toISOString(),
-          kind: "info",
-          channel: "PHANTOM",
-          text: "Stopping server..."
-        }
-      ]);
-      await adminApi.stopMinecraftServer(entry.server.id);
-      await onRefresh();
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const handleStart = async () => {
-    setBusy(true);
-    try {
-      lastStatusRef.current = "starting";
-      commandHistoryRef.current.clear();
-      setLines([
-        {
-          id: crypto.randomUUID(),
-          timestamp: new Date().toISOString(),
-          kind: "info",
-          channel: "PHANTOM",
-          text: "Starting Minecraft..."
-        }
-      ]);
-      await adminApi.startMinecraftServer(entry.server.id);
-      manuallyClosedRef.current = false;
-      shouldReconnectRef.current = true;
-      socketRef.current?.close();
-      await onRefresh();
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const handleRestart = async () => {
-    setBusy(true);
-    try {
-      lastStatusRef.current = "restarting";
-      commandHistoryRef.current.clear();
-      setLines([
-        {
-          id: crypto.randomUUID(),
-          timestamp: new Date().toISOString(),
-          kind: "info",
-          channel: "PHANTOM",
-          text: "Restarting server..."
-        }
-      ]);
-      await adminApi.restartMinecraftServer(entry.server.id);
-      manuallyClosedRef.current = false;
-      shouldReconnectRef.current = true;
-      socketRef.current?.close();
-      await onRefresh();
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const handleReconnectLogs = () => {
-    manuallyClosedRef.current = false;
-    shouldReconnectRef.current = true;
-    socketRef.current?.close();
-  };
-
-  const derivedBusy = busy || connectionState === "connecting" || connectionState === "reconnecting";
->>>>>>> 76b50ad (fix(minecraft): stop workload correctly and apply online mode)
 
   return (
     <MinecraftConsole
