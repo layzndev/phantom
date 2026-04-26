@@ -7,6 +7,7 @@ import {
 import { MinecraftFilesManager } from "./minecraft-files.js";
 import { PhantomApiClient } from "./phantom-api.js";
 import type {
+  MinecraftFileAccessMode,
   MinecraftOperationCompletePayload,
   MinecraftOperationKind,
   MinecraftRuntimeOperation
@@ -88,6 +89,7 @@ export class MinecraftOperationsProcessor {
     payload: Record<string, unknown>
   ): Promise<Record<string, unknown>> {
     const target = { workloadId, containerId };
+    const accessMode = readFileAccessMode(payload);
     switch (kind) {
       case "command": {
         const command = typeof payload.command === "string" ? payload.command.trim() : "";
@@ -114,58 +116,67 @@ export class MinecraftOperationsProcessor {
       case "files.list": {
         return this.files.list(
           this.docker.getWorkloadVolumePath(workloadId, "minecraft-data"),
-          typeof payload.path === "string" ? payload.path : "/"
+          typeof payload.path === "string" ? payload.path : "/",
+          accessMode
         );
       }
       case "files.read": {
         return this.files.readText(
           this.docker.getWorkloadVolumePath(workloadId, "minecraft-data"),
-          typeof payload.path === "string" ? payload.path : "/"
+          typeof payload.path === "string" ? payload.path : "/",
+          accessMode
         );
       }
       case "files.write": {
         return this.files.writeText(
           this.docker.getWorkloadVolumePath(workloadId, "minecraft-data"),
           typeof payload.path === "string" ? payload.path : "/",
-          typeof payload.content === "string" ? payload.content : ""
+          typeof payload.content === "string" ? payload.content : "",
+          accessMode
         );
       }
       case "files.upload": {
         return this.files.upload(
           this.docker.getWorkloadVolumePath(workloadId, "minecraft-data"),
           typeof payload.path === "string" ? payload.path : "/",
-          typeof payload.contentBase64 === "string" ? payload.contentBase64 : ""
+          typeof payload.contentBase64 === "string" ? payload.contentBase64 : "",
+          accessMode
         );
       }
       case "files.mkdir": {
         return this.files.mkdir(
           this.docker.getWorkloadVolumePath(workloadId, "minecraft-data"),
-          typeof payload.path === "string" ? payload.path : "/"
+          typeof payload.path === "string" ? payload.path : "/",
+          accessMode
         );
       }
       case "files.rename": {
         return this.files.rename(
           this.docker.getWorkloadVolumePath(workloadId, "minecraft-data"),
           typeof payload.from === "string" ? payload.from : "/",
-          typeof payload.to === "string" ? payload.to : "/"
+          typeof payload.to === "string" ? payload.to : "/",
+          accessMode
         );
       }
       case "files.delete": {
         return this.files.delete(
           this.docker.getWorkloadVolumePath(workloadId, "minecraft-data"),
-          typeof payload.path === "string" ? payload.path : "/"
+          typeof payload.path === "string" ? payload.path : "/",
+          accessMode
         );
       }
       case "files.archive": {
         return this.files.archive(
           this.docker.getWorkloadVolumePath(workloadId, "minecraft-data"),
-          typeof payload.path === "string" ? payload.path : "/"
+          typeof payload.path === "string" ? payload.path : "/",
+          accessMode
         );
       }
       case "files.extract": {
         return this.files.extract(
           this.docker.getWorkloadVolumePath(workloadId, "minecraft-data"),
-          typeof payload.path === "string" ? payload.path : "/"
+          typeof payload.path === "string" ? payload.path : "/",
+          accessMode
         );
       }
       default:
@@ -183,4 +194,8 @@ export class MinecraftOperationsProcessor {
       });
     }
   }
+}
+
+function readFileAccessMode(payload: Record<string, unknown>): MinecraftFileAccessMode {
+  return payload.accessMode === "infra_admin" ? "infra_admin" : "tenant_user";
 }

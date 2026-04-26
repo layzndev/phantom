@@ -15,6 +15,7 @@ import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, normalize, resolve as resolvePath } from "node:path";
 import { promisify } from "node:util";
 import { Logger } from "./logger.js";
+import type { MinecraftFileAccessMode } from "./types.js";
 
 const execFileAsync = promisify(execFile);
 const MAX_TEXT_READ_BYTES = 2 * 1024 * 1024;
@@ -47,7 +48,7 @@ export class MinecraftFilesManager {
     this.logger = logger.child("minecraft-files");
   }
 
-  async list(baseDir: string, requestedPath: string) {
+  async list(baseDir: string, requestedPath: string, accessMode: MinecraftFileAccessMode = "tenant_user") {
     const { relativePath, targetPath } = await this.resolveSandboxPath(baseDir, requestedPath, {
       allowMissing: false,
       allowRoot: true
@@ -69,7 +70,7 @@ export class MinecraftFilesManager {
       if (childStats.isSymbolicLink()) {
         continue;
       }
-      if (isSensitivePath(entry.name)) {
+      if (accessMode !== "infra_admin" && isSensitivePath(entry.name)) {
         continue;
       }
       rows.push({
@@ -95,11 +96,15 @@ export class MinecraftFilesManager {
     };
   }
 
-  async readText(baseDir: string, requestedPath: string) {
+  async readText(
+    baseDir: string,
+    requestedPath: string,
+    accessMode: MinecraftFileAccessMode = "tenant_user"
+  ) {
     const { relativePath, targetPath } = await this.resolveSandboxPath(baseDir, requestedPath, {
       allowMissing: false
     });
-    await this.assertEditableFile(targetPath);
+    await this.assertEditableFile(targetPath, accessMode);
     const fileStats = await stat(targetPath);
     if (fileStats.size > MAX_TEXT_READ_BYTES) {
       throw new Error("File too large to open in the text editor.");
@@ -109,11 +114,14 @@ export class MinecraftFilesManager {
       throw new Error("Binary files cannot be edited as text.");
     }
     const basenameValue = basename(targetPath).toLowerCase();
-    if (isSensitivePath(basenameValue)) {
+    if (accessMode !== "infra_admin" && isSensitivePath(basenameValue)) {
       throw new Error("Access to this file is forbidden.");
     }
     const decoded = buffer.toString("utf8");
-    const redaction = basenameValue === "server.properties" ? redactServerProperties(decoded) : null;
+    const redaction =
+      accessMode === "tenant_user" && basenameValue === "server.properties"
+        ? redactServerProperties(decoded)
+        : null;
     return {
       path: toDisplayPath(relativePath),
       content: redaction?.content ?? decoded,
@@ -125,11 +133,16 @@ export class MinecraftFilesManager {
     };
   }
 
-  async writeText(baseDir: string, requestedPath: string, content: string) {
+  async writeText(
+    baseDir: string,
+    requestedPath: string,
+    content: string,
+    accessMode: MinecraftFileAccessMode = "tenant_user"
+  ) {
     const target = await this.resolveSandboxPath(baseDir, requestedPath, {
       allowMissing: true
     });
-    await this.assertWritablePath(baseDir, target.relativePath);
+    await this.assertWritablePath(baseDir, target.relativePath, accessMode);
     const parent = dirname(target.targetPath);
     await mkdir(parent, { recursive: true });
     const tempPath = resolvePath(tmpdir(), `phantom-${Date.now()}-${Math.random().toString(16).slice(2)}.tmp`);
@@ -143,7 +156,12 @@ export class MinecraftFilesManager {
     };
   }
 
-  async upload(baseDir: string, requestedPath: string, contentBase64: string) {
+  async upload(
+    baseDir: string,
+    requestedPath: string,
+    contentBase64: string,
+    accessMode: MinecraftFileAccessMode = "tenant_user"
+  ) {
     const buffer = Buffer.from(contentBase64, "base64");
     if (buffer.byteLength > MAX_UPLOAD_BYTES) {
       throw new Error("Upload exceeds maximum allowed size.");
@@ -151,7 +169,7 @@ export class MinecraftFilesManager {
     const target = await this.resolveSandboxPath(baseDir, requestedPath, {
       allowMissing: true
     });
-    await this.assertWritablePath(baseDir, target.relativePath);
+    await this.assertWritablePath(baseDir, target.relativePath, accessMode);
     await mkdir(dirname(target.targetPath), { recursive: true });
     await writeFile(target.targetPath, buffer);
     const fileStats = await stat(target.targetPath);
@@ -162,39 +180,44 @@ export class MinecraftFilesManager {
     };
   }
 
-  async mkdir(baseDir: string, requestedPath: string) {
+  async mkdir(baseDir: string, requestedPath: string, accessMode: MinecraftFileAccessMode = "tenant_user") {
     const target = await this.resolveSandboxPath(baseDir, requestedPath, {
       allowMissing: true
     });
-    await this.assertWritablePath(baseDir, target.relativePath);
+    await this.assertWritablePath(baseDir, target.relativePath, accessMode);
     await mkdir(target.targetPath, { recursive: true });
     return { path: toDisplayPath(target.relativePath) };
   }
 
-  async rename(baseDir: string, fromPath: string, toPath: string) {
+  async rename(
+    baseDir: string,
+    fromPath: string,
+    toPath: string,
+    accessMode: MinecraftFileAccessMode = "tenant_user"
+  ) {
     const from = await this.resolveSandboxPath(baseDir, fromPath, { allowMissing: false });
     const to = await this.resolveSandboxPath(baseDir, toPath, { allowMissing: true });
-    await this.assertWritablePath(baseDir, from.relativePath);
-    await this.assertWritablePath(baseDir, to.relativePath);
+    await this.assertWritablePath(baseDir, from.relativePath, accessMode);
+    await this.assertWritablePath(baseDir, to.relativePath, accessMode);
     await mkdir(dirname(to.targetPath), { recursive: true });
     await rename(from.targetPath, to.targetPath);
     return { from: toDisplayPath(from.relativePath), to: toDisplayPath(to.relativePath) };
   }
 
-  async delete(baseDir: string, requestedPath: string) {
+  async delete(baseDir: string, requestedPath: string, accessMode: MinecraftFileAccessMode = "tenant_user") {
     const target = await this.resolveSandboxPath(baseDir, requestedPath, {
       allowMissing: false
     });
-    await this.assertWritablePath(baseDir, target.relativePath);
+    await this.assertWritablePath(baseDir, target.relativePath, accessMode);
     await rm(target.targetPath, { recursive: true, force: true });
     return { path: toDisplayPath(target.relativePath) };
   }
 
-  async archive(baseDir: string, requestedPath: string) {
+  async archive(baseDir: string, requestedPath: string, accessMode: MinecraftFileAccessMode = "tenant_user") {
     const target = await this.resolveSandboxPath(baseDir, requestedPath, {
       allowMissing: false
     });
-    await this.assertWritablePath(baseDir, target.relativePath);
+    await this.assertWritablePath(baseDir, target.relativePath, accessMode);
     const archiveRelative = buildArchivePath(target.relativePath);
     const archive = await this.resolveSandboxPath(baseDir, archiveRelative, { allowMissing: true });
     await execFileAsync("zip", ["-r", archive.targetPath, basename(target.targetPath)], {
@@ -204,11 +227,11 @@ export class MinecraftFilesManager {
     return { path: toDisplayPath(archive.relativePath) };
   }
 
-  async extract(baseDir: string, requestedPath: string) {
+  async extract(baseDir: string, requestedPath: string, accessMode: MinecraftFileAccessMode = "tenant_user") {
     const archive = await this.resolveSandboxPath(baseDir, requestedPath, {
       allowMissing: false
     });
-    await this.assertWritablePath(baseDir, archive.relativePath);
+    await this.assertWritablePath(baseDir, archive.relativePath, accessMode);
     await execFileAsync("unzip", ["-o", archive.targetPath, "-d", dirname(archive.targetPath)], {
       maxBuffer: 20 * 1024 * 1024
     });
@@ -219,7 +242,10 @@ export class MinecraftFilesManager {
     await mkdir(baseDir, { recursive: true });
   }
 
-  private async assertEditableFile(targetPath: string) {
+  private async assertEditableFile(
+    targetPath: string,
+    accessMode: MinecraftFileAccessMode = "tenant_user"
+  ) {
     const fileStats = await lstat(targetPath);
     if (fileStats.isSymbolicLink()) {
       throw new Error("Symlink access is not allowed.");
@@ -228,18 +254,22 @@ export class MinecraftFilesManager {
       throw new Error("Path is not a file.");
     }
     const base = basename(targetPath).toLowerCase();
-    if (isSensitivePath(base)) {
+    if (accessMode !== "infra_admin" && isSensitivePath(base)) {
       throw new Error("Access to this file is forbidden.");
     }
   }
 
-  private async assertWritablePath(baseDir: string, relativePath: string) {
+  private async assertWritablePath(
+    baseDir: string,
+    relativePath: string,
+    accessMode: MinecraftFileAccessMode = "tenant_user"
+  ) {
     const normalized = normalizeRelativePath(relativePath);
     if (normalized === ".") {
       throw new Error("Root path is not writable.");
     }
     const base = basename(normalized).toLowerCase();
-    if (isSensitivePath(base) || base === "server.properties") {
+    if (accessMode !== "infra_admin" && (isSensitivePath(base) || base === "server.properties")) {
       throw new Error("Access to this file is forbidden.");
     }
 

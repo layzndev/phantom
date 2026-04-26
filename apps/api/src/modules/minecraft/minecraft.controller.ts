@@ -117,7 +117,11 @@ minecraftController.get(
     if (!parsed.success) {
       throw new AppError(400, "Invalid query parameters.", "VALIDATION_ERROR", parsed.error.flatten());
     }
-    const result = await listMinecraftFiles(req.params.id, parsed.data.path, actor);
+    const result = await listMinecraftFiles(req.params.id, parsed.data.path, {
+      id: actor.id,
+      email: actor.email,
+      role: actor.role
+    });
     res.json(result);
   })
 );
@@ -131,7 +135,11 @@ minecraftController.get(
     if (!parsed.success) {
       throw new AppError(400, "Invalid query parameters.", "VALIDATION_ERROR", parsed.error.flatten());
     }
-    const result = await readMinecraftFile(req.params.id, parsed.data.path, actor);
+    const result = await readMinecraftFile(req.params.id, parsed.data.path, {
+      id: actor.id,
+      email: actor.email,
+      role: actor.role
+    });
     res.json(result);
   })
 );
@@ -143,7 +151,11 @@ minecraftController.put(
   validateBody(minecraftFilesWriteSchema),
   asyncHandler(async (req, res) => {
     const actor = req.session.admin!;
-    const result = await writeMinecraftFile(req.params.id, req.body.path, req.body.content, actor);
+    const result = await writeMinecraftFile(req.params.id, req.body.path, req.body.content, {
+      id: actor.id,
+      email: actor.email,
+      role: actor.role
+    });
     await writeAuditLog(req, {
       action: "minecraft.server.file.write",
       actorId: actor.id,
@@ -163,7 +175,11 @@ minecraftController.post(
   asyncHandler(async (req, res) => {
     const actor = req.session.admin!;
     const upload = await parseMultipartUpload(req);
-    const result = await uploadMinecraftFile(req.params.id, upload.path, upload.contentBase64, actor);
+    const result = await uploadMinecraftFile(req.params.id, upload.path, upload.contentBase64, {
+      id: actor.id,
+      email: actor.email,
+      role: actor.role
+    });
     await writeAuditLog(req, {
       action: "minecraft.server.file.upload",
       actorId: actor.id,
@@ -183,7 +199,11 @@ minecraftController.post(
   validateBody(minecraftFilesMkdirSchema),
   asyncHandler(async (req, res) => {
     const actor = req.session.admin!;
-    const result = await mkdirMinecraftFilePath(req.params.id, req.body.path, actor);
+    const result = await mkdirMinecraftFilePath(req.params.id, req.body.path, {
+      id: actor.id,
+      email: actor.email,
+      role: actor.role
+    });
     await writeAuditLog(req, {
       action: "minecraft.server.file.mkdir",
       actorId: actor.id,
@@ -203,7 +223,11 @@ minecraftController.post(
   validateBody(minecraftFilesRenameSchema),
   asyncHandler(async (req, res) => {
     const actor = req.session.admin!;
-    const result = await renameMinecraftFilePath(req.params.id, req.body.from, req.body.to, actor);
+    const result = await renameMinecraftFilePath(req.params.id, req.body.from, req.body.to, {
+      id: actor.id,
+      email: actor.email,
+      role: actor.role
+    });
     await writeAuditLog(req, {
       action: "minecraft.server.file.rename",
       actorId: actor.id,
@@ -223,7 +247,11 @@ minecraftController.delete(
   validateBody(minecraftFilesDeleteSchema),
   asyncHandler(async (req, res) => {
     const actor = req.session.admin!;
-    const result = await deleteMinecraftFilePath(req.params.id, req.body.path, actor);
+    const result = await deleteMinecraftFilePath(req.params.id, req.body.path, {
+      id: actor.id,
+      email: actor.email,
+      role: actor.role
+    });
     await writeAuditLog(req, {
       action: "minecraft.server.file.delete",
       actorId: actor.id,
@@ -243,7 +271,11 @@ minecraftController.post(
   validateBody(minecraftFilesArchiveSchema),
   asyncHandler(async (req, res) => {
     const actor = req.session.admin!;
-    const result = await archiveMinecraftFilePath(req.params.id, req.body.path, actor);
+    const result = await archiveMinecraftFilePath(req.params.id, req.body.path, {
+      id: actor.id,
+      email: actor.email,
+      role: actor.role
+    });
     await writeAuditLog(req, {
       action: "minecraft.server.file.archive",
       actorId: actor.id,
@@ -263,7 +295,11 @@ minecraftController.post(
   validateBody(minecraftFilesExtractSchema),
   asyncHandler(async (req, res) => {
     const actor = req.session.admin!;
-    const result = await extractMinecraftArchive(req.params.id, req.body.path, actor);
+    const result = await extractMinecraftArchive(req.params.id, req.body.path, {
+      id: actor.id,
+      email: actor.email,
+      role: actor.role
+    });
     await writeAuditLog(req, {
       action: "minecraft.server.file.extract",
       actorId: actor.id,

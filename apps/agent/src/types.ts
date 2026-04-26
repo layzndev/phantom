@@ -167,6 +167,8 @@ export type MinecraftOperationKind =
   | "files.archive"
   | "files.extract";
 
+export type MinecraftFileAccessMode = "infra_admin" | "tenant_user";
+
 export interface MinecraftRuntimeOperation {
   id: string;
   workloadId: string;

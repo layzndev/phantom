@@ -4,6 +4,7 @@ export type MinecraftDifficulty = "peaceful" | "easy" | "normal" | "hard";
 export type MinecraftGameMode = "survival" | "creative" | "adventure" | "spectator";
 export type PlanTier = "free" | "premium";
 export type MinecraftDnsStatus = "wildcard" | "disabled" | "pending" | "active" | "failed";
+export type MinecraftFileAccessMode = "infra_admin" | "tenant_user";
 export type MinecraftRuntimeState =
   | "sleeping"
   | "waking"

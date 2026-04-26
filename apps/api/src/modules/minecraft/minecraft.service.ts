@@ -56,6 +56,7 @@ import type {
   CreateMinecraftServerResult,
   DeleteMinecraftServerResult,
   MinecraftDifficulty,
+  MinecraftFileAccessMode,
   MinecraftFileReadResult,
   MinecraftFilesListResult,
   MinecraftGameMode,
@@ -521,9 +522,14 @@ export async function getMinecraftOperation(
 export async function listMinecraftFiles(
   serverId: string,
   path: string,
-  actor: { id: string; email: string }
+  actor: { id: string; email: string; role?: string }
 ): Promise<MinecraftFilesListResult> {
-  const result = await enqueueMinecraftOperation(serverId, "files.list", { path }, actor);
+  const result = await enqueueMinecraftOperation(
+    serverId,
+    "files.list",
+    { path, accessMode: resolveMinecraftFileAccessMode(actor) },
+    actor
+  );
   return unwrapMinecraftFileOperation<MinecraftFilesListResult>(
     result,
     "MINECRAFT_FILES_LIST_FAILED",
@@ -534,9 +540,14 @@ export async function listMinecraftFiles(
 export async function readMinecraftFile(
   serverId: string,
   path: string,
-  actor: { id: string; email: string }
+  actor: { id: string; email: string; role?: string }
 ): Promise<MinecraftFileReadResult> {
-  const result = await enqueueMinecraftOperation(serverId, "files.read", { path }, actor);
+  const result = await enqueueMinecraftOperation(
+    serverId,
+    "files.read",
+    { path, accessMode: resolveMinecraftFileAccessMode(actor) },
+    actor
+  );
   return unwrapMinecraftFileOperation<MinecraftFileReadResult>(
     result,
     "MINECRAFT_FILE_READ_FAILED",
@@ -548,59 +559,94 @@ export async function writeMinecraftFile(
   serverId: string,
   path: string,
   content: string,
-  actor: { id: string; email: string }
+  actor: { id: string; email: string; role?: string }
 ) {
-  return enqueueMinecraftOperation(serverId, "files.write", { path, content }, actor);
+  return enqueueMinecraftOperation(
+    serverId,
+    "files.write",
+    { path, content, accessMode: resolveMinecraftFileAccessMode(actor) },
+    actor
+  );
 }
 
 export async function uploadMinecraftFile(
   serverId: string,
   path: string,
   contentBase64: string,
-  actor: { id: string; email: string }
+  actor: { id: string; email: string; role?: string }
 ) {
-  return enqueueMinecraftOperation(serverId, "files.upload", { path, contentBase64 }, actor);
+  return enqueueMinecraftOperation(
+    serverId,
+    "files.upload",
+    { path, contentBase64, accessMode: resolveMinecraftFileAccessMode(actor) },
+    actor
+  );
 }
 
 export async function mkdirMinecraftFilePath(
   serverId: string,
   path: string,
-  actor: { id: string; email: string }
+  actor: { id: string; email: string; role?: string }
 ) {
-  return enqueueMinecraftOperation(serverId, "files.mkdir", { path }, actor);
+  return enqueueMinecraftOperation(
+    serverId,
+    "files.mkdir",
+    { path, accessMode: resolveMinecraftFileAccessMode(actor) },
+    actor
+  );
 }
 
 export async function renameMinecraftFilePath(
   serverId: string,
   from: string,
   to: string,
-  actor: { id: string; email: string }
+  actor: { id: string; email: string; role?: string }
 ) {
-  return enqueueMinecraftOperation(serverId, "files.rename", { from, to }, actor);
+  return enqueueMinecraftOperation(
+    serverId,
+    "files.rename",
+    { from, to, accessMode: resolveMinecraftFileAccessMode(actor) },
+    actor
+  );
 }
 
 export async function deleteMinecraftFilePath(
   serverId: string,
   path: string,
-  actor: { id: string; email: string }
+  actor: { id: string; email: string; role?: string }
 ) {
-  return enqueueMinecraftOperation(serverId, "files.delete", { path }, actor);
+  return enqueueMinecraftOperation(
+    serverId,
+    "files.delete",
+    { path, accessMode: resolveMinecraftFileAccessMode(actor) },
+    actor
+  );
 }
 
 export async function archiveMinecraftFilePath(
   serverId: string,
   path: string,
-  actor: { id: string; email: string }
+  actor: { id: string; email: string; role?: string }
 ) {
-  return enqueueMinecraftOperation(serverId, "files.archive", { path }, actor);
+  return enqueueMinecraftOperation(
+    serverId,
+    "files.archive",
+    { path, accessMode: resolveMinecraftFileAccessMode(actor) },
+    actor
+  );
 }
 
 export async function extractMinecraftArchive(
   serverId: string,
   path: string,
-  actor: { id: string; email: string }
+  actor: { id: string; email: string; role?: string }
 ) {
-  return enqueueMinecraftOperation(serverId, "files.extract", { path }, actor);
+  return enqueueMinecraftOperation(
+    serverId,
+    "files.extract",
+    { path, accessMode: resolveMinecraftFileAccessMode(actor) },
+    actor
+  );
 }
 
 export interface RuntimeMinecraftOperation {
@@ -967,6 +1013,10 @@ async function waitForMinecraftOperation(operationId: string) {
 
 function isOperationPending(record: MinecraftOperationRecord) {
   return record.status === "pending" || record.status === "in_progress";
+}
+
+function resolveMinecraftFileAccessMode(actor: { role?: string }): MinecraftFileAccessMode {
+  return actor.role === "superadmin" || actor.role === "ops" ? "infra_admin" : "tenant_user";
 }
 
 function unwrapMinecraftFileOperation<T>(
