@@ -292,6 +292,12 @@ export function MinecraftFilesManager({
             Sensitive secrets were redacted from this file. Editing is disabled for safety.
           </p>
         ) : null}
+        {selectedFile?.path === "server.properties" ? (
+          <p className="mt-4 rounded-xl border border-cyan-500/25 bg-cyan-500/[0.08] px-3 py-2 text-xs text-cyan-100">
+            `online-mode` is controlled by Settings and may be overwritten on restart. Use the
+            Settings tab for durable online-mode changes.
+          </p>
+        ) : null}
         <textarea
           value={content}
           onChange={(event) => setContent(event.target.value)}

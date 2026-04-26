@@ -288,6 +288,7 @@ export async function createMinecraftServer(
   const cpu = input.cpu ?? template.defaults.cpu;
   const ramMb = input.ramMb ?? template.defaults.ramMb;
   const diskGb = input.diskGb ?? template.defaults.diskGb;
+  const onlineMode = true;
   const difficulty: MinecraftDifficulty = input.difficulty ?? "normal";
   const gameMode: MinecraftGameMode = input.gameMode ?? "survival";
   const maxPlayers = input.maxPlayers ?? 20;
@@ -313,7 +314,7 @@ export async function createMinecraftServer(
     difficulty,
     gameMode,
     maxPlayers,
-    onlineMode: true,
+    onlineMode,
     whitelistEnabled: false,
     rconPassword
   });
@@ -369,14 +370,14 @@ export async function createMinecraftServer(
       autoSleepEnabled: planTier === "free",
       autoSleepIdleMinutes: planTier === "free" ? env.autoSleepIdleMinutes : 10,
       autoSleepAction: "stop",
-      onlineMode: true,
+      onlineMode,
       whitelistEnabled: false,
       serverProperties: buildMinecraftServerPropertiesSnapshot({
         motd: motd ?? `${input.name} — Phantom`,
         difficulty,
         gameMode,
         maxPlayers,
-        onlineMode: true,
+        onlineMode,
         whitelistEnabled: false
       }) as Prisma.InputJsonValue,
       rconPassword
@@ -1316,8 +1317,8 @@ function buildMinecraftEnv(input: {
     DIFFICULTY: input.difficulty,
     MODE: input.gameMode,
     MAX_PLAYERS: String(input.maxPlayers),
-    ONLINE_MODE: input.onlineMode ? "true" : "false",
-    ENABLE_WHITELIST: input.whitelistEnabled ? "true" : "false",
+    ONLINE_MODE: input.onlineMode ? "TRUE" : "FALSE",
+    ENABLE_WHITELIST: input.whitelistEnabled ? "TRUE" : "FALSE",
     ENABLE_RCON: "true",
     RCON_PORT: String(DEFAULT_RCON_PORT),
     RCON_PASSWORD: input.rconPassword,
@@ -1367,8 +1368,8 @@ function buildUpdatedMinecraftWorkloadConfig(
     DIFFICULTY: input.difficulty,
     MODE: input.gameMode,
     MAX_PLAYERS: String(input.maxPlayers),
-    ONLINE_MODE: input.onlineMode ? "true" : "false",
-    ENABLE_WHITELIST: input.whitelistEnabled ? "true" : "false",
+    ONLINE_MODE: input.onlineMode ? "TRUE" : "FALSE",
+    ENABLE_WHITELIST: input.whitelistEnabled ? "TRUE" : "FALSE",
     ENABLE_RCON: "true",
     RCON_PORT: String(DEFAULT_RCON_PORT),
     RCON_PASSWORD: input.rconPassword,
