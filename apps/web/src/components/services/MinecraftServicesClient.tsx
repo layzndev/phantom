@@ -166,9 +166,12 @@ export function MinecraftServicesClient() {
                     workload.ports.find((port) => port.internalPort === 25565)?.externalPort ?? null;
                   return (
                     <div className="text-slate-300">
-                      <p className="font-mono text-xs">{connectAddress ?? server.hostname ?? (gamePort ? `${gamePort}/tcp` : "—")}</p>
+                      <p className="font-mono text-xs">
+                        {connectAddress ?? server.hostname ?? "—"}
+                      </p>
                       <p className="mt-1 text-xs text-slate-500">
-                        {gamePort ? `${gamePort}/tcp` : "No port"}
+                        Proxy 25565/tcp
+                        {gamePort ? ` · Direct ${gamePort}/tcp` : " · No direct port"}
                       </p>
                       {connectAddress ? (
                         <button

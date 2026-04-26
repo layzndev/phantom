@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 import { AppError } from "../../lib/appError.js";
 import { env } from "../../config/env.js";
+import { db } from "../../db/client.js";
 import { createAuditLog } from "../audit/audit.repository.js";
 import {
   createMinecraftServerRecord,
@@ -73,7 +74,9 @@ type MinecraftOperationRecord = NonNullable<
   Awaited<ReturnType<typeof findMinecraftOperationById>>
 >;
 
-const DEFAULT_GAME_PORT = 25565;
+const MINECRAFT_INTERNAL_GAME_PORT = 25565;
+const PHANTOM_PROXY_PUBLIC_PORT = 25565;
+const MIN_MINECRAFT_DIRECT_PORT = 25566;
 const DEFAULT_RCON_PORT = 25575;
 const MIN_JVM_HEAP_MB = 1024;
 const JVM_HEADROOM_MB = 512;
@@ -105,6 +108,150 @@ export async function getMinecraftServer(id: string): Promise<MinecraftServerWit
   }
   const workload = await getWorkload(record.workloadId);
   return toMinecraftServerWithRuntime(record, workload);
+}
+
+export async function reconcileReservedMinecraftProxyPorts() {
+  const legacyPorts = await db.workloadPort.findMany({
+    where: {
+      externalPort: PHANTOM_PROXY_PUBLIC_PORT,
+      protocol: "tcp",
+      workload: {
+        deletedAt: null,
+        type: "minecraft",
+        nodeId: { not: null }
+      }
+    },
+    select: {
+      id: true,
+      workloadId: true,
+      nodeId: true,
+      workload: {
+        select: {
+          id: true,
+          name: true,
+          status: true
+        }
+      }
+    }
+  });
+
+  for (const portRecord of legacyPorts) {
+    if (!portRecord.nodeId) {
+      continue;
+    }
+
+    try {
+      const result = await db.$transaction(async (tx) => {
+        const current = await tx.workloadPort.findUnique({
+          where: { id: portRecord.id },
+          select: {
+            id: true,
+            nodeId: true,
+            externalPort: true,
+            protocol: true,
+            workloadId: true
+          }
+        });
+
+        if (!current || !current.nodeId || current.externalPort !== PHANTOM_PROXY_PUBLIC_PORT) {
+          return null;
+        }
+
+        const node = await tx.node.findUnique({
+          where: { id: current.nodeId },
+          select: { portRangeStart: true, portRangeEnd: true }
+        });
+
+        if (node?.portRangeEnd === null || node?.portRangeEnd === undefined) {
+          return { skipped: "missing_port_range" } as const;
+        }
+
+        const rangeStart = Math.max(
+          node.portRangeStart ?? MIN_MINECRAFT_DIRECT_PORT,
+          MIN_MINECRAFT_DIRECT_PORT
+        );
+        if (node.portRangeEnd < rangeStart) {
+          return { skipped: "invalid_port_range" } as const;
+        }
+
+        const usedPorts = await tx.workloadPort.findMany({
+          where: {
+            nodeId: current.nodeId,
+            protocol: current.protocol,
+            id: { not: current.id }
+          },
+          select: { externalPort: true }
+        });
+
+        const used = new Set(usedPorts.map((entry) => entry.externalPort));
+        let nextPort: number | null = null;
+        for (let port = rangeStart; port <= node.portRangeEnd; port += 1) {
+          if (port === PHANTOM_PROXY_PUBLIC_PORT) continue;
+          if (used.has(port)) continue;
+          nextPort = port;
+          break;
+        }
+
+        if (nextPort === null) {
+          return { skipped: "no_free_port" } as const;
+        }
+
+        await tx.workloadPort.update({
+          where: { id: current.id },
+          data: { externalPort: nextPort }
+        });
+
+        await tx.workloadStatusEvent.create({
+          data: {
+            workloadId: current.workloadId,
+            previousStatus: portRecord.workload.status,
+            newStatus: portRecord.workload.status,
+            reason: `[ports] migrated reserved proxy port 25565 -> ${nextPort}`
+          }
+        });
+
+        return { nextPort } as const;
+      });
+
+      if (!result) {
+        continue;
+      }
+
+      if ("skipped" in result) {
+        console.warn("[minecraft] reserved proxy port migration skipped", {
+          workloadId: portRecord.workloadId,
+          serverName: portRecord.workload.name,
+          reason: result.skipped
+        });
+        continue;
+      }
+
+      console.info("[minecraft] migrated reserved proxy port", {
+        workloadId: portRecord.workloadId,
+        serverName: portRecord.workload.name,
+        previousPort: PHANTOM_PROXY_PUBLIC_PORT,
+        nextPort: result.nextPort
+      });
+      await createAuditLog({
+        action: "minecraft.server.port_migrated",
+        actorEmail: "phantom@system",
+        targetType: "system",
+        targetId: portRecord.workloadId,
+        metadata: {
+          previousPort: PHANTOM_PROXY_PUBLIC_PORT,
+          nextPort: result.nextPort,
+          runtimeStatus: portRecord.workload.status,
+          restartMayBeRequired: ["running", "creating"].includes(portRecord.workload.status)
+        }
+      });
+    } catch (error) {
+      console.error("[minecraft] failed to migrate reserved proxy port", {
+        workloadId: portRecord.workloadId,
+        serverName: portRecord.workload.name,
+        error: error instanceof Error ? error.message : "unknown"
+      });
+    }
+  }
 }
 
 export async function createMinecraftServer(
@@ -161,7 +308,7 @@ export async function createMinecraftServer(
       templateId: template.id,
       family: template.family,
       version,
-      gamePort: DEFAULT_GAME_PORT,
+      gamePort: MINECRAFT_INTERNAL_GAME_PORT,
       rconPort: DEFAULT_RCON_PORT,
       gracefulStopCommand: "stop"
     }
@@ -175,7 +322,7 @@ export async function createMinecraftServer(
     requestedRamMb: ramMb,
     requestedDiskGb: diskGb,
     requiredPool,
-    ports: [{ internalPort: DEFAULT_GAME_PORT, protocol: "tcp" }],
+    ports: [{ internalPort: MINECRAFT_INTERNAL_GAME_PORT, protocol: "tcp" }],
     config
   });
 
@@ -451,7 +598,9 @@ export async function getRuntimeMinecraftRouting(rawToken: string, hostname: str
 
   const workload = await getWorkload(record.workloadId);
   const node = workload.nodeId ? await findNodeFromRegistry(workload.nodeId) : null;
-  const gamePort = workload.ports.find((port) => port.internalPort === DEFAULT_GAME_PORT)?.externalPort ?? null;
+  const gamePort =
+    workload.ports.find((port) => port.internalPort === MINECRAFT_INTERNAL_GAME_PORT)
+      ?.externalPort ?? null;
 
   return {
     serverId: record.id,

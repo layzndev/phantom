@@ -218,7 +218,7 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
             <dl className="mt-6 grid gap-4 text-sm md:grid-cols-2 xl:grid-cols-4">
               <Field label="UUID" value={displayEntry.server.id} mono />
               <Field label="Node" value={displayEntry.node?.name ?? "Unassigned"} />
-              <Field label="Direct port" value={runtime.gamePort ? `${runtime.gamePort}/tcp` : "Unknown"} mono />
+              <Field label="Dedicated direct port" value={runtime.gamePort ? `${runtime.gamePort}/tcp` : "Unknown"} mono />
               <Field label="Proxy address" value={displayEntry.server.hostname} mono />
             </dl>
           </div>
@@ -268,6 +268,7 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
             <MetricRow label="Node" value={displayEntry.node?.name ?? "Unassigned"} />
             <MetricRow label="Public host" value={displayEntry.node?.publicHost ?? "Unknown"} mono wrap />
             <MetricRow label="Proxy address" value={displayEntry.server.hostname} mono wrap />
+            <MetricRow label="Public proxy port" value="25565/tcp" mono />
             <MetricRow
               label="Direct address"
               value={runtime.gamePort ? `${displayEntry.server.hostname}:${runtime.gamePort}` : "Pending assignment"}
@@ -275,7 +276,11 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
               wrap
             />
             <MetricRow label="Internal container port" value="25565/tcp" mono />
-            <MetricRow label="Public direct port" value={runtime.gamePort ? `${runtime.gamePort}/tcp` : "Unknown"} mono />
+            <MetricRow
+              label="Dedicated direct port"
+              value={runtime.gamePort ? `${runtime.gamePort}/tcp` : "Unknown"}
+              mono
+            />
             <MetricRow label="DNS status" value={displayEntry.server.dnsStatus} />
             <MetricRow label="Hostname updated" value={formatDateTime(displayEntry.server.hostnameUpdatedAt)} />
             <MetricRow

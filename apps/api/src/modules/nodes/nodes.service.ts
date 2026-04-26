@@ -35,6 +35,7 @@ type CreateNodeInput = z.infer<typeof createNodeSchema>;
 type UpdateNodeInput = z.infer<typeof updateNodeSchema>;
 type NodeRecord = Awaited<ReturnType<typeof findNodeFromRegistry>>;
 type NonNullNodeRecord = NonNullable<NodeRecord>;
+const PHANTOM_PROXY_RESERVED_PORT = 25565;
 
 export async function listNodes() {
   const [nodes, hostedAssignments] = await Promise.all([
@@ -76,6 +77,8 @@ export async function createNode(input: CreateNodeInput): Promise<CreateNodeResu
   if (existingNode) {
     throw new AppError(409, "Node already exists.", "NODE_ALREADY_EXISTS");
   }
+
+  assertProxyPortNotInRange(input.portRangeStart, input.portRangeEnd);
 
   const token = generateNodeToken(input.id);
   const tokenHash = hashNodeToken(token);
@@ -302,8 +305,30 @@ export async function updateNode(id: string, input: UpdateNodeInput) {
     );
   }
 
+  assertProxyPortNotInRange(effectivePortStart, effectivePortEnd);
+
   const updated = await updateNodeInRegistry(id, input);
   return toCompanyNode(updated);
+}
+
+function assertProxyPortNotInRange(
+  portRangeStart: number | null | undefined,
+  portRangeEnd: number | null | undefined
+) {
+  if (
+    portRangeStart !== null &&
+    portRangeStart !== undefined &&
+    portRangeEnd !== null &&
+    portRangeEnd !== undefined &&
+    portRangeStart <= PHANTOM_PROXY_RESERVED_PORT &&
+    portRangeEnd >= PHANTOM_PROXY_RESERVED_PORT
+  ) {
+    throw new AppError(
+      400,
+      "Port 25565 is reserved for Phantom proxy.",
+      "PROXY_PORT_RESERVED"
+    );
+  }
 }
 
 function generateNodeToken(nodeId: string) {

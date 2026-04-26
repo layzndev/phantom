@@ -4,6 +4,8 @@ import { env } from "../../config/env.js";
 import type { NodePool } from "../nodes/nodes.types.js";
 import type { WorkloadPortSpec } from "./workloads.schema.js";
 
+const RESERVED_EXTERNAL_PORTS = new Set([25565]);
+
 export interface PlacementRequest {
   name: string;
   type: string;
@@ -315,6 +317,7 @@ async function allocatePortsForNode(
     const proto = port.protocol ?? "tcp";
     let picked: number | null = null;
     for (let p = candidate.portRangeStart; p <= candidate.portRangeEnd; p++) {
+      if (RESERVED_EXTERNAL_PORTS.has(p)) continue;
       if (usedByProtocol[proto].has(p)) continue;
       picked = p;
       break;

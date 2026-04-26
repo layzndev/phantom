@@ -3,7 +3,11 @@ import { assertRuntimeConfig, env } from "./config/env.js";
 import { createApp } from "./app.js";
 import { disconnectDb } from "./db/client.js";
 import { createAuditLog } from "./modules/audit/audit.repository.js";
-import { getMinecraftConsoleSession, enqueueMinecraftOperation } from "./modules/minecraft/minecraft.service.js";
+import {
+  getMinecraftConsoleSession,
+  enqueueMinecraftOperation,
+  reconcileReservedMinecraftProxyPorts
+} from "./modules/minecraft/minecraft.service.js";
 import { minecraftConsoleGateway } from "./modules/minecraft/minecraft.console.gateway.js";
 import {
   startMinecraftAutoSleepMonitor,
@@ -50,6 +54,9 @@ server.on("upgrade", (req, socket, head) => {
 
 server.listen(env.port, env.host, () => {
   console.log(`Phantom API listening on http://${env.host}:${env.port}`);
+  void reconcileReservedMinecraftProxyPorts().catch((error) => {
+    console.error("[server] failed to reconcile reserved minecraft proxy ports", error);
+  });
 });
 
 const monitor: NodeRuntimeMonitorHandle | null = env.nodeMonitorEnabled
