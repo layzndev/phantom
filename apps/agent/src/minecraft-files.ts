@@ -145,6 +145,23 @@ export class MinecraftFilesManager {
       allowMissing: true
     });
     await this.assertWritablePath(baseDir, target.relativePath, accessMode);
+    if (isBinaryExtension(target.targetPath)) {
+      throw new Error(
+        "Refusing to overwrite a binary Minecraft data file as text. Use Upload (or delete the file) instead."
+      );
+    }
+    try {
+      const existing = await readFile(target.targetPath);
+      if (looksBinary(existing)) {
+        throw new Error(
+          "Existing file is binary; refusing to overwrite it as text. Delete it first if you really need to replace it."
+        );
+      }
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+        throw error;
+      }
+    }
     const parent = dirname(target.targetPath);
     await mkdir(parent, { recursive: true });
     const desiredOwnership = await this.resolveDesiredOwnership(target.targetPath);
@@ -392,6 +409,38 @@ function looksBinary(buffer: Buffer) {
     if (byte === 0) return true;
   }
   return false;
+}
+
+const BINARY_EXTENSIONS = new Set([
+  ".dat",
+  ".dat_old",
+  ".dat_mcr",
+  ".mca",
+  ".mcr",
+  ".mcc",
+  ".nbt",
+  ".jar",
+  ".class",
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".gif",
+  ".zip",
+  ".gz",
+  ".tar",
+  ".tgz",
+  ".7z",
+  ".rar",
+  ".bin",
+  ".so",
+  ".db"
+]);
+
+function isBinaryExtension(targetPath: string) {
+  const lower = basename(targetPath).toLowerCase();
+  const dot = lower.lastIndexOf(".");
+  if (dot < 0) return false;
+  return BINARY_EXTENSIONS.has(lower.slice(dot));
 }
 
 function buildArchivePath(relativePath: string) {
