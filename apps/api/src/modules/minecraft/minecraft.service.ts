@@ -1644,7 +1644,11 @@ function sanitizeConsoleLogLine(line: string) {
   }
   if (
     /container .* is not running/i.test(sanitized) ||
-    /rcon.*connection refused/i.test(sanitized)
+    /rcon.*connection refused/i.test(sanitized) ||
+    /Failed to connect to RCON/i.test(sanitized) ||
+    /Failed to stop using rcon-cli/i.test(sanitized) ||
+    /Stopping with rcon-cli/i.test(sanitized) ||
+    /dial tcp .*: connect: connection refused/i.test(sanitized)
   ) {
     return "";
   }

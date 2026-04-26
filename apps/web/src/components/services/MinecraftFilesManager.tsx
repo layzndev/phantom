@@ -146,6 +146,10 @@ export function MinecraftFilesManager({
   };
 
   return (
+    <div className="space-y-4">
+      <div className="rounded-2xl border border-amber-400/25 bg-amber-400/[0.05] px-4 py-3 text-xs text-amber-200">
+        File changes only take effect after the next server restart. Stop &amp; start the server (or use Restart) once your edits are done.
+      </div>
     <section className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
       <div className="rounded-2xl border border-line bg-panel/78 p-5 shadow-soft">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -297,6 +301,7 @@ export function MinecraftFilesManager({
         />
       </div>
     </section>
+    </div>
   );
 }
 

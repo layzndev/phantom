@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { MinecraftServerWithWorkload } from "@/types/admin";
 
@@ -27,17 +28,16 @@ interface MinecraftConsoleProps {
   commandInput: string;
   onCommandInputChange: (value: string) => void;
   onCommandSubmit: () => void;
-  onStart?: () => void;
-  onSave: () => void;
-  onFetchLogs: () => void;
+  onStart: () => void;
   onRestart: () => void;
   onStop: () => void;
-  onClear: () => void;
   busy: boolean;
   operatorLabel?: string;
   phantomIdentity?: string;
   activeTab?: "console" | "files" | "settings";
   onTabChange?: (tab: "console" | "files" | "settings") => void;
+  filesContent?: ReactNode;
+  settingsContent?: ReactNode;
 }
 
 const TABS = [
@@ -56,16 +56,15 @@ export function MinecraftConsole({
   onCommandInputChange,
   onCommandSubmit,
   onStart,
-  onSave,
-  onFetchLogs,
   onRestart,
   onStop,
-  onClear,
   busy,
   operatorLabel = "operator",
   phantomIdentity = "phantom@system~",
   activeTab = "console",
-  onTabChange
+  onTabChange,
+  filesContent,
+  settingsContent
 }: MinecraftConsoleProps) {
   const consoleReady = entry?.server.runtimeState === "running" && Boolean(entry?.server.readyAt);
   const singleServerView = servers.length <= 1;
@@ -92,12 +91,11 @@ export function MinecraftConsole({
   const ramLabel = entry ? `${entry.workload.requestedRamMb} MB` : "— MB";
   const addressLabel = externalPort ? `:${externalPort}` : "—";
   const canSwitchTabs = Boolean(onTabChange);
-  const canStart =
-    !!entry && Boolean(onStart) && ["stopped", "crashed"].includes(entry.server.runtimeState);
-  const canRestart =
-    !!entry && ["running", "starting", "restarting"].includes(entry.server.runtimeState);
-  const canStop =
-    !!entry && ["running", "starting", "restarting", "stopping"].includes(entry.server.runtimeState);
+  const runtimeState = entry?.server.runtimeState;
+  // Strict per-state gating so transient states do not allow conflicting actions.
+  const canStart = !!entry && ["stopped", "sleeping", "crashed", "error"].includes(runtimeState ?? "");
+  const canRestart = !!entry && runtimeState === "running";
+  const canStop = !!entry && ["running", "starting", "waking"].includes(runtimeState ?? "");
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -147,7 +145,7 @@ export function MinecraftConsole({
               {entry ? (
                 <>
                   <span>·</span>
-                  <span className="text-slate-300">{entry.server.templateId}</span>
+                  <span className="text-slate-300">{templateFamilyLabel(entry.server.templateId)}</span>
                   <span>·</span>
                   <span>v{entry.server.minecraftVersion}</span>
                 </>
@@ -233,17 +231,17 @@ export function MinecraftConsole({
         ))}
       </nav>
 
-      <div className="mt-4 flex flex-wrap items-center gap-2">
-        <ToolbarButton onClick={onSave} disabled={!consoleReady || busy} label="Save world" />
-        <ToolbarButton onClick={onFetchLogs} disabled={!consoleReady || busy} label="Fetch logs" />
-        <ToolbarButton onClick={onClear} disabled={lines.length === 0} label="Clear" />
-        {entry && !consoleReady ? (
-          <span className="ml-auto text-[11px] text-amber-300">
-            Server status: {entry.server.runtimeState}. Console requires a ready server.
-          </span>
-        ) : null}
-      </div>
+      {activeTab === "console" && entry && !consoleReady ? (
+        <div className="mt-4 text-[11px] text-amber-300">
+          Server status: {entry.server.runtimeState}. Console requires a ready server.
+        </div>
+      ) : null}
 
+      {activeTab === "files" ? (
+        <div className="mt-4">{filesContent ?? <p className="text-sm text-slate-500">Files panel unavailable.</p>}</div>
+      ) : activeTab === "settings" ? (
+        <div className="mt-4">{settingsContent ?? <p className="text-sm text-slate-500">Settings panel unavailable.</p>}</div>
+      ) : (
       <div className="relative mt-4 overflow-hidden border border-white/10 bg-[#070707] shadow-[0_20px_60px_rgba(0,0,0,0.35)]">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_70%_0%,rgba(34,211,238,0.08),transparent_35%)]" />
         <div className="pointer-events-none absolute right-6 top-5 select-none font-mono text-[42px] font-black tracking-[0.22em] text-white/[0.025]">
@@ -307,8 +305,15 @@ export function MinecraftConsole({
           </button>
         </form>
       </div>
+      )}
     </section>
   );
+}
+
+function templateFamilyLabel(templateId: string) {
+  const family = templateId.split("-")[0] ?? templateId;
+  if (!family) return templateId;
+  return family.charAt(0).toUpperCase() + family.slice(1);
 }
 
 function lineTone(kind: ConsoleLineKind, channel?: MinecraftConsoleLine["channel"]) {
@@ -412,20 +417,19 @@ function welcomeLine(entry: MinecraftServerWithWorkload): MinecraftConsoleLine {
     timestamp: new Date().toISOString(),
     kind: "info",
     channel: "PHANTOM",
-    text: `Console attached to ${entry.server.name} (${entry.server.templateId} v${entry.server.minecraftVersion})`
+    text: `Console attached to ${entry.server.name} (${templateFamilyLabel(entry.server.templateId)} v${entry.server.minecraftVersion})`
   };
 }
 
-function useUptime(startedAtMs: number | null, finishedAtMs: number | null, running: boolean) {
+function useUptime(startedAtMs: number | null, _finishedAtMs: number | null, running: boolean) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     if (startedAtMs === null || !running) return;
     const id = setInterval(() => setNow(Date.now()), 1_000);
     return () => clearInterval(id);
   }, [running, startedAtMs]);
-  if (startedAtMs === null) return "00:00:00";
-  const endMs = running ? now : finishedAtMs ?? startedAtMs;
-  const total = Math.max(0, Math.floor((endMs - startedAtMs) / 1_000));
+  if (!running || startedAtMs === null) return "00:00:00";
+  const total = Math.max(0, Math.floor((now - startedAtMs) / 1_000));
   const hours = Math.floor(total / 3600);
   const minutes = Math.floor((total % 3600) / 60);
   const seconds = total % 60;
@@ -481,23 +485,3 @@ function PowerIcon({ className = "h-4 w-4" }: { className?: string }) {
   );
 }
 
-function ToolbarButton({
-  label,
-  onClick,
-  disabled
-}: {
-  label: string;
-  onClick: () => void;
-  disabled?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className="h-8 rounded-md border border-white/10 bg-white/[0.035] px-3 text-xs font-semibold text-slate-200 transition hover:border-white/20 hover:bg-white/[0.07] disabled:cursor-not-allowed disabled:opacity-40"
-    >
-      {label}
-    </button>
-  );
-}

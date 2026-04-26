@@ -1,7 +1,8 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ADMIN_API_BASE_URL, adminApi } from "@/lib/api/admin-api";
+import { ADMIN_API_BASE_URL } from "@/lib/api/admin-api";
 import { MinecraftConsole, type MinecraftConsoleLine } from "@/components/playground/MinecraftConsole";
 import type { MinecraftServerWithWorkload } from "@/types/admin";
 
@@ -11,16 +12,27 @@ export function MinecraftServiceConsole({
   entry,
   onRefresh,
   activeTab,
-  onTabChange
+  onTabChange,
+  onStart,
+  onStop,
+  onRestart,
+  actionInFlight,
+  filesContent,
+  settingsContent
 }: {
   entry: MinecraftServerWithWorkload;
   onRefresh: () => Promise<void> | void;
   activeTab: "console" | "files" | "settings";
   onTabChange: (tab: "console" | "files" | "settings") => void;
+  onStart: () => Promise<void> | void;
+  onStop: () => Promise<void> | void;
+  onRestart: () => Promise<void> | void;
+  actionInFlight: "start" | "stop" | "restart" | null;
+  filesContent?: ReactNode;
+  settingsContent?: ReactNode;
 }) {
   const [lines, setLines] = useState<MinecraftConsoleLine[]>([]);
   const [commandInput, setCommandInput] = useState("");
-  const [busy, setBusy] = useState(false);
   const [connectionState, setConnectionState] = useState<
     "connecting" | "connected" | "disconnected" | "reconnecting"
   >("connecting");
@@ -228,9 +240,60 @@ export function MinecraftServiceConsole({
     return true;
   };
 
+  const runStop = async () => {
+    appendLines([
+      {
+        timestamp: new Date().toISOString(),
+        kind: "info",
+        channel: "PHANTOM",
+        text: "Stopping server..."
+      }
+    ]);
+    await onStop();
+  };
+
+  const runStart = async () => {
+    lastStatusRef.current = "starting";
+    appendLines([
+      {
+        timestamp: new Date().toISOString(),
+        kind: "info",
+        channel: "PHANTOM",
+        text: "Starting Minecraft..."
+      }
+    ]);
+    await onStart();
+    manuallyClosedRef.current = false;
+    shouldReconnectRef.current = true;
+    socketRef.current?.close();
+  };
+
+  const runRestart = async () => {
+    lastStatusRef.current = "restarting";
+    appendLines([
+      {
+        timestamp: new Date().toISOString(),
+        kind: "info",
+        channel: "PHANTOM",
+        text: "Restarting server..."
+      }
+    ]);
+    await onRestart();
+    manuallyClosedRef.current = false;
+    shouldReconnectRef.current = true;
+    socketRef.current?.close();
+  };
+
   const handleSubmit = () => {
     const command = commandInput.trim();
     if (!command) {
+      return;
+    }
+    if (/^stop\b/i.test(command)) {
+      // Typing `stop` in the console must change the desired state, not just
+      // pipe through rcon (otherwise the reconciler restarts the container).
+      void runStop();
+      setCommandInput("");
       return;
     }
     const id = `cmd-${Date.now()}`;
@@ -248,91 +311,10 @@ export function MinecraftServiceConsole({
     }
   };
 
-  const handleSave = () => {
-    appendLines([
-      {
-        timestamp: new Date().toISOString(),
-        kind: "info",
-        channel: "PHANTOM",
-        text: "Saving world..."
-      }
-    ]);
-    sendMessage({ type: "action", action: "save-all" });
-  };
-
-  const handleStop = async () => {
-    setBusy(true);
-    try {
-      appendLines([
-        {
-          timestamp: new Date().toISOString(),
-          kind: "info",
-          channel: "PHANTOM",
-          text: "Stopping server..."
-        }
-      ]);
-      sendMessage({ type: "action", action: "stop" });
-      await onRefresh();
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const handleStart = async () => {
-    setBusy(true);
-    try {
-      lastStatusRef.current = "starting";
-      commandHistoryRef.current.clear();
-      setLines([
-        {
-          id: crypto.randomUUID(),
-          timestamp: new Date().toISOString(),
-          kind: "info",
-          channel: "PHANTOM",
-          text: "Starting Minecraft..."
-        }
-      ]);
-      await adminApi.startMinecraftServer(entry.server.id);
-      manuallyClosedRef.current = false;
-      shouldReconnectRef.current = true;
-      socketRef.current?.close();
-      await onRefresh();
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const handleRestart = async () => {
-    setBusy(true);
-    try {
-      lastStatusRef.current = "restarting";
-      commandHistoryRef.current.clear();
-      setLines([
-        {
-          id: crypto.randomUUID(),
-          timestamp: new Date().toISOString(),
-          kind: "info",
-          channel: "PHANTOM",
-          text: "Restarting server..."
-        }
-      ]);
-      await adminApi.restartMinecraftServer(entry.server.id);
-      manuallyClosedRef.current = false;
-      shouldReconnectRef.current = true;
-      socketRef.current?.close();
-      await onRefresh();
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const handleReconnectLogs = () => {
-    manuallyClosedRef.current = false;
-    shouldReconnectRef.current = true;
-    socketRef.current?.close();
-  };
-
-  const derivedBusy = busy || connectionState === "connecting" || connectionState === "reconnecting";
+  const derivedBusy =
+    actionInFlight !== null ||
+    connectionState === "connecting" ||
+    connectionState === "reconnecting";
 
   return (
     <MinecraftConsole
@@ -344,17 +326,16 @@ export function MinecraftServiceConsole({
       commandInput={commandInput}
       onCommandInputChange={setCommandInput}
       onCommandSubmit={handleSubmit}
-      onStart={() => void handleStart()}
-      onSave={handleSave}
-      onFetchLogs={handleReconnectLogs}
-      onRestart={() => void handleRestart()}
-      onStop={() => void handleStop()}
-      onClear={() => setLines([])}
+      onStart={() => void runStart()}
+      onRestart={() => void runRestart()}
+      onStop={() => void runStop()}
       busy={derivedBusy}
       operatorLabel="admin"
       phantomIdentity={phantomIdentity}
       activeTab={activeTab}
       onTabChange={onTabChange}
+      filesContent={filesContent}
+      settingsContent={settingsContent}
     />
   );
 }

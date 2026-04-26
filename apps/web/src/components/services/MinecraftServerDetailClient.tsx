@@ -168,6 +168,8 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
     }
   };
 
+  const consoleAction = (busy === "start" || busy === "stop" || busy === "restart") ? busy : null;
+
   const runHostnameUpdate = async () => {
     if (!entry) return;
     setBusy("hostname");
@@ -185,17 +187,17 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
 
   const rootDomain = entry.server.hostname.split(".").slice(1).join(".");
   const hostnamePreview = `${hostnameSlug.trim().toLowerCase() || entry.server.hostnameSlug}.${rootDomain}`;
-  const liveCpuLabel = formatRuntimeCpu(entry.workload.runtimeCpuPercent);
-  const liveRamLabel = formatRuntimeResource(
-    entry.workload.runtimeMemoryMb,
-    entry.workload.requestedRamMb,
-    formatRam
-  );
-  const liveDiskLabel = formatRuntimeResource(
-    entry.workload.runtimeDiskGb,
-    entry.workload.requestedDiskGb,
-    formatDisk
-  );
+  // Live runtime metrics only make sense when the workload is actually up.
+  const isWorkloadRunning = entry.workload.status === "running";
+  const liveCpuLabel = isWorkloadRunning ? formatRuntimeCpu(entry.workload.runtimeCpuPercent) : "—";
+  const liveRamLabel = isWorkloadRunning
+    ? formatRuntimeResource(entry.workload.runtimeMemoryMb, entry.workload.requestedRamMb, formatRam)
+    : "—";
+  const liveDiskLabel = isWorkloadRunning
+    ? formatRuntimeResource(entry.workload.runtimeDiskGb, entry.workload.requestedDiskGb, formatDisk)
+    : "—";
+  const uptimeLabel = isWorkloadRunning ? formatHms(runtime.uptimeSeconds) : "00:00:00";
+  const templateLabel = templateFamilyLabel(displayEntry.server.templateId);
 
   return (
     <div className="space-y-6">
@@ -210,7 +212,7 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
             <div className="mt-4 flex flex-wrap items-center gap-2">
               <StatePill label={formatRuntimeState(displayEntry.server.runtimeState)} />
               <span className="rounded-full border border-white/10 bg-white/[0.035] px-3 py-1 font-mono text-[11px] text-slate-300">
-                {displayEntry.server.templateId}
+                {templateLabel}
               </span>
               <span className="rounded-full border border-white/10 bg-white/[0.035] px-3 py-1 font-mono text-[11px] text-slate-300">
                 v{displayEntry.server.minecraftVersion}
@@ -222,7 +224,11 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
 
             <dl className="mt-6 grid gap-4 text-sm md:grid-cols-2 xl:grid-cols-4">
               <Field label="UUID" value={displayEntry.server.id} mono />
-              <Field label="Node" value={displayEntry.node?.name ?? "Unassigned"} />
+              <Field
+                label="Node"
+                value={displayEntry.node?.name ?? "Unassigned"}
+                href={displayEntry.node?.id ? `/nodes/${displayEntry.node.id}` : undefined}
+              />
               <Field label="Dedicated direct port" value={runtime.gamePort ? `${runtime.gamePort}/tcp` : "Unknown"} mono />
               <Field label="Proxy address" value={displayEntry.server.hostname} mono />
             </dl>
@@ -239,20 +245,22 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
         onRefresh={refresh}
         activeTab={activeTab}
         onTabChange={setActiveTab}
+        actionInFlight={consoleAction}
+        onStart={() => runAction("start")}
+        onStop={() => runAction("stop")}
+        onRestart={() => runAction("restart")}
+        filesContent={<MinecraftFilesManager entry={displayEntry} />}
+        settingsContent={
+          <MinecraftSettingsForm
+            entry={displayEntry}
+            globalSettings={globalSettings}
+            onSaved={(next) => {
+              setEntry(next);
+              setError(null);
+            }}
+          />
+        }
       />
-
-      {activeTab === "files" ? (
-        <MinecraftFilesManager entry={displayEntry} />
-      ) : activeTab === "settings" ? (
-        <MinecraftSettingsForm
-          entry={displayEntry}
-          globalSettings={globalSettings}
-          onSaved={(next) => {
-            setEntry(next);
-            setError(null);
-          }}
-        />
-      ) : null}
 
       <section className="grid grid-cols-1 gap-6 xl:grid-cols-3">
         <DetailCard title="Resources">
@@ -268,7 +276,7 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
 
         <DetailCard title="Runtime">
           <div className="grid min-w-0 gap-3 text-sm">
-            <MetricRow label="Uptime" value={formatHms(runtime.uptimeSeconds)} />
+            <MetricRow label="Uptime" value={uptimeLabel} />
             <MetricRow label="Started at" value={formatDateTime(runtime.startedAt)} />
             <MetricRow label="Finished at" value={formatDateTime(runtime.finishedAt)} />
             <MetricRow label="Restart count" value={String(entry.workload.restartCount)} />
@@ -284,7 +292,11 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
             <MetricRow label="Last player sample" value={formatDateTime(displayEntry.server.lastPlayerSampleAt)} />
             <MetricRow
               label="Player check"
-              value={displayEntry.server.lastPlayerCheckError ?? "Healthy"}
+              value={
+                isWorkloadRunning
+                  ? displayEntry.server.lastPlayerCheckError ?? "Healthy"
+                  : "—"
+              }
               wrap
             />
             <MetricRow label="Idle duration" value={formatRelativeDurationSince(displayEntry.server.idleSince)} />
@@ -295,7 +307,11 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
 
         <DetailCard title="Network">
           <div className="grid min-w-0 gap-3 text-sm">
-            <MetricRow label="Node" value={displayEntry.node?.name ?? "Unassigned"} />
+            <MetricRow
+              label="Node"
+              value={displayEntry.node?.name ?? "Unassigned"}
+              href={displayEntry.node?.id ? `/nodes/${displayEntry.node.id}` : undefined}
+            />
             <MetricRow label="Public host" value={displayEntry.node?.publicHost ?? "Unknown"} mono wrap />
             <MetricRow label="Proxy address" value={displayEntry.server.hostname} mono wrap />
             <MetricRow label="Public proxy port" value="25565/tcp" mono />
@@ -442,13 +458,37 @@ function formatRuntimeState(value: MinecraftServerWithWorkload["server"]["runtim
   }
 }
 
-function Field({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
+function Field({
+  label,
+  value,
+  mono = false,
+  href
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+  href?: string;
+}) {
   return (
     <div>
       <dt className="text-slate-500">{label}</dt>
-      <dd className={`mt-1 text-slate-200 ${mono ? "font-mono text-xs" : ""}`}>{value}</dd>
+      <dd className={`mt-1 ${mono ? "font-mono text-xs" : ""}`}>
+        {href ? (
+          <Link href={href} className="text-accent hover:text-accent/80">
+            {value}
+          </Link>
+        ) : (
+          <span className="text-slate-200">{value}</span>
+        )}
+      </dd>
     </div>
   );
+}
+
+function templateFamilyLabel(templateId: string) {
+  const family = templateId.split("-")[0] ?? templateId;
+  if (!family) return templateId;
+  return family.charAt(0).toUpperCase() + family.slice(1);
 }
 
 function MetricRow({
