@@ -9,7 +9,8 @@ export type ConsoleLineKind =
   | "response"
   | "logs"
   | "info"
-  | "error";
+  | "error"
+  | "divider";
 
 export interface MinecraftConsoleLine {
   id: string;
@@ -32,6 +33,7 @@ interface MinecraftConsoleProps {
   onRestart: () => void;
   onStop: () => void;
   busy: boolean;
+  actionState?: "start" | "stop" | "restart" | null;
   operatorLabel?: string;
   phantomIdentity?: string;
   activeTab?: "console" | "files" | "settings";
@@ -59,6 +61,7 @@ export function MinecraftConsole({
   onRestart,
   onStop,
   busy,
+  actionState = null,
   operatorLabel = "operator",
   phantomIdentity = "phantom@system~",
   activeTab = "console",
@@ -87,11 +90,19 @@ export function MinecraftConsole({
   }, [entry]);
 
   const diskAllocGb = entry?.workload.requestedDiskGb ?? 0;
+  const diskUsedGb = entry?.workload.runtimeDiskGb ?? null;
   const cpuLabel = entry ? `${entry.workload.requestedCpu} vCPU` : "— vCPU";
   const ramLabel = entry ? `${entry.workload.requestedRamMb} MB` : "— MB";
+  const diskLabel =
+    diskUsedGb !== null ? `${formatDiskGb(diskUsedGb)} / ${formatDiskGb(diskAllocGb)}` : formatDiskGb(diskAllocGb);
   const addressLabel = externalPort ? `:${externalPort}` : "—";
   const canSwitchTabs = Boolean(onTabChange);
   const runtimeState = entry?.server.runtimeState;
+  const isStoppedState = runtimeState === "stopped";
+  const showStartingBadge =
+    actionState === "start" || (runtimeState === "starting" && !consoleReady);
+  const showStoppingBadge =
+    actionState === "stop" || runtimeState === "stopping";
   // Strict per-state gating so transient states do not allow conflicting actions.
   const canStart = !!entry && ["stopped", "crashed", "error"].includes(runtimeState ?? "");
   const canRestart = !!entry && runtimeState === "running";
@@ -138,7 +149,7 @@ export function MinecraftConsole({
               </span>
               <span>·</span>
               <span>
-                <span className="text-slate-300">Disk:</span> {diskAllocGb} GB
+                <span className="text-slate-300">Disk:</span> {diskLabel}
               </span>
               <span>·</span>
               <span className="text-slate-300">{addressLabel}</span>
@@ -185,30 +196,48 @@ export function MinecraftConsole({
                 ))}
               </select>
             ) : null}
-            <button
-              type="button"
-              onClick={onStart}
-              disabled={!canStart || busy}
-              className="inline-flex h-9 items-center gap-2 rounded-md border border-emerald-500/25 bg-emerald-500/[0.06] px-4 text-sm font-bold text-emerald-200 transition hover:border-emerald-400/40 hover:bg-emerald-500/[0.1] disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              <PowerIcon className="h-[15px] w-[15px]" /> Start
-            </button>
-            <button
-              type="button"
-              onClick={onRestart}
-              disabled={!canRestart || busy}
-              className="inline-flex h-9 items-center gap-2 rounded-md border border-white/10 bg-white/[0.025] px-4 text-sm font-bold text-slate-100 transition hover:border-white/20 hover:bg-white/[0.05] disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              <RestartIcon className="h-[15px] w-[15px]" /> Restart
-            </button>
-            <button
-              type="button"
-              onClick={onStop}
-              disabled={!canStop || busy}
-              className="inline-flex h-9 items-center gap-2 rounded-md border border-red-500/25 bg-red-500/[0.06] px-4 text-sm font-bold text-red-300 transition hover:border-red-400/40 hover:bg-red-500/[0.1] disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              <PowerIcon className="h-[15px] w-[15px]" /> Stop
-            </button>
+            {showStartingBadge ? (
+              <div className="inline-flex h-11 items-center gap-3 rounded-xl border border-amber-500/45 bg-amber-500/[0.06] px-6 text-sm font-semibold text-amber-300 shadow-[0_0_30px_rgba(245,158,11,0.08)]">
+                <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-amber-500/30 border-t-amber-300" />
+                Starting
+              </div>
+            ) : null}
+            {showStoppingBadge ? (
+              <div className="inline-flex h-11 items-center gap-3 rounded-xl border border-red-500/45 bg-red-500/[0.06] px-6 text-sm font-semibold text-red-300 shadow-[0_0_30px_rgba(239,68,68,0.08)]">
+                <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-red-500/30 border-t-red-300" />
+                Stopping
+              </div>
+            ) : null}
+            {canStart && !showStartingBadge && !showStoppingBadge ? (
+              <button
+                type="button"
+                onClick={onStart}
+                disabled={busy}
+                className="inline-flex h-9 items-center gap-2 rounded-md border border-emerald-500/25 bg-emerald-500/[0.06] px-4 text-sm font-bold text-emerald-200 transition hover:border-emerald-400/40 hover:bg-emerald-500/[0.1] disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <PowerIcon className="h-[15px] w-[15px]" /> Start
+              </button>
+            ) : null}
+            {!canStart && !showStartingBadge && !showStoppingBadge ? (
+              <>
+                <button
+                  type="button"
+                  onClick={onRestart}
+                  disabled={!canRestart || busy}
+                  className="inline-flex h-9 items-center gap-2 rounded-md border border-white/10 bg-white/[0.025] px-4 text-sm font-bold text-slate-100 transition hover:border-white/20 hover:bg-white/[0.05] disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <RestartIcon className="h-[15px] w-[15px]" /> Restart
+                </button>
+                <button
+                  type="button"
+                  onClick={onStop}
+                  disabled={!canStop || busy}
+                  className="inline-flex h-9 items-center gap-2 rounded-md border border-red-500/25 bg-red-500/[0.06] px-4 text-sm font-bold text-red-300 transition hover:border-red-400/40 hover:bg-red-500/[0.1] disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <PowerIcon className="h-[15px] w-[15px]" /> Stop
+                </button>
+              </>
+            ) : null}
           </div>
         </div>
       </header>
@@ -231,12 +260,6 @@ export function MinecraftConsole({
         ))}
       </nav>
 
-      {activeTab === "console" && entry && !consoleReady ? (
-        <div className="mt-4 text-[11px] text-amber-300">
-          Server status: {entry.server.runtimeState}. Console requires a ready server.
-        </div>
-      ) : null}
-
       <div className={activeTab === "files" ? "mt-4 block" : "hidden"}>
         {filesContent ?? <p className="text-sm text-slate-500">Files panel unavailable.</p>}
       </div>
@@ -257,23 +280,35 @@ export function MinecraftConsole({
 
         <div
           ref={scrollRef}
-          className="relative h-[480px] overflow-y-auto p-4 font-mono text-[13px] leading-6 text-slate-100"
+          className={`relative h-[480px] overflow-y-auto p-4 font-mono text-[13px] leading-6 text-slate-100 transition ${
+            isStoppedState ? "opacity-45 saturate-50" : ""
+          }`}
         >
           {!entry ? (
             <p className="text-slate-600">Pick a server to attach the console.</p>
           ) : (
-            renderedLines.map((line) => (
-              <p key={line.id} className="whitespace-pre-wrap">
-                <span className="text-slate-500">[{formatClock(line.timestamp)} </span>
-                <span className={sourceTone(line.kind, line.channel)}>
-                  {lineSource(line.kind, operatorLabel, line.channel)}
-                </span>
-                <span className="text-slate-500">] </span>
-                <span className={lineTone(line.kind, line.channel)}>
-                  {line.channel === "PHANTOM" ? `${phantomIdentity} ${line.text}` : line.text}
-                </span>
-              </p>
-            ))
+            renderedLines.map((line) =>
+              line.kind === "divider" ? (
+                <div key={line.id} className="my-5 flex items-center gap-4">
+                  <div className="h-px flex-1 bg-white/12" />
+                  <span className="rounded-full border border-white/10 bg-white/[0.08] px-4 py-1 text-sm font-medium text-slate-300">
+                    {line.text}
+                  </span>
+                  <div className="h-px flex-1 bg-white/12" />
+                </div>
+              ) : (
+                <p key={line.id} className="whitespace-pre-wrap">
+                  <span className="text-slate-500">[{formatClock(line.timestamp)} </span>
+                  <span className={sourceTone(line.kind, line.channel)}>
+                    {lineSource(line.kind, operatorLabel, line.channel)}
+                  </span>
+                  <span className="text-slate-500">] </span>
+                  <span className={lineTone(line.kind, line.channel)}>
+                    {line.channel === "PHANTOM" ? `${phantomIdentity} ${line.text}` : line.text}
+                  </span>
+                </p>
+              )
+            )
           )}
           {entry ? (
             <span
@@ -286,8 +321,20 @@ export function MinecraftConsole({
           ) : null}
         </div>
 
+        {entry && isStoppedState ? (
+          <div className="pointer-events-none absolute inset-x-6 bottom-12 z-10 flex items-center gap-4">
+            <div className="h-px flex-1 bg-white/12" />
+            <span className="rounded-full border border-white/10 bg-white/[0.08] px-4 py-1 font-medium text-sm text-slate-300 shadow-[0_0_30px_rgba(0,0,0,0.25)]">
+              Server stopped
+            </span>
+            <div className="h-px flex-1 bg-white/12" />
+          </div>
+        ) : null}
+
         <form
-          className="relative flex h-11 items-center gap-3 border-t border-white/10 bg-white/[0.055] px-4 font-mono text-sm"
+          className={`relative flex h-11 items-center gap-3 border-t border-white/10 px-4 font-mono text-sm transition ${
+            isStoppedState ? "bg-white/[0.03]" : "bg-white/[0.055]"
+          }`}
           onSubmit={(event) => {
             event.preventDefault();
             onCommandSubmit();
@@ -434,12 +481,16 @@ function useUptime(startedAtMs: number | null, _finishedAtMs: number | null, run
     const id = setInterval(() => setNow(Date.now()), 1_000);
     return () => clearInterval(id);
   }, [running, startedAtMs]);
-  if (!running || startedAtMs === null) return "00:00:00";
+  if (!running || startedAtMs === null) return "--:--:--";
   const total = Math.max(0, Math.floor((now - startedAtMs) / 1_000));
   const hours = Math.floor(total / 3600);
   const minutes = Math.floor((total % 3600) / 60);
   const seconds = total % 60;
   return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+}
+
+function formatDiskGb(value: number) {
+  return `${value.toFixed(2)} GB`;
 }
 
 function pad(n: number) {

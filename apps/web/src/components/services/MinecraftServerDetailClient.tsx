@@ -32,6 +32,7 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
   const [activeTab, setActiveTab] = useState<"console" | "files" | "settings">("console");
   const [globalSettings, setGlobalSettings] = useState<MinecraftGlobalSettings | null>(null);
   const [liveRefreshAt, setLiveRefreshAt] = useState(0);
+  const [copiedAddress, setCopiedAddress] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -205,6 +206,7 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
 
   const rootDomain = entry.server.hostname.split(".").slice(1).join(".");
   const hostnamePreview = `${hostnameSlug.trim().toLowerCase() || entry.server.hostnameSlug}.${rootDomain}`;
+  const proxyAddress = entry.server.hostname;
   // Live runtime metrics only make sense when the workload is actually up.
   const isWorkloadRunning = entry.workload.status === "running";
   const liveCpuLabel = isWorkloadRunning ? formatRuntimeCpu(entry.workload.runtimeCpuPercent) : "—";
@@ -238,7 +240,6 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
             <SectionHeader
               eyebrow="Minecraft service"
               title={entry.server.name}
-              description="Dedicated admin view on top of the Phantom workload runtime."
             />
             <div className="mt-4 flex flex-wrap items-center gap-2">
               <StatePill label={formatRuntimeState(displayEntry.server.runtimeState)} />
@@ -263,6 +264,34 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
               <Field label="Dedicated direct port" value={runtime.gamePort ? `${runtime.gamePort}/tcp` : "Unknown"} mono />
               <Field label="Proxy address" value={displayEntry.server.hostname} mono />
             </dl>
+
+            <details className="mt-5 max-w-2xl overflow-hidden rounded-2xl border border-white/10 bg-white/[0.035]">
+              <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-left text-sm text-slate-300 marker:hidden">
+                <span className="font-mono text-lg tracking-wide text-slate-200">Server Address</span>
+                <span className="text-slate-500">▾</span>
+              </summary>
+              <div className="border-t border-white/10 px-4 py-4">
+                <div className="flex items-center justify-between gap-4 rounded-xl bg-white/[0.03] px-4 py-4">
+                  <div className="min-w-0">
+                    <p className="text-sm text-slate-500">Java</p>
+                    <p className="mt-2 truncate font-mono text-lg text-slate-100" title={proxyAddress}>
+                      {proxyAddress}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void navigator.clipboard.writeText(proxyAddress);
+                      setCopiedAddress(true);
+                      window.setTimeout(() => setCopiedAddress(false), 1500);
+                    }}
+                    className="shrink-0 rounded-xl border border-white/10 bg-white/[0.05] px-4 py-2 text-sm text-white transition hover:bg-white/[0.08]"
+                  >
+                    {copiedAddress ? "Copied" : "Copy"}
+                  </button>
+                </div>
+              </div>
+            </details>
           </div>
 
           <div className="flex flex-wrap gap-2">
@@ -391,13 +420,6 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
                     className="rounded-xl border border-white/10 bg-white/[0.05] px-4 py-2 text-sm text-white transition hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     {busy === "hostname" ? "Saving..." : "Save hostname"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void navigator.clipboard.writeText(entry.connectAddress ?? hostnamePreview)}
-                    className="rounded-xl border border-white/10 bg-white/[0.05] px-4 py-2 text-sm text-white transition hover:bg-white/[0.08]"
-                  >
-                    Copy address
                   </button>
                 </div>
               </div>

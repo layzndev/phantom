@@ -152,13 +152,23 @@ export function MinecraftServiceConsole({
 
   useEffect(() => {
     if (lastRuntimeStartedAtRef.current !== entry.workload.runtimeStartedAt) {
+      const previousRuntimeStartedAt = lastRuntimeStartedAtRef.current;
       lastRuntimeStartedAtRef.current = entry.workload.runtimeStartedAt;
       lastStatusRef.current = null;
       commandHistoryRef.current.clear();
       lineFingerprintsRef.current.clear();
       lifecycleDedupRef.current.clear();
+      if (previousRuntimeStartedAt && entry.workload.runtimeStartedAt) {
+        appendLines([
+          {
+            timestamp: entry.workload.runtimeStartedAt,
+            kind: "divider",
+            text: "Starting"
+          }
+        ]);
+      }
     }
-  }, [entry.workload.runtimeStartedAt]);
+  }, [appendLines, entry.workload.runtimeStartedAt]);
 
   useEffect(() => {
     shouldReconnectRef.current = true;
@@ -386,6 +396,7 @@ export function MinecraftServiceConsole({
       onRestart={() => void runRestart()}
       onStop={() => void runStop()}
       busy={derivedBusy}
+      actionState={actionInFlight}
       operatorLabel="admin"
       phantomIdentity={phantomIdentity}
       activeTab={activeTab}
