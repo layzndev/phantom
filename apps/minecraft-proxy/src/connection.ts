@@ -140,7 +140,16 @@ export function handleConnection(socket: net.Socket, deps: HandlerDeps) {
   }
 
   function routeByStatus(hs: MinecraftHandshake, route: RoutingRecord, hostname: string) {
-    switch (route.status as RoutingStatus) {
+    const status = route.status as RoutingStatus;
+    log.info("route.dispatch", {
+      hostname,
+      status,
+      nextState: hs.nextState,
+      bytesConsumed: hs.bytesConsumed,
+      bufferedBytes: buffer.length,
+      mode: status === "running" ? "backend_relay" : "local_response"
+    });
+    switch (status) {
       case "running":
         if (!route.host || !route.port) {
           respondUnavailable(hs.nextState, MOTD_MAINTENANCE, DISCONNECT_MAINTENANCE);
@@ -230,7 +239,12 @@ export function handleConnection(socket: net.Socket, deps: HandlerDeps) {
         backend.write(header);
       }
 
-      backend.write(buffer);
+      // Replay the original client bytes (handshake + any post-handshake packets)
+      // exactly as received, then install the duplex pipes for everything else.
+      const replayBytes = buffer.length;
+      if (replayBytes > 0) {
+        backend.write(buffer);
+      }
       buffer = Buffer.alloc(0);
 
       socket.pipe(backend);
@@ -239,7 +253,11 @@ export function handleConnection(socket: net.Socket, deps: HandlerDeps) {
       log.info("backend.connected", {
         hostname,
         backendHost: route.host,
-        backendPort: route.port
+        backendPort: route.port,
+        nextState: hs.nextState,
+        bytesConsumed: hs.bytesConsumed,
+        bytesReplayed: replayBytes,
+        mode: "backend_relay"
       });
     });
 
@@ -272,9 +290,19 @@ export function handleConnection(socket: net.Socket, deps: HandlerDeps) {
   function respondLoginDisconnect(message: string) {
     metrics.loginDisconnects += 1;
     if (socket.destroyed) return;
+    log.info("response.login_disconnect", {
+      remoteAddress,
+      hostname: handshake?.hostname ?? null,
+      nextState: handshake?.nextState ?? null,
+      bytesConsumed: handshake?.bytesConsumed ?? 0,
+      mode: "local_response"
+    });
+    // Phantom-local disconnect — written to client only, never to the backend.
     socket.write(encodeLoginDisconnect(message));
     socket.end();
     phase = "closed";
+    // Drain any further client bytes so they cannot accidentally be relayed.
+    buffer = Buffer.alloc(0);
   }
 
   function respondStatusOnly(description: string, route: RoutingRecord | null) {
@@ -291,6 +319,7 @@ export function handleConnection(socket: net.Socket, deps: HandlerDeps) {
       max: 20,
       online: 0
     });
+    // Phantom-local status payload — written to client only, never to the backend.
     socket.write(responsePayload);
 
     if (requestPacket) {
@@ -300,8 +329,17 @@ export function handleConnection(socket: net.Socket, deps: HandlerDeps) {
         socket.write(encodeStatusPong(ping.packet.subarray(1, 9)));
       }
     }
+    log.info("response.status_only", {
+      remoteAddress,
+      hostname: handshake?.hostname ?? null,
+      nextState: handshake?.nextState ?? null,
+      bytesConsumed: handshake?.bytesConsumed ?? 0,
+      bufferedAfterHandshake: statusBuffer.length,
+      mode: "local_response"
+    });
     socket.end();
     phase = "closed";
+    buffer = Buffer.alloc(0);
   }
 
   function respondUnavailable(

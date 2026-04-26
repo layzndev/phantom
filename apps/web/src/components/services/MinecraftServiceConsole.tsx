@@ -97,12 +97,26 @@ export function MinecraftServiceConsole({
       socket.addEventListener("message", (event) => {
         try {
           const payload = JSON.parse(String(event.data)) as
-            | { type: "log"; line: string }
-            | { type: "status"; status: string }
-            | { type: "command_result"; id: string; output: string }
-            | { type: "error"; message: string };
+            | { type: "log"; line: string; timestamp?: string }
+            | { type: "status"; status: string; timestamp?: string }
+            | { type: "command_result"; id: string; output: string; timestamp?: string }
+            | { type: "error"; message: string; timestamp?: string }
+            | { type: "history"; events: ConsoleHistoryEvent[] };
 
-          const timestamp = new Date().toISOString();
+          if (payload.type === "history") {
+            const replay = renderHistory(payload.events, commandHistoryRef.current);
+            setLines(replay.slice(-500));
+            const lastStatus = [...payload.events].reverse().find(
+              (event): event is Extract<ConsoleHistoryEvent, { type: "status" }> =>
+                event.type === "status"
+            );
+            if (lastStatus) {
+              lastStatusRef.current = lastStatus.status;
+            }
+            return;
+          }
+
+          const timestamp = payload.timestamp ?? new Date().toISOString();
           if (payload.type === "log") {
             appendLines(
               payload.line
@@ -312,6 +326,54 @@ export function MinecraftServiceConsole({
       phantomIdentity={phantomIdentity}
     />
   );
+}
+
+type ConsoleHistoryEvent =
+  | { type: "log"; line: string; timestamp: string }
+  | { type: "status"; status: string; timestamp: string }
+  | { type: "command_result"; id: string; output: string; timestamp: string }
+  | { type: "error"; message: string; timestamp: string };
+
+function renderHistory(
+  events: ConsoleHistoryEvent[],
+  pendingAdminIds: Set<string>
+): MinecraftConsoleLine[] {
+  const out: MinecraftConsoleLine[] = [];
+  let lastStatus: string | null = null;
+  for (const event of events) {
+    const timestamp = event.timestamp ?? new Date().toISOString();
+    if (event.type === "log") {
+      for (const text of event.line.split(/\r?\n/)) {
+        out.push(...normalizeConsoleLogLine(text, timestamp));
+      }
+    } else if (event.type === "status") {
+      if (lastStatus === event.status) continue;
+      lastStatus = event.status;
+      const description = describeStatusTransition(event.status);
+      if (description) {
+        out.push({
+          id: crypto.randomUUID(),
+          timestamp,
+          kind: "info",
+          channel: "PHANTOM",
+          text: description
+        });
+      }
+    } else if (event.type === "command_result") {
+      const isAdminCommand = pendingAdminIds.has(event.id);
+      pendingAdminIds.delete(event.id);
+      out.push(...normalizeCommandResult(event.output, timestamp, isAdminCommand));
+    } else if (event.type === "error") {
+      out.push({
+        id: crypto.randomUUID(),
+        timestamp,
+        kind: "error",
+        channel: "ERROR",
+        text: event.message
+      });
+    }
+  }
+  return out;
 }
 
 function normalizeConsoleLogLine(

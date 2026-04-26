@@ -467,12 +467,14 @@ export async function updateMinecraftServerSettings(
 ) {
   const record = await ensureMinecraftServerRecord(id);
   const workload = await getWorkload(record.workloadId);
-  const nextMotd = input.motd.trim();
+  const trimmedMotd = (input.motd ?? "").trim();
+  const motdForRuntime =
+    trimmedMotd.length > 0 ? trimmedMotd : `${record.name} — Phantom`;
   const currentConfig = (workload.config as Record<string, unknown>) ?? {};
   const nextConfig = buildUpdatedMinecraftWorkloadConfig(currentConfig, {
     version: record.minecraftVersion,
     ramMb: workload.requestedRamMb,
-    motd: nextMotd,
+    motd: motdForRuntime,
     difficulty: input.difficulty,
     gameMode: input.gameMode,
     maxPlayers: input.maxPlayers,
@@ -486,14 +488,14 @@ export async function updateMinecraftServerSettings(
     autoSleepEnabled: input.autoSleepEnabled,
     autoSleepIdleMinutes: input.autoSleepIdleMinutes,
     autoSleepAction: input.autoSleepAction,
-    motd: nextMotd,
+    motd: trimmedMotd.length > 0 ? trimmedMotd : null,
     difficulty: input.difficulty,
     gameMode: input.gameMode,
     maxPlayers: input.maxPlayers,
     onlineMode: input.onlineMode,
     whitelistEnabled: input.whitelistEnabled,
     serverProperties: buildMinecraftServerPropertiesSnapshot({
-      motd: nextMotd,
+      motd: motdForRuntime,
       difficulty: input.difficulty,
       gameMode: input.gameMode,
       maxPlayers: input.maxPlayers,
@@ -1049,6 +1051,20 @@ export async function runMinecraftAutoSleepTick() {
       continue;
     }
 
+    console.info("[autosleep] sleeping", {
+      serverId: record.id,
+      planTier: record.planTier,
+      source: effectiveConfig.source,
+      enabled: effectiveConfig.enabled,
+      idleMinutes: effectiveConfig.idleMinutes,
+      action: effectiveConfig.action,
+      workloadId: record.workloadId,
+      playersOnline: record.currentPlayerCount,
+      idleSince: record.idleSince.toISOString(),
+      reason: "idle_threshold_reached",
+      currentIdleMinutes: Math.floor(idleMs / 60_000),
+      thresholdMinutes: idleThresholdMinutes
+    });
     await createAuditLog({
       action: "minecraft.server.autosleep",
       actorEmail: "system",

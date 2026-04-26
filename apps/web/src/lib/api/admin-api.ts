@@ -39,7 +39,18 @@ async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (!response.ok) {
     const payload = await response.json().catch(() => ({ error: "Request failed." }));
-    throw new Error(payload.error ?? "Request failed.");
+    const message = payload.error ?? "Request failed.";
+    const details = payload.details?.fieldErrors as Record<string, string[]> | undefined;
+    if (details) {
+      const fields = Object.entries(details)
+        .filter(([, errors]) => Array.isArray(errors) && errors.length > 0)
+        .map(([field, errors]) => `${field}: ${errors.join(", ")}`)
+        .join("; ");
+      if (fields) {
+        throw new Error(`${message} (${fields})`);
+      }
+    }
+    throw new Error(message);
   }
 
   if (response.status === 204) {

@@ -122,7 +122,11 @@ export const updateMinecraftServerSettingsSchema = z.object({
   onlineMode: z.boolean(),
   difficulty: z.enum(["peaceful", "easy", "normal", "hard"]),
   gameMode: z.enum(["survival", "creative", "adventure", "spectator"]),
-  motd: z.string().trim().min(1).max(120),
+  motd: z
+    .union([z.string(), z.null()])
+    .optional()
+    .transform((value) => (typeof value === "string" ? value.trim() : ""))
+    .refine((value) => value.length <= 120, { message: "MOTD must be 120 characters or fewer." }),
   whitelistEnabled: z.boolean()
 });
 
