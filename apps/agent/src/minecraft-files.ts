@@ -58,7 +58,7 @@ export class MinecraftFilesManager {
     const entries = await readdir(targetPath, { withFileTypes: true });
     const rows: MinecraftFileEntry[] = [];
     for (const entry of entries) {
-      const childRelative = normalizeRelativePath(join(relativePath, entry.name));
+      const childRelative = joinSandboxPath(relativePath, entry.name);
       const childAbsolute = await this.resolveSandboxPath(baseDir, childRelative, {
         allowMissing: false
       });
@@ -83,8 +83,8 @@ export class MinecraftFilesManager {
     });
 
     return {
-      path: relativePath,
-      parentPath: relativePath === "/" ? null : dirname(relativePath) === "." ? "/" : dirname(relativePath),
+      path: toDisplayPath(relativePath),
+      parentPath: relativePath === "." ? null : dirname(relativePath) === "." ? "/" : dirname(relativePath),
       entries: rows
     };
   }
@@ -103,7 +103,7 @@ export class MinecraftFilesManager {
       throw new Error("Binary files cannot be edited as text.");
     }
     return {
-      path: relativePath,
+      path: toDisplayPath(relativePath),
       content: buffer.toString("utf8"),
       modifiedAt: fileStats.mtime.toISOString(),
       sizeBytes: fileStats.size,
@@ -123,7 +123,7 @@ export class MinecraftFilesManager {
     await rename(tempPath, target.targetPath);
     const fileStats = await stat(target.targetPath);
     return {
-      path: target.relativePath,
+      path: toDisplayPath(target.relativePath),
       modifiedAt: fileStats.mtime.toISOString(),
       sizeBytes: fileStats.size
     };
@@ -142,7 +142,7 @@ export class MinecraftFilesManager {
     await writeFile(target.targetPath, buffer);
     const fileStats = await stat(target.targetPath);
     return {
-      path: target.relativePath,
+      path: toDisplayPath(target.relativePath),
       modifiedAt: fileStats.mtime.toISOString(),
       sizeBytes: fileStats.size
     };
@@ -154,7 +154,7 @@ export class MinecraftFilesManager {
     });
     await this.assertWritablePath(baseDir, target.relativePath);
     await mkdir(target.targetPath, { recursive: true });
-    return { path: target.relativePath };
+    return { path: toDisplayPath(target.relativePath) };
   }
 
   async rename(baseDir: string, fromPath: string, toPath: string) {
@@ -164,7 +164,7 @@ export class MinecraftFilesManager {
     await this.assertWritablePath(baseDir, to.relativePath);
     await mkdir(dirname(to.targetPath), { recursive: true });
     await rename(from.targetPath, to.targetPath);
-    return { from: from.relativePath, to: to.relativePath };
+    return { from: toDisplayPath(from.relativePath), to: toDisplayPath(to.relativePath) };
   }
 
   async delete(baseDir: string, requestedPath: string) {
@@ -173,7 +173,7 @@ export class MinecraftFilesManager {
     });
     await this.assertWritablePath(baseDir, target.relativePath);
     await rm(target.targetPath, { recursive: true, force: true });
-    return { path: target.relativePath };
+    return { path: toDisplayPath(target.relativePath) };
   }
 
   async archive(baseDir: string, requestedPath: string) {
@@ -187,7 +187,7 @@ export class MinecraftFilesManager {
       cwd: dirname(target.targetPath),
       maxBuffer: 20 * 1024 * 1024
     });
-    return { path: archive.relativePath };
+    return { path: toDisplayPath(archive.relativePath) };
   }
 
   async extract(baseDir: string, requestedPath: string) {
@@ -198,7 +198,7 @@ export class MinecraftFilesManager {
     await execFileAsync("unzip", ["-o", archive.targetPath, "-d", dirname(archive.targetPath)], {
       maxBuffer: 20 * 1024 * 1024
     });
-    return { path: archive.relativePath };
+    return { path: toDisplayPath(archive.relativePath) };
   }
 
   async ensureServerDataDir(baseDir: string) {
@@ -221,7 +221,7 @@ export class MinecraftFilesManager {
 
   private async assertWritablePath(baseDir: string, relativePath: string) {
     const normalized = normalizeRelativePath(relativePath);
-    if (normalized === "/") {
+    if (normalized === ".") {
       throw new Error("Root path is not writable.");
     }
     const base = basename(normalized).toLowerCase();
@@ -229,7 +229,7 @@ export class MinecraftFilesManager {
       throw new Error("Access to this file is forbidden.");
     }
 
-    const parentRelative = dirname(normalized) === "." ? "/" : dirname(normalized);
+    const parentRelative = dirname(normalized) === "." ? "." : dirname(normalized);
     const parent = await this.resolveSandboxPath(baseDir, parentRelative, {
       allowMissing: false,
       allowRoot: true
@@ -249,11 +249,11 @@ export class MinecraftFilesManager {
     await this.ensureServerDataDir(baseDir);
     const baseRealPath = await realpath(baseDir);
     const relativePath = normalizeRelativePath(requestedPath);
-    if (!options.allowRoot && relativePath === "/") {
+    if (!options.allowRoot && relativePath === ".") {
       throw new Error("Root path is not allowed for this operation.");
     }
 
-    const joinedPath = resolvePath(baseRealPath, `.${relativePath}`);
+    const joinedPath = resolvePath(baseRealPath, relativePath);
     if (!joinedPath.startsWith(baseRealPath)) {
       throw new Error("Path traversal is not allowed.");
     }
@@ -279,18 +279,26 @@ export class MinecraftFilesManager {
 }
 
 function normalizeRelativePath(input: string) {
-  const trimmed = (input || "/").replace(/\0/g, "").trim();
-  if (!trimmed || trimmed === ".") {
-    return "/";
+  const raw = input ?? "";
+  if (raw.includes("\0")) {
+    throw new Error("Path contains invalid null bytes.");
   }
-  if (isAbsolute(trimmed)) {
+  const trimmed = raw.trim();
+  if (!trimmed || trimmed === "." || trimmed === "/") {
+    return ".";
+  }
+  const sanitized = trimmed.replace(/\\/g, "/");
+  if (sanitized.startsWith("/")) {
     throw new Error("Absolute paths are not allowed.");
   }
-  const normalized = normalize(trimmed.replace(/\\/g, "/"));
+  const normalized = normalize(sanitized);
   if (normalized.startsWith("../") || normalized === ".." || normalized.includes("/../")) {
     throw new Error("Path traversal is not allowed.");
   }
-  return normalized.startsWith("/") ? normalized : `/${normalized}`;
+  if (normalized.startsWith("/") || normalized === "") {
+    throw new Error("Absolute paths are not allowed.");
+  }
+  return normalized === "." ? "." : normalized.replace(/^\.\/+/, "");
 }
 
 function looksBinary(buffer: Buffer) {
@@ -303,7 +311,15 @@ function looksBinary(buffer: Buffer) {
 
 function buildArchivePath(relativePath: string) {
   const normalized = normalizeRelativePath(relativePath);
-  const base = normalized === "/" ? "archive" : basename(normalized);
-  const parent = dirname(normalized) === "." ? "/" : dirname(normalized);
-  return join(parent, `${base}.zip`).replace(/\\/g, "/");
+  const base = normalized === "." ? "archive" : basename(normalized);
+  const parent = dirname(normalized) === "." ? "." : dirname(normalized);
+  return normalizeRelativePath(join(parent, `${base}.zip`).replace(/\\/g, "/"));
+}
+
+function toDisplayPath(relativePath: string) {
+  return relativePath === "." ? "/" : relativePath;
+}
+
+function joinSandboxPath(base: string, name: string) {
+  return normalizeRelativePath(base === "." ? name : join(base, name).replace(/\\/g, "/"));
 }

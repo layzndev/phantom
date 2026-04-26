@@ -173,7 +173,7 @@ export function MinecraftFilesManager({
             .split("/")
             .filter(Boolean)
             .map((segment, index, array) => {
-              const crumbPath = `/${array.slice(0, index + 1).join("/")}`;
+              const crumbPath = array.slice(0, index + 1).join("/");
               return (
                 <Crumb
                   key={crumbPath}
@@ -316,14 +316,18 @@ function Crumb({
 }
 
 function parentPath(path: string) {
+  if (path === "/") return "/";
   const parts = path.split("/").filter(Boolean);
   if (parts.length <= 1) return "/";
-  return `/${parts.slice(0, -1).join("/")}`;
+  return parts.slice(0, -1).join("/");
 }
 
 function joinPath(base: string, name: string) {
-  const safeBase = base === "/" ? "" : base.replace(/\/$/, "");
-  return `${safeBase}/${name}`.replace(/\/+/g, "/");
+  const safeName = name.replace(/^\/+/, "");
+  if (base === "/" || base === "") {
+    return safeName;
+  }
+  return `${base.replace(/\/$/, "")}/${safeName}`.replace(/\/+/g, "/");
 }
 
 const toolbarClass =

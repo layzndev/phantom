@@ -42,6 +42,7 @@ import type {
 import {
   findMinecraftTemplate,
   listMinecraftTemplates,
+  resolveMinecraftImageForVersion,
   type MinecraftTemplate
 } from "./minecraft.templates.js";
 import { minecraftConsoleGateway } from "./minecraft.console.gateway.js";
@@ -319,7 +320,7 @@ export async function createMinecraftServer(
   const placement = await createWorkload({
     name: input.name,
     type: "minecraft",
-    image: template.image,
+    image: resolveMinecraftImageForVersion(version),
     requestedCpu: cpu,
     requestedRamMb: ramMb,
     requestedDiskGb: diskGb,

@@ -33,7 +33,8 @@ type TemplateSeed = Omit<MinecraftTemplate, "defaultVersion" | "supportedVersion
 
 const execFileAsync = promisify(execFile);
 const TEMPLATE_REFRESH_TTL_MS = 5 * 60_000;
-const DOCKER_IMAGE = "itzg/minecraft-server:java21";
+const JAVA21_IMAGE = "itzg/minecraft-server:java21";
+const JAVA25_IMAGE = "itzg/minecraft-server:java25";
 
 const templateSeeds: TemplateSeed[] = [
   {
@@ -41,7 +42,7 @@ const templateSeeds: TemplateSeed[] = [
     family: "vanilla",
     displayName: "Vanilla",
     description: "Serveur officiel Mojang, sans mod ni plugin.",
-    image: DOCKER_IMAGE,
+    image: JAVA21_IMAGE,
     fallbackDefaultVersion: "1.21.1",
     fallbackSupportedVersions: ["1.21.1", "1.21", "1.20.6", "1.20.4"],
     defaults: { cpu: 2, ramMb: 4096, diskGb: 10 },
@@ -52,7 +53,7 @@ const templateSeeds: TemplateSeed[] = [
     family: "paper",
     displayName: "Paper",
     description: "Fork performant compatible plugins Bukkit/Spigot.",
-    image: DOCKER_IMAGE,
+    image: JAVA21_IMAGE,
     fallbackDefaultVersion: "1.21.1",
     fallbackSupportedVersions: ["1.21.1", "1.21", "1.20.6", "1.20.4"],
     defaults: { cpu: 2, ramMb: 4096, diskGb: 10 },
@@ -63,7 +64,7 @@ const templateSeeds: TemplateSeed[] = [
     family: "purpur",
     displayName: "Purpur",
     description: "Fork de Paper avec options de gameplay avancées.",
-    image: DOCKER_IMAGE,
+    image: JAVA21_IMAGE,
     fallbackDefaultVersion: "1.21.1",
     fallbackSupportedVersions: ["1.21.1", "1.21", "1.20.6"],
     defaults: { cpu: 2, ramMb: 4096, diskGb: 10 },
@@ -74,7 +75,7 @@ const templateSeeds: TemplateSeed[] = [
     family: "fabric",
     displayName: "Fabric",
     description: "Loader de mods moderne et leger.",
-    image: DOCKER_IMAGE,
+    image: JAVA21_IMAGE,
     fallbackDefaultVersion: "1.21.1",
     fallbackSupportedVersions: ["1.21.1", "1.21", "1.20.4"],
     defaults: { cpu: 2, ramMb: 4096, diskGb: 10 },
@@ -85,7 +86,7 @@ const templateSeeds: TemplateSeed[] = [
     family: "forge",
     displayName: "Forge",
     description: "Loader de mods classique, plus gourmand en ressources.",
-    image: DOCKER_IMAGE,
+    image: JAVA21_IMAGE,
     fallbackDefaultVersion: "1.20.1",
     fallbackSupportedVersions: ["1.20.1", "1.19.2"],
     defaults: { cpu: 3, ramMb: 6144, diskGb: 15 },
@@ -131,14 +132,14 @@ async function ensureTemplateCacheFresh() {
 }
 
 async function refreshTemplateCatalog(): Promise<MinecraftTemplate[]> {
-  const [resolvedLatest, vanillaVersions, paperVersions, purpurVersions] = await Promise.all([
+  const [dockerJava21Latest, vanillaVersions, paperVersions, purpurVersions] = await Promise.all([
     resolveLatestReleaseViaDocker(),
     fetchVanillaReleaseVersions(),
     fetchPaperVersions(),
     fetchPurpurVersions()
   ]);
 
-  const latestStable = resolvedLatest ?? vanillaVersions[0] ?? "1.21.1";
+  const latestStable = vanillaVersions[0] ?? dockerJava21Latest ?? "1.21.1";
   const sharedVersions = dedupeVersions([
     latestStable,
     ...paperVersions,
@@ -163,6 +164,7 @@ async function refreshTemplateCatalog(): Promise<MinecraftTemplate[]> {
 
     return {
       ...seed,
+      image: resolveMinecraftImageForVersion(supportedVersions[0] ?? seed.fallbackDefaultVersion),
       defaultVersion: supportedVersions[0] ?? seed.fallbackDefaultVersion,
       supportedVersions
     };
@@ -179,7 +181,7 @@ async function resolveLatestReleaseViaDocker(): Promise<string | null> {
       "--rm",
       "--entrypoint",
       "mc-image-helper",
-      DOCKER_IMAGE,
+      JAVA21_IMAGE,
       "resolve-minecraft-version",
       "latest"
     ]);
@@ -293,4 +295,27 @@ function compareReleaseVersionsDesc(left: string, right: string) {
 
 function isReleaseVersion(value: string) {
   return /^\d+\.\d+(?:\.\d+)?$/.test(value);
+}
+
+export function resolveMinecraftImageForVersion(version: string) {
+  return requiresJava25(version) ? JAVA25_IMAGE : JAVA21_IMAGE;
+}
+
+function requiresJava25(version: string) {
+  const normalized = version.trim();
+  if (/^\d{2,}\./.test(normalized)) {
+    return true;
+  }
+
+  const parts = normalized.split(".").map((part) => Number(part));
+  if (parts.some((part) => !Number.isFinite(part))) {
+    return false;
+  }
+
+  const [major = 0, minor = 0, patch = 0] = parts;
+  if (major > 1) {
+    return true;
+  }
+
+  return major === 1 && (minor > 21 || (minor === 21 && patch >= 6));
 }
