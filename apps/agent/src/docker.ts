@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
 import { access, lstat, mkdir, readdir, rm } from "node:fs/promises";
 import { resolve as resolvePath } from "node:path";
@@ -128,6 +129,7 @@ export class DockerRuntime {
   async createContainer(workload: AssignedWorkload, nodeId: string) {
     const runtimeConfig = parseRuntimeConfig(workload.config);
     const name = buildContainerName(workload.name, workload.id);
+    const configFingerprint = buildWorkloadConfigFingerprint(workload);
 
     if (await this.removeContainerByName(name, { force: true })) {
       this.logger.info("removed stale container with conflicting name before create", {
@@ -150,6 +152,8 @@ export class DockerRuntime {
       `phantom.workload.name=${workload.name}`,
       "--label",
       `phantom.workload.type=${workload.type}`,
+      "--label",
+      `phantom.workload.config-hash=${configFingerprint}`,
       "--cpus",
       String(workload.requestedCpu),
       "--memory",
@@ -273,6 +277,10 @@ export class DockerRuntime {
       .split(/\r?\n/)
       .map((line) => line.trim())
       .filter(Boolean);
+  }
+
+  workloadConfigMatches(container: DockerContainerSummary, workload: AssignedWorkload) {
+    return container.labels["phantom.workload.config-hash"] === buildWorkloadConfigFingerprint(workload);
   }
 
   async listPhantomNamedContainers(): Promise<DockerContainerSummary[]> {
@@ -464,6 +472,41 @@ export class DockerRuntime {
       throw error;
     }
   }
+}
+
+function buildWorkloadConfigFingerprint(workload: AssignedWorkload) {
+  const payload = {
+    image: workload.image,
+    requestedCpu: workload.requestedCpu,
+    requestedRamMb: workload.requestedRamMb,
+    requestedDiskGb: workload.requestedDiskGb,
+    ports: [...workload.ports].sort((left, right) => {
+      if (left.externalPort !== right.externalPort) {
+        return left.externalPort - right.externalPort;
+      }
+      if (left.internalPort !== right.internalPort) {
+        return left.internalPort - right.internalPort;
+      }
+      return left.protocol.localeCompare(right.protocol);
+    }),
+    config: sortJsonValue(workload.config)
+  };
+
+  return createHash("sha256").update(JSON.stringify(payload)).digest("hex");
+}
+
+function sortJsonValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((entry) => sortJsonValue(entry));
+  }
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, entry]) => [key, sortJsonValue(entry)])
+    );
+  }
+  return value;
 }
 
 async function measurePathBytes(pathname: string): Promise<number> {

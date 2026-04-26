@@ -93,9 +93,9 @@ export function MinecraftConsole({
   const canSwitchTabs = Boolean(onTabChange);
   const runtimeState = entry?.server.runtimeState;
   // Strict per-state gating so transient states do not allow conflicting actions.
-  const canStart = !!entry && ["stopped", "sleeping", "crashed", "error"].includes(runtimeState ?? "");
+  const canStart = !!entry && ["stopped", "crashed", "error"].includes(runtimeState ?? "");
   const canRestart = !!entry && runtimeState === "running";
-  const canStop = !!entry && ["running", "starting", "waking"].includes(runtimeState ?? "");
+  const canStop = !!entry && ["running", "starting", "restarting", "stopping"].includes(runtimeState ?? "");
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -237,12 +237,19 @@ export function MinecraftConsole({
         </div>
       ) : null}
 
-      {activeTab === "files" ? (
-        <div className="mt-4">{filesContent ?? <p className="text-sm text-slate-500">Files panel unavailable.</p>}</div>
-      ) : activeTab === "settings" ? (
-        <div className="mt-4">{settingsContent ?? <p className="text-sm text-slate-500">Settings panel unavailable.</p>}</div>
-      ) : (
-      <div className="relative mt-4 overflow-hidden border border-white/10 bg-[#070707] shadow-[0_20px_60px_rgba(0,0,0,0.35)]">
+      <div className={activeTab === "files" ? "mt-4 block" : "hidden"}>
+        {filesContent ?? <p className="text-sm text-slate-500">Files panel unavailable.</p>}
+      </div>
+
+      <div className={activeTab === "settings" ? "mt-4 block" : "hidden"}>
+        {settingsContent ?? <p className="text-sm text-slate-500">Settings panel unavailable.</p>}
+      </div>
+
+      <div
+        className={`relative mt-4 overflow-hidden border border-white/10 bg-[#070707] shadow-[0_20px_60px_rgba(0,0,0,0.35)] ${
+          activeTab === "console" ? "block" : "hidden"
+        }`}
+      >
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_70%_0%,rgba(34,211,238,0.08),transparent_35%)]" />
         <div className="pointer-events-none absolute right-6 top-5 select-none font-mono text-[42px] font-black tracking-[0.22em] text-white/[0.025]">
           PHANTOM
@@ -305,7 +312,6 @@ export function MinecraftConsole({
           </button>
         </form>
       </div>
-      )}
     </section>
   );
 }
@@ -484,4 +490,3 @@ function PowerIcon({ className = "h-4 w-4" }: { className?: string }) {
     </svg>
   );
 }
-

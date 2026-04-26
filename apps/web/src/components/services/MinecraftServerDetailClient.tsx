@@ -50,11 +50,14 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
 
   useEffect(() => {
     void refresh();
+    if (activeTab !== "console" && busy === null) {
+      return;
+    }
     const timer = setInterval(() => {
       void refresh();
     }, REFRESH_MS);
     return () => clearInterval(timer);
-  }, [id, refresh]);
+  }, [activeTab, busy, id, refresh]);
 
   useEffect(() => {
     if (!entry || !optimisticRuntimeState) {

@@ -219,6 +219,21 @@ export class WorkloadReconciler {
       return;
     }
 
+    if (!this.docker.workloadConfigMatches(container, workload)) {
+      this.logger.info("recreating stopped container because runtime config changed", {
+        workloadId: workload.id,
+        containerId: container.id
+      });
+      await this.docker.stopAndRemoveContainer(container.id);
+      await this.api.sendEvent(workload.id, {
+        type: "stopped",
+        status: "stopped",
+        reason: "container removed to apply updated runtime config"
+      });
+      await this.ensureRunning(workload, null);
+      return;
+    }
+
     if ((container.exitCode ?? 0) !== 0) {
       const crashFingerprint = `${container.id}:${container.finishedAt ?? "none"}:${container.exitCode}`;
       if (this.lastCrashFingerprint.get(workload.id) !== crashFingerprint) {

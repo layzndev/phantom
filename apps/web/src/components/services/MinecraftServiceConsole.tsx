@@ -7,6 +7,8 @@ import { MinecraftConsole, type MinecraftConsoleLine } from "@/components/playgr
 import type { MinecraftServerWithWorkload } from "@/types/admin";
 
 const RECONNECT_DELAY_MS = 2_000;
+const MAX_CONSOLE_LINES = 1_000;
+const REFRESH_DEBOUNCE_MS = 300;
 
 export function MinecraftServiceConsole({
   entry,
@@ -38,12 +40,15 @@ export function MinecraftServiceConsole({
   >("connecting");
   const socketRef = useRef<WebSocket | null>(null);
   const reconnectTimerRef = useRef<number | null>(null);
+  const refreshTimerRef = useRef<number | null>(null);
   const shouldReconnectRef = useRef(true);
   const manuallyClosedRef = useRef(false);
   const commandHistoryRef = useRef(new Set<string>());
   const lastStatusRef = useRef<string | null>(null);
   const lastRuntimeStartedAtRef = useRef<string | null>(entry.workload.runtimeStartedAt);
   const currentRuntimeStateRef = useRef(entry.server.runtimeState);
+  const lineFingerprintsRef = useRef(new Set<string>());
+  const linesRef = useRef<MinecraftConsoleLine[]>([]);
 
   const phantomIdentity = useMemo(() => {
     const base = entry.server.slug?.trim() || "phantom";
@@ -59,15 +64,54 @@ export function MinecraftServiceConsole({
         channel?: MinecraftConsoleLine["channel"];
       }>
     ) => {
-      setLines((current) =>
-        [...current, ...incoming.map((line, index) => ({
-          id: `${line.timestamp}-${index}-${Math.random().toString(16).slice(2, 8)}`,
-          ...line
-        }))].slice(-500)
-      );
+      const normalized = incoming
+        .map((line) => toConsoleLine(line))
+        .filter((line) => {
+          const fingerprint = buildLineFingerprint(line);
+          if (lineFingerprintsRef.current.has(fingerprint)) {
+            return false;
+          }
+          lineFingerprintsRef.current.add(fingerprint);
+          return true;
+        });
+
+      if (normalized.length === 0) {
+        return;
+      }
+
+      setLines((current) => {
+        const next = [...current, ...normalized];
+        if (next.length <= MAX_CONSOLE_LINES) {
+          linesRef.current = next;
+          return next;
+        }
+
+        const trimmed = next.slice(-MAX_CONSOLE_LINES);
+        lineFingerprintsRef.current = new Set(trimmed.map((line) => buildLineFingerprint(line)));
+        linesRef.current = trimmed;
+        return trimmed;
+      });
     },
     []
   );
+
+  const replaceLines = useCallback((incoming: MinecraftConsoleLine[]) => {
+    const next = incoming.slice(-MAX_CONSOLE_LINES);
+    lineFingerprintsRef.current = new Set(next.map((line) => buildLineFingerprint(line)));
+    linesRef.current = next;
+    setLines(next);
+  }, []);
+
+  const scheduleRefresh = useCallback(() => {
+    if (refreshTimerRef.current !== null) {
+      return;
+    }
+
+    refreshTimerRef.current = window.setTimeout(() => {
+      refreshTimerRef.current = null;
+      void onRefresh();
+    }, REFRESH_DEBOUNCE_MS);
+  }, [onRefresh]);
 
   const wsUrl = useMemo(() => {
     const base = new URL(ADMIN_API_BASE_URL);
@@ -83,12 +127,24 @@ export function MinecraftServiceConsole({
 
   useEffect(() => {
     if (lastRuntimeStartedAtRef.current !== entry.workload.runtimeStartedAt) {
+      const previousRuntimeStartedAt = lastRuntimeStartedAtRef.current;
       lastRuntimeStartedAtRef.current = entry.workload.runtimeStartedAt;
       lastStatusRef.current = null;
       commandHistoryRef.current.clear();
-      setLines([]);
+      lineFingerprintsRef.current.clear();
+      if (previousRuntimeStartedAt !== null || entry.workload.runtimeStartedAt !== null) {
+        replaceLines([
+          {
+            id: crypto.randomUUID(),
+            timestamp: new Date().toISOString(),
+            kind: "info",
+            channel: "PHANTOM",
+            text: "Runtime session changed. Streaming fresh console output..."
+          }
+        ]);
+      }
     }
-  }, [entry.workload.runtimeStartedAt]);
+  }, [entry.workload.runtimeStartedAt, replaceLines]);
 
   useEffect(() => {
     shouldReconnectRef.current = true;
@@ -121,7 +177,18 @@ export function MinecraftServiceConsole({
 
           if (payload.type === "history") {
             const replay = renderHistory(payload.events, commandHistoryRef.current);
-            setLines(replay.slice(-500));
+            if (linesRef.current.length === 0) {
+              replaceLines(replay);
+            } else {
+              appendLines(
+                replay.map((line) => ({
+                  timestamp: line.timestamp,
+                  kind: line.kind,
+                  text: line.text,
+                  channel: line.channel
+                }))
+              );
+            }
             const lastStatus = [...payload.events].reverse().find(
               (event): event is Extract<ConsoleHistoryEvent, { type: "status" }> =>
                 event.type === "status"
@@ -158,15 +225,15 @@ export function MinecraftServiceConsole({
                 ]);
               }
             }
-            void onRefresh();
+            scheduleRefresh();
           } else if (payload.type === "command_result") {
             const isAdminCommand = commandHistoryRef.current.has(payload.id);
             commandHistoryRef.current.delete(payload.id);
             appendLines(normalizeCommandResult(payload.output, timestamp, isAdminCommand));
-            void onRefresh();
+            scheduleRefresh();
           } else if (payload.type === "error") {
             appendLines([{ timestamp, kind: "error", channel: "ERROR", text: payload.message }]);
-            void onRefresh();
+            scheduleRefresh();
           }
         } catch {
           appendLines([
@@ -183,7 +250,7 @@ export function MinecraftServiceConsole({
       socket.addEventListener("open", () => {
         clearReconnectTimer();
         setConnectionState("connected");
-        void onRefresh();
+        scheduleRefresh();
       });
 
       socket.addEventListener("close", () => {
@@ -218,10 +285,14 @@ export function MinecraftServiceConsole({
       shouldReconnectRef.current = false;
       manuallyClosedRef.current = true;
       clearReconnectTimer();
+      if (refreshTimerRef.current !== null) {
+        window.clearTimeout(refreshTimerRef.current);
+        refreshTimerRef.current = null;
+      }
       socketRef.current?.close();
       socketRef.current = null;
     };
-  }, [appendLines, entry.server.id, entry.server.name, onRefresh, wsUrl]);
+  }, [appendLines, entry.server.id, entry.server.name, replaceLines, scheduleRefresh, wsUrl]);
 
   const sendMessage = (payload: Record<string, unknown>) => {
     const socket = socketRef.current;
@@ -345,6 +416,25 @@ type ConsoleHistoryEvent =
   | { type: "status"; status: string; timestamp: string }
   | { type: "command_result"; id: string; output: string; timestamp: string }
   | { type: "error"; message: string; timestamp: string };
+
+function toConsoleLine(input: {
+  timestamp: string;
+  kind: MinecraftConsoleLine["kind"];
+  text: string;
+  channel?: MinecraftConsoleLine["channel"];
+}): MinecraftConsoleLine {
+  return {
+    id: crypto.randomUUID(),
+    timestamp: input.timestamp,
+    kind: input.kind,
+    text: input.text,
+    channel: input.channel
+  };
+}
+
+function buildLineFingerprint(line: Pick<MinecraftConsoleLine, "timestamp" | "kind" | "channel" | "text">) {
+  return [line.timestamp, line.kind, line.channel ?? "", line.text].join("|");
+}
 
 function renderHistory(
   events: ConsoleHistoryEvent[],
