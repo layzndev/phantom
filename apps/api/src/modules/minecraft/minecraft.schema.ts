@@ -113,6 +113,18 @@ export const updateMinecraftHostnameSchema = z.object({
   hostnameSlug: hostnameSlugSchema
 });
 
+export const updateMinecraftServerSettingsSchema = z.object({
+  autoSleepEnabled: z.boolean(),
+  autoSleepIdleMinutes: z.coerce.number().int().min(1).max(240),
+  autoSleepAction: z.enum(["sleep", "stop"]),
+  maxPlayers: z.coerce.number().int().min(1).max(500),
+  onlineMode: z.boolean(),
+  difficulty: z.enum(["peaceful", "easy", "normal", "hard"]),
+  gameMode: z.enum(["survival", "creative", "adventure", "spectator"]),
+  motd: z.string().trim().min(1).max(120),
+  whitelistEnabled: z.boolean()
+});
+
 export type CreateMinecraftServerInput = z.infer<typeof createMinecraftServerSchema>;
 export type MinecraftServerListQuery = z.infer<typeof minecraftServerListQuerySchema>;
 export type DeleteMinecraftServerQuery = z.infer<typeof deleteMinecraftServerQuerySchema>;
@@ -127,3 +139,4 @@ export type MinecraftFilesRenameInput = z.infer<typeof minecraftFilesRenameSchem
 export type MinecraftFilesDeleteInput = z.infer<typeof minecraftFilesDeleteSchema>;
 export type MinecraftFilesArchiveInput = z.infer<typeof minecraftFilesArchiveSchema>;
 export type MinecraftFilesExtractInput = z.infer<typeof minecraftFilesExtractSchema>;
+export type UpdateMinecraftServerSettingsInput = z.infer<typeof updateMinecraftServerSettingsSchema>;

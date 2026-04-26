@@ -1,6 +1,8 @@
 import { execFile } from "node:child_process";
 import {
   access,
+  chmod,
+  chown,
   lstat,
   mkdir,
   readFile,
@@ -145,9 +147,11 @@ export class MinecraftFilesManager {
     await this.assertWritablePath(baseDir, target.relativePath, accessMode);
     const parent = dirname(target.targetPath);
     await mkdir(parent, { recursive: true });
+    const desiredOwnership = await this.resolveDesiredOwnership(target.targetPath);
     const tempPath = resolvePath(tmpdir(), `phantom-${Date.now()}-${Math.random().toString(16).slice(2)}.tmp`);
     await writeFile(tempPath, content, "utf8");
     await rename(tempPath, target.targetPath);
+    await this.applyDesiredOwnership(target.targetPath, desiredOwnership);
     const fileStats = await stat(target.targetPath);
     return {
       path: toDisplayPath(target.relativePath),
@@ -171,7 +175,9 @@ export class MinecraftFilesManager {
     });
     await this.assertWritablePath(baseDir, target.relativePath, accessMode);
     await mkdir(dirname(target.targetPath), { recursive: true });
+    const desiredOwnership = await this.resolveDesiredOwnership(target.targetPath);
     await writeFile(target.targetPath, buffer);
+    await this.applyDesiredOwnership(target.targetPath, desiredOwnership);
     const fileStats = await stat(target.targetPath);
     return {
       path: toDisplayPath(target.relativePath),
@@ -318,6 +324,41 @@ export class MinecraftFilesManager {
         return { relativePath, targetPath: joinedPath };
       }
       throw error;
+    }
+  }
+
+  private async resolveDesiredOwnership(targetPath: string) {
+    try {
+      const existing = await stat(targetPath);
+      return {
+        uid: existing.uid,
+        gid: existing.gid,
+        mode: existing.mode & 0o777
+      };
+    } catch {
+      const parentStats = await stat(dirname(targetPath));
+      return {
+        uid: parentStats.uid,
+        gid: parentStats.gid,
+        mode: 0o644
+      };
+    }
+  }
+
+  private async applyDesiredOwnership(
+    targetPath: string,
+    desired: { uid: number; gid: number; mode: number }
+  ) {
+    await chmod(targetPath, desired.mode);
+    try {
+      await chown(targetPath, desired.uid, desired.gid);
+    } catch (error) {
+      this.logger.warn("failed to restore file ownership", {
+        path: targetPath,
+        uid: desired.uid,
+        gid: desired.gid,
+        error: error instanceof Error ? error.message : "unknown"
+      });
     }
   }
 }

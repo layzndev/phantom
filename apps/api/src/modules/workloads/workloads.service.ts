@@ -571,16 +571,21 @@ async function syncMinecraftSleepStateFromRuntimeHeartbeat(
 
   if (nextStatus === "stopped" && server.sleepRequestedAt !== null) {
     const confirmedAt = new Date();
+    const shouldSleep = server.autoSleepAction !== "stop";
     await updateMinecraftServerRecord(server.id, {
       sleepRequestedAt: null,
-      sleepingAt: server.sleepingAt ?? confirmedAt,
+      sleepingAt: shouldSleep ? server.sleepingAt ?? confirmedAt : null,
       wakeRequestedAt: null,
       readyAt: null,
       currentPlayerCount: 0
     });
     if (previousStatus !== "stopped") {
-      minecraftConsoleGateway.publishLogs(server.id, ["__PHANTOM__ Server marked as sleeping"]);
-      minecraftConsoleGateway.publishStatus(server.id, "sleeping");
+      minecraftConsoleGateway.publishLogs(server.id, [
+        shouldSleep
+          ? "__PHANTOM__ Server marked as sleeping"
+          : "__PHANTOM__ Server marked as stopped"
+      ]);
+      minecraftConsoleGateway.publishStatus(server.id, shouldSleep ? "sleeping" : "stopped");
     }
     await createAuditLog({
       action: "minecraft.server.autosleep",
@@ -588,9 +593,10 @@ async function syncMinecraftSleepStateFromRuntimeHeartbeat(
       targetType: "system",
       targetId: server.id,
       metadata: {
-        phase: "sleeping_confirmed",
+        phase: shouldSleep ? "sleeping_confirmed" : "stopped_confirmed",
         workloadId,
-        confirmedAt: confirmedAt.toISOString()
+        confirmedAt: confirmedAt.toISOString(),
+        autoSleepAction: server.autoSleepAction
       }
     });
     return;

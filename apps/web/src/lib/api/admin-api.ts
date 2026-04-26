@@ -14,6 +14,7 @@ import type {
   MinecraftServerWithWorkload,
   MinecraftFilesListResult,
   MinecraftFileReadResult,
+  UpdateMinecraftServerSettingsPayload,
   NodeSummary,
   UpdateNodePayload,
   UpdateWorkloadPayload
@@ -200,6 +201,14 @@ export const adminApi = {
       {
         method: "PATCH",
         body: JSON.stringify({ hostnameSlug })
+      }
+    ),
+  updateMinecraftServerSettings: (id: string, payload: UpdateMinecraftServerSettingsPayload) =>
+    apiRequest<MinecraftServerWithWorkload>(
+      `/minecraft/servers/${encodeURIComponent(id)}/settings`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(payload)
       }
     ),
   commandMinecraftServer: (id: string, command: string) =>

@@ -22,6 +22,10 @@ export interface CreateMinecraftServerRecordInput {
   serverProperties: Prisma.InputJsonValue;
   rconPassword: string;
   autoSleepEnabled?: boolean;
+  autoSleepIdleMinutes?: number;
+  autoSleepAction?: string;
+  onlineMode?: boolean;
+  whitelistEnabled?: boolean;
 }
 
 export interface MinecraftServerFilter {
@@ -50,6 +54,10 @@ export function createMinecraftServerRecord(input: CreateMinecraftServerRecordIn
       eula: input.eula,
       planTier: input.planTier,
       autoSleepEnabled: input.autoSleepEnabled ?? true,
+      autoSleepIdleMinutes: input.autoSleepIdleMinutes ?? 10,
+      autoSleepAction: input.autoSleepAction ?? "sleep",
+      onlineMode: input.onlineMode ?? true,
+      whitelistEnabled: input.whitelistEnabled ?? false,
       serverProperties: input.serverProperties,
       rconPassword: input.rconPassword
     }
@@ -124,9 +132,20 @@ export function listMinecraftServerNodeAssignments() {
 export function updateMinecraftServerRecord(
   id: string,
   updates: {
+    motd?: string | null;
+    difficulty?: string;
+    gameMode?: string;
+    maxPlayers?: number;
+    serverProperties?: Prisma.InputJsonValue;
     autoSleepEnabled?: boolean;
+    autoSleepIdleMinutes?: number;
+    autoSleepAction?: string;
+    onlineMode?: boolean;
+    whitelistEnabled?: boolean;
     currentPlayerCount?: number;
     lastPlayerSampleAt?: Date | null;
+    lastPlayerCheckFailedAt?: Date | null;
+    lastPlayerCheckError?: string | null;
     lastPlayerSeenAt?: Date | null;
     lastConsoleCommandAt?: Date | null;
     lastActivityAt?: Date | null;
@@ -146,14 +165,35 @@ export function updateMinecraftServerRecord(
   return db.minecraftServer.update({
     where: { id },
     data: {
+      ...(updates.motd !== undefined ? { motd: updates.motd } : {}),
+      ...(updates.difficulty !== undefined ? { difficulty: updates.difficulty } : {}),
+      ...(updates.gameMode !== undefined ? { gameMode: updates.gameMode } : {}),
+      ...(updates.maxPlayers !== undefined ? { maxPlayers: updates.maxPlayers } : {}),
+      ...(updates.serverProperties !== undefined ? { serverProperties: updates.serverProperties } : {}),
       ...(updates.autoSleepEnabled !== undefined
         ? { autoSleepEnabled: updates.autoSleepEnabled }
+        : {}),
+      ...(updates.autoSleepIdleMinutes !== undefined
+        ? { autoSleepIdleMinutes: updates.autoSleepIdleMinutes }
+        : {}),
+      ...(updates.autoSleepAction !== undefined
+        ? { autoSleepAction: updates.autoSleepAction }
+        : {}),
+      ...(updates.onlineMode !== undefined ? { onlineMode: updates.onlineMode } : {}),
+      ...(updates.whitelistEnabled !== undefined
+        ? { whitelistEnabled: updates.whitelistEnabled }
         : {}),
       ...(updates.currentPlayerCount !== undefined
         ? { currentPlayerCount: updates.currentPlayerCount }
         : {}),
       ...(updates.lastPlayerSampleAt !== undefined
         ? { lastPlayerSampleAt: updates.lastPlayerSampleAt }
+        : {}),
+      ...(updates.lastPlayerCheckFailedAt !== undefined
+        ? { lastPlayerCheckFailedAt: updates.lastPlayerCheckFailedAt }
+        : {}),
+      ...(updates.lastPlayerCheckError !== undefined
+        ? { lastPlayerCheckError: updates.lastPlayerCheckError }
         : {}),
       ...(updates.lastPlayerSeenAt !== undefined
         ? { lastPlayerSeenAt: updates.lastPlayerSeenAt }

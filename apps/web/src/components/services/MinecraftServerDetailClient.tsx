@@ -16,6 +16,7 @@ import {
 } from "@/lib/utils/format";
 import { MinecraftServiceConsole } from "./MinecraftServiceConsole";
 import { MinecraftFilesManager } from "./MinecraftFilesManager";
+import { MinecraftSettingsForm } from "./MinecraftSettingsForm";
 import type { MinecraftServerWithWorkload } from "@/types/admin";
 
 const REFRESH_MS = 10_000;
@@ -257,8 +258,17 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
             <MetricRow label="Finished at" value={formatDateTime(runtime.finishedAt)} />
             <MetricRow label="Restart count" value={String(entry.workload.restartCount)} />
             <MetricRow label="AutoSleep" value={displayEntry.server.autoSleepEnabled ? "Enabled" : "Disabled"} />
+            <MetricRow label="AutoSleep delay" value={`${displayEntry.server.autoSleepIdleMinutes} min`} />
+            <MetricRow label="AutoSleep action" value={displayEntry.server.autoSleepAction} />
+            <MetricRow label="Players online" value={String(displayEntry.server.currentPlayerCount)} />
             <MetricRow label="Idle since" value={formatDateTime(displayEntry.server.idleSince)} />
             <MetricRow label="Last player seen" value={formatDateTime(displayEntry.server.lastPlayerSeenAt)} />
+            <MetricRow label="Last player sample" value={formatDateTime(displayEntry.server.lastPlayerSampleAt)} />
+            <MetricRow
+              label="Player check"
+              value={displayEntry.server.lastPlayerCheckError ?? "Healthy"}
+              wrap
+            />
             <MetricRow label="Idle duration" value={formatRelativeDurationSince(displayEntry.server.idleSince)} />
             <MetricRow label="Workload ID" value={entry.workload.id} mono wrap />
             <MetricRow label="Container ID" value={entry.workload.containerId ?? "Pending"} mono wrap />
@@ -367,9 +377,12 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
             description="Plugin inventory and install actions will be layered on top of the current admin service model."
           />
         ) : (
-          <PlaceholderCard
-            title="Settings"
-            description="Server properties and template-specific settings will be exposed here next."
+          <MinecraftSettingsForm
+            entry={displayEntry}
+            onSaved={(next) => {
+              setEntry(next);
+              setError(null);
+            }}
           />
         )}
       </section>

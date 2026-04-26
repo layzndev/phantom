@@ -263,6 +263,7 @@ export type MinecraftDifficulty = "peaceful" | "easy" | "normal" | "hard";
 export type MinecraftGameMode = "survival" | "creative" | "adventure" | "spectator";
 export type PlanTier = "free" | "premium";
 export type MinecraftDnsStatus = "wildcard" | "pending" | "active" | "failed" | "disabled";
+export type MinecraftAutoSleepAction = "sleep" | "stop";
 export type MinecraftRuntimeState =
   | "sleeping"
   | "waking"
@@ -314,12 +315,18 @@ export interface MinecraftServer {
   eula: boolean;
   planTier: PlanTier;
   autoSleepEnabled: boolean;
+  autoSleepIdleMinutes: number;
+  autoSleepAction: MinecraftAutoSleepAction;
+  onlineMode: boolean;
+  whitelistEnabled: boolean;
   runtimeState: MinecraftRuntimeState;
   sleeping: boolean;
   currentPlayerCount: number;
   idleSince: string | null;
   lastPlayerSeenAt: string | null;
   lastPlayerSampleAt: string | null;
+  lastPlayerCheckFailedAt: string | null;
+  lastPlayerCheckError: string | null;
   lastConsoleCommandAt: string | null;
   sleepRequestedAt: string | null;
   sleepingAt: string | null;
@@ -369,6 +376,18 @@ export interface CreateMinecraftServerResult {
 
 export interface DeleteMinecraftServerOptions {
   hardDeleteData?: boolean;
+}
+
+export interface UpdateMinecraftServerSettingsPayload {
+  autoSleepEnabled: boolean;
+  autoSleepIdleMinutes: number;
+  autoSleepAction: MinecraftAutoSleepAction;
+  maxPlayers: number;
+  onlineMode: boolean;
+  difficulty: MinecraftDifficulty;
+  gameMode: MinecraftGameMode;
+  motd: string;
+  whitelistEnabled: boolean;
 }
 
 export interface DeleteMinecraftServerResult {

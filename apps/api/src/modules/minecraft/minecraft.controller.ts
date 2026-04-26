@@ -23,6 +23,7 @@ import {
   startMinecraftServer,
   stopMinecraftServer,
   uploadMinecraftFile,
+  updateMinecraftServerSettings,
   updateMinecraftServerHostname,
   writeMinecraftFile
 } from "./minecraft.service.js";
@@ -41,6 +42,7 @@ import {
   minecraftLogsQuerySchema,
   minecraftOperationParamsSchema,
   minecraftServerParamsSchema,
+  updateMinecraftServerSettingsSchema,
   updateMinecraftHostnameSchema
 } from "./minecraft.schema.js";
 
@@ -379,6 +381,33 @@ async function parseMultipartUpload(req: import("express").Request) {
     sizeBytes: fileBuffer.byteLength
   };
 }
+
+minecraftController.patch(
+  "/servers/:id/settings",
+  requireRole(["superadmin", "ops"]),
+  validateParams(minecraftServerParamsSchema),
+  validateBody(updateMinecraftServerSettingsSchema),
+  asyncHandler(async (req, res) => {
+    const actor = req.session.admin!;
+    const result = await updateMinecraftServerSettings(req.params.id, req.body);
+    await writeAuditLog(req, {
+      action: "minecraft.server.settings",
+      actorId: actor.id,
+      actorEmail: actor.email,
+      targetType: "system",
+      targetId: req.params.id,
+      metadata: {
+        autoSleepEnabled: result.server.autoSleepEnabled,
+        autoSleepIdleMinutes: result.server.autoSleepIdleMinutes,
+        autoSleepAction: result.server.autoSleepAction,
+        onlineMode: result.server.onlineMode,
+        maxPlayers: result.server.maxPlayers,
+        whitelistEnabled: result.server.whitelistEnabled
+      }
+    });
+    res.json(result);
+  })
+);
 
 minecraftController.patch(
   "/servers/:id/hostname",

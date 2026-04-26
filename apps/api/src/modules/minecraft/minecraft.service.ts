@@ -32,12 +32,14 @@ import {
   requestWorkloadDeletion,
   restartWorkload,
   startWorkload,
-  stopWorkload
+  stopWorkload,
+  updateWorkload
 } from "../workloads/workloads.service.js";
 import type { CompanyWorkload } from "../workloads/workloads.types.js";
 import type {
   CreateMinecraftServerInput,
-  DeleteMinecraftServerQuery
+  DeleteMinecraftServerQuery,
+  UpdateMinecraftServerSettingsInput
 } from "./minecraft.schema.js";
 import {
   findMinecraftTemplate,
@@ -60,6 +62,7 @@ import type {
   MinecraftFileReadResult,
   MinecraftFilesListResult,
   MinecraftGameMode,
+  MinecraftAutoSleepAction,
   MinecraftOperation,
   MinecraftOperationKind,
   MinecraftOperationResponse,
@@ -288,7 +291,7 @@ export async function createMinecraftServer(
   });
   const rconPassword = generateRconPassword();
 
-  const env = buildMinecraftEnv({
+  const minecraftEnv = buildMinecraftEnv({
     template,
     version,
     ramMb,
@@ -296,11 +299,13 @@ export async function createMinecraftServer(
     difficulty,
     gameMode,
     maxPlayers,
+    onlineMode: true,
+    whitelistEnabled: false,
     rconPassword
   });
 
   const config: Record<string, unknown> = {
-    env,
+    env: minecraftEnv,
     volumes: [
       {
         name: MINECRAFT_VOLUME_NAME,
@@ -347,7 +352,18 @@ export async function createMinecraftServer(
       eula: true,
       planTier,
       autoSleepEnabled: planTier === "free",
-      serverProperties: {} as Prisma.InputJsonValue,
+      autoSleepIdleMinutes: planTier === "free" ? env.autoSleepIdleMinutes : 10,
+      autoSleepAction: "sleep",
+      onlineMode: true,
+      whitelistEnabled: false,
+      serverProperties: buildMinecraftServerPropertiesSnapshot({
+        motd: motd ?? `${input.name} — Phantom`,
+        difficulty,
+        gameMode,
+        maxPlayers,
+        onlineMode: true,
+        whitelistEnabled: false
+      }) as Prisma.InputJsonValue,
       rconPassword
     });
 
@@ -430,6 +446,53 @@ export async function updateMinecraftServerHostname(id: string, hostnameSlug: st
 
   const workload = await getWorkload(record.workloadId);
   return toMinecraftServerWithRuntime(updated, workload);
+}
+
+export async function updateMinecraftServerSettings(
+  id: string,
+  input: UpdateMinecraftServerSettingsInput
+) {
+  const record = await ensureMinecraftServerRecord(id);
+  const workload = await getWorkload(record.workloadId);
+  const nextMotd = input.motd.trim();
+  const currentConfig = (workload.config as Record<string, unknown>) ?? {};
+  const nextConfig = buildUpdatedMinecraftWorkloadConfig(currentConfig, {
+    version: record.minecraftVersion,
+    ramMb: workload.requestedRamMb,
+    motd: nextMotd,
+    difficulty: input.difficulty,
+    gameMode: input.gameMode,
+    maxPlayers: input.maxPlayers,
+    onlineMode: input.onlineMode,
+    whitelistEnabled: input.whitelistEnabled,
+    rconPassword: record.rconPassword ?? generateRconPassword()
+  });
+
+  const updatedServer = await updateMinecraftServerRecord(record.id, {
+    autoSleepEnabled: input.autoSleepEnabled,
+    autoSleepIdleMinutes: input.autoSleepIdleMinutes,
+    autoSleepAction: input.autoSleepAction,
+    motd: nextMotd,
+    difficulty: input.difficulty,
+    gameMode: input.gameMode,
+    maxPlayers: input.maxPlayers,
+    onlineMode: input.onlineMode,
+    whitelistEnabled: input.whitelistEnabled,
+    serverProperties: buildMinecraftServerPropertiesSnapshot({
+      motd: nextMotd,
+      difficulty: input.difficulty,
+      gameMode: input.gameMode,
+      maxPlayers: input.maxPlayers,
+      onlineMode: input.onlineMode,
+      whitelistEnabled: input.whitelistEnabled
+    }) as Prisma.InputJsonValue
+  });
+
+  const updatedWorkload = await updateWorkload(record.workloadId, {
+    config: nextConfig
+  });
+
+  return toMinecraftServerWithRuntime(updatedServer, updatedWorkload);
 }
 
 export async function deleteMinecraftServer(
@@ -820,6 +883,7 @@ export async function completeRuntimeMinecraftOperation(
   });
 
   if (payload.status === "failed") {
+    await processMinecraftOperationFailure(op, payload.error ?? "operation failed");
     if (shouldSurfaceMinecraftOperationError(op, payload.error ?? "")) {
       minecraftConsoleGateway.publishError(op.workloadId, payload.error ?? "operation failed");
     }
@@ -865,7 +929,26 @@ export async function runMinecraftAutoSleepTick() {
       });
     }
 
+    const playerCheckState = evaluateAutoSleepPlayerCheck(record);
+    if (!playerCheckState.ok) {
+      console.info("[autosleep] skipped", {
+        serverId: record.id,
+        workloadId: record.workloadId,
+        playersOnline: record.currentPlayerCount,
+        idleSince: record.idleSince?.toISOString() ?? null,
+        reason: playerCheckState.reason
+      });
+      continue;
+    }
+
     if (record.currentPlayerCount > 0 || record.idleSince === null) {
+      console.info("[autosleep] skipped", {
+        serverId: record.id,
+        workloadId: record.workloadId,
+        playersOnline: record.currentPlayerCount,
+        idleSince: record.idleSince?.toISOString() ?? null,
+        reason: record.currentPlayerCount > 0 ? "players_online" : "idle_not_started"
+      });
       continue;
     }
 
@@ -876,11 +959,28 @@ export async function runMinecraftAutoSleepTick() {
     const activeSave = await findActiveMinecraftOperationByWorkloadAndKind(record.workloadId, "save");
     const activeStop = await findActiveMinecraftOperationByWorkloadAndKind(record.workloadId, "stop");
     if (activeSave || activeStop) {
+      console.info("[autosleep] skipped", {
+        serverId: record.id,
+        workloadId: record.workloadId,
+        playersOnline: record.currentPlayerCount,
+        idleSince: record.idleSince?.toISOString() ?? null,
+        reason: "stop_or_save_in_progress"
+      });
       continue;
     }
 
     const idleMs = Date.now() - record.idleSince.getTime();
-    if (idleMs < env.autoSleepIdleMinutes * 60_000) {
+    const idleThresholdMinutes = record.autoSleepIdleMinutes ?? env.autoSleepIdleMinutes;
+    if (idleMs < idleThresholdMinutes * 60_000) {
+      console.info("[autosleep] skipped", {
+        serverId: record.id,
+        workloadId: record.workloadId,
+        playersOnline: record.currentPlayerCount,
+        idleSince: record.idleSince.toISOString(),
+        reason: "below_idle_threshold",
+        idleMinutes: Math.floor(idleMs / 60_000),
+        thresholdMinutes: idleThresholdMinutes
+      });
       continue;
     }
 
@@ -894,7 +994,10 @@ export async function runMinecraftAutoSleepTick() {
         workloadId: record.workloadId,
         idleSince: record.idleSince.toISOString(),
         idleMinutes: Math.floor(idleMs / 60_000),
-        planTier: record.planTier
+        planTier: record.planTier,
+        playersOnline: record.currentPlayerCount,
+        autoSleepAction: record.autoSleepAction,
+        thresholdMinutes: idleThresholdMinutes
       }
     });
     publishPhantomConsoleLifecycle(record.id, "AutoSleep triggered");
@@ -928,7 +1031,8 @@ export async function runMinecraftAutoSleepTick() {
       metadata: {
         phase: "stop_requested",
         workloadId: record.workloadId,
-        source: "autosleep"
+        source: "autosleep",
+        autoSleepAction: record.autoSleepAction
       }
     });
     slept += 1;
@@ -1109,9 +1213,12 @@ function buildMinecraftEnv(input: {
   difficulty: MinecraftDifficulty;
   gameMode: MinecraftGameMode;
   maxPlayers: number;
+  onlineMode: boolean;
+  whitelistEnabled: boolean;
   rconPassword: string;
 }): Record<string, string> {
   const heapMb = computeHeapMb(input.ramMb);
+  const jvmOptions = buildJvmOptionsForVersion(input.version);
   return {
     ...input.template.baseEnv,
     EULA: "true",
@@ -1121,10 +1228,72 @@ function buildMinecraftEnv(input: {
     DIFFICULTY: input.difficulty,
     MODE: input.gameMode,
     MAX_PLAYERS: String(input.maxPlayers),
+    ONLINE_MODE: input.onlineMode ? "true" : "false",
+    ENABLE_WHITELIST: input.whitelistEnabled ? "true" : "false",
     ENABLE_RCON: "true",
     RCON_PORT: String(DEFAULT_RCON_PORT),
     RCON_PASSWORD: input.rconPassword,
-    BROADCAST_RCON_TO_OPS: "false"
+    BROADCAST_RCON_TO_OPS: "false",
+    ...(jvmOptions ? { JVM_OPTS: jvmOptions } : {})
+  };
+}
+
+function buildMinecraftServerPropertiesSnapshot(input: {
+  motd: string;
+  difficulty: MinecraftDifficulty;
+  gameMode: MinecraftGameMode;
+  maxPlayers: number;
+  onlineMode: boolean;
+  whitelistEnabled: boolean;
+}) {
+  return {
+    motd: input.motd,
+    "max-players": input.maxPlayers,
+    "online-mode": input.onlineMode,
+    difficulty: input.difficulty,
+    gamemode: input.gameMode,
+    "white-list": input.whitelistEnabled
+  };
+}
+
+function buildUpdatedMinecraftWorkloadConfig(
+  currentConfig: Record<string, unknown>,
+  input: {
+    version: string;
+    ramMb: number;
+    motd: string;
+    difficulty: MinecraftDifficulty;
+    gameMode: MinecraftGameMode;
+    maxPlayers: number;
+    onlineMode: boolean;
+    whitelistEnabled: boolean;
+    rconPassword: string;
+  }
+) {
+  const envConfig = (currentConfig.env as Record<string, unknown> | undefined) ?? {};
+  const nextEnv = {
+    ...envConfig,
+    VERSION: input.version,
+    MEMORY: `${computeHeapMb(input.ramMb)}M`,
+    MOTD: input.motd,
+    DIFFICULTY: input.difficulty,
+    MODE: input.gameMode,
+    MAX_PLAYERS: String(input.maxPlayers),
+    ONLINE_MODE: input.onlineMode ? "true" : "false",
+    ENABLE_WHITELIST: input.whitelistEnabled ? "true" : "false",
+    ENABLE_RCON: "true",
+    RCON_PORT: String(DEFAULT_RCON_PORT),
+    RCON_PASSWORD: input.rconPassword,
+    BROADCAST_RCON_TO_OPS: "false",
+    ...(() => {
+      const jvmOptions = buildJvmOptionsForVersion(input.version);
+      return jvmOptions ? { JVM_OPTS: jvmOptions } : {};
+    })()
+  };
+
+  return {
+    ...currentConfig,
+    env: nextEnv
   };
 }
 
@@ -1135,6 +1304,26 @@ function generateRconPassword() {
 function computeHeapMb(ramMb: number) {
   const target = ramMb - JVM_HEADROOM_MB;
   return target < MIN_JVM_HEAP_MB ? MIN_JVM_HEAP_MB : target;
+}
+
+function buildJvmOptionsForVersion(version: string) {
+  if (!isJava25Version(version)) {
+    return "";
+  }
+  return "--enable-native-access=ALL-UNNAMED";
+}
+
+function isJava25Version(version: string) {
+  if (/^\d{2,}\./.test(version)) {
+    return true;
+  }
+  const match = version.match(/^1\.(\d+)\.(\d+)/);
+  if (!match) {
+    return false;
+  }
+  const minor = Number.parseInt(match[1] ?? "0", 10);
+  const patch = Number.parseInt(match[2] ?? "0", 10);
+  return minor > 21 || (minor === 21 && patch >= 6);
 }
 
 function toMinecraftOperation(record: MinecraftOperationRecord): MinecraftOperation {
@@ -1174,12 +1363,18 @@ function toMinecraftServer(record: MinecraftServerRecord): MinecraftServer {
     eula: record.eula,
     planTier: record.planTier as PlanTier,
     autoSleepEnabled: record.autoSleepEnabled,
+    autoSleepIdleMinutes: record.autoSleepIdleMinutes,
+    autoSleepAction: record.autoSleepAction as MinecraftAutoSleepAction,
+    onlineMode: record.onlineMode,
+    whitelistEnabled: record.whitelistEnabled,
     runtimeState: record.sleepingAt !== null ? "sleeping" : "stopped",
     sleeping: record.sleepingAt !== null,
     currentPlayerCount: record.currentPlayerCount,
     idleSince: record.idleSince?.toISOString() ?? null,
     lastPlayerSeenAt: record.lastPlayerSeenAt?.toISOString() ?? null,
     lastPlayerSampleAt: record.lastPlayerSampleAt?.toISOString() ?? null,
+    lastPlayerCheckFailedAt: record.lastPlayerCheckFailedAt?.toISOString() ?? null,
+    lastPlayerCheckError: record.lastPlayerCheckError ?? null,
     lastConsoleCommandAt: record.lastConsoleCommandAt?.toISOString() ?? null,
     sleepRequestedAt: record.sleepRequestedAt?.toISOString() ?? null,
     sleepingAt: record.sleepingAt?.toISOString() ?? null,
@@ -1279,10 +1474,27 @@ async function processMinecraftOperationSideEffects(
       (completed.result as Record<string, unknown> | null) ?? null,
       server.maxPlayers
     );
+    if (!sample.ok) {
+      const now = new Date();
+      await updateMinecraftServerRecord(server.id, {
+        idleSince: null,
+        sleepRequestedAt: null,
+        lastPlayerCheckFailedAt: now,
+        lastPlayerCheckError: sample.reason
+      });
+      console.info("[autosleep] player check failed", {
+        serverId: server.id,
+        workloadId: server.workloadId,
+        reason: sample.reason
+      });
+      return;
+    }
     const now = new Date();
     await updateMinecraftServerRecord(server.id, {
       currentPlayerCount: sample.currentPlayers,
       lastPlayerSampleAt: now,
+      lastPlayerCheckFailedAt: null,
+      lastPlayerCheckError: null,
       lastPlayerSeenAt: sample.currentPlayers > 0 ? now : undefined,
       lastActivityAt: sample.currentPlayers > 0 ? now : undefined,
       idleSince:
@@ -1313,11 +1525,36 @@ async function processMinecraftOperationSideEffects(
   }
 }
 
+async function processMinecraftOperationFailure(op: MinecraftOperationRecord, error: string) {
+  if (op.kind !== "players") {
+    return;
+  }
+  const server = await findMinecraftServerRecordByWorkloadId(op.workloadId);
+  if (!server || server.deletedAt !== null) {
+    return;
+  }
+  const now = new Date();
+  await updateMinecraftServerRecord(server.id, {
+    idleSince: null,
+    sleepRequestedAt: null,
+    lastPlayerCheckFailedAt: now,
+    lastPlayerCheckError: error
+  });
+  console.info("[autosleep] player check failed", {
+    serverId: server.id,
+    workloadId: server.workloadId,
+    reason: error
+  });
+}
+
 function sanitizeConsoleLogLine(line: string) {
   const sanitized = line.replace(
     /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})\s+/,
     ""
   );
+  if (isSuppressedJavaWarning(sanitized)) {
+    return "";
+  }
   if (
     /container .* is not running/i.test(sanitized) ||
     /rcon.*connection refused/i.test(sanitized)
@@ -1325,6 +1562,18 @@ function sanitizeConsoleLogLine(line: string) {
     return "";
   }
   return sanitized;
+}
+
+function isSuppressedJavaWarning(line: string) {
+  return [
+    "WARNING: A restricted method in java.lang.System has been called",
+    "WARNING: java.lang.System::load has been called",
+    "WARNING: Use --enable-native-access=ALL-UNNAMED",
+    "WARNING: Restricted methods will be blocked in a future release",
+    "WARNING: A terminally deprecated method in sun.misc.Unsafe has been called",
+    "WARNING: sun.misc.Unsafe::objectFieldOffset",
+    "WARNING: Please consider reporting this to the maintainers"
+  ].some((snippet) => line.includes(snippet));
 }
 
 function isMinecraftReadyLog(line: string) {
@@ -1420,10 +1669,34 @@ function parsePlayerSample(result: Record<string, unknown> | null, maxPlayers: n
   const output = typeof result?.output === "string" ? result.output : "";
   const match = output.match(/There are\s+(\d+)\s+of a max(?:imum)?\s+(\d+)\s+players online/i);
   if (!match) {
-    return { currentPlayers: 0, maxPlayers };
+    return { ok: false as const, currentPlayers: 0, maxPlayers, reason: "unparseable_player_count" };
   }
   return {
+    ok: true as const,
     currentPlayers: Number.parseInt(match[1] ?? "0", 10) || 0,
     maxPlayers: Number.parseInt(match[2] ?? String(maxPlayers), 10) || maxPlayers
   };
+}
+
+function evaluateAutoSleepPlayerCheck(record: MinecraftServerRecord) {
+  const freshnessWindowMs = Math.max(env.autoSleepMonitorTickMs * 3, 90_000);
+  if (record.lastPlayerCheckFailedAt !== null) {
+    if (
+      record.lastPlayerSampleAt === null ||
+      record.lastPlayerCheckFailedAt.getTime() >= record.lastPlayerSampleAt.getTime()
+    ) {
+      return { ok: false as const, reason: "player_check_failed" };
+    }
+  }
+
+  if (record.lastPlayerSampleAt === null) {
+    return { ok: false as const, reason: "missing_player_sample" };
+  }
+
+  const sampleAgeMs = Date.now() - record.lastPlayerSampleAt.getTime();
+  if (sampleAgeMs > freshnessWindowMs) {
+    return { ok: false as const, reason: "stale_player_sample" };
+  }
+
+  return { ok: true as const };
 }

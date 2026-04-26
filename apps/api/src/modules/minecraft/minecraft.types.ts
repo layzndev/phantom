@@ -5,6 +5,7 @@ export type MinecraftGameMode = "survival" | "creative" | "adventure" | "spectat
 export type PlanTier = "free" | "premium";
 export type MinecraftDnsStatus = "wildcard" | "disabled" | "pending" | "active" | "failed";
 export type MinecraftFileAccessMode = "infra_admin" | "tenant_user";
+export type MinecraftAutoSleepAction = "sleep" | "stop";
 export type MinecraftRuntimeState =
   | "sleeping"
   | "waking"
@@ -36,12 +37,18 @@ export interface MinecraftServer {
   eula: boolean;
   planTier: PlanTier;
   autoSleepEnabled: boolean;
+  autoSleepIdleMinutes: number;
+  autoSleepAction: MinecraftAutoSleepAction;
+  onlineMode: boolean;
+  whitelistEnabled: boolean;
   runtimeState: MinecraftRuntimeState;
   sleeping: boolean;
   currentPlayerCount: number;
   idleSince: string | null;
   lastPlayerSeenAt: string | null;
   lastPlayerSampleAt: string | null;
+  lastPlayerCheckFailedAt: string | null;
+  lastPlayerCheckError: string | null;
   lastConsoleCommandAt: string | null;
   sleepRequestedAt: string | null;
   sleepingAt: string | null;
@@ -146,4 +153,16 @@ export interface MinecraftFileReadResult {
   encoding: "utf-8";
   readOnly?: boolean;
   redacted?: boolean;
+}
+
+export interface UpdateMinecraftServerSettingsInput {
+  autoSleepEnabled: boolean;
+  autoSleepIdleMinutes: number;
+  autoSleepAction: MinecraftAutoSleepAction;
+  maxPlayers: number;
+  onlineMode: boolean;
+  difficulty: MinecraftDifficulty;
+  gameMode: MinecraftGameMode;
+  motd: string;
+  whitelistEnabled: boolean;
 }
