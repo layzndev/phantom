@@ -143,4 +143,6 @@ export interface MinecraftFileReadResult {
   modifiedAt: string;
   sizeBytes: number;
   encoding: "utf-8";
+  readOnly?: boolean;
+  redacted?: boolean;
 }

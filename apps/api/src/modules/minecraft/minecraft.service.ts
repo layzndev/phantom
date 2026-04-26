@@ -1185,10 +1185,17 @@ function formatMinecraftOperationOutput(result: Record<string, unknown> | null) 
   return JSON.stringify(result);
 }
 
+function isMinecraftFileOperation(kind: MinecraftOperationRecord["kind"]) {
+  return kind.startsWith("files.");
+}
+
 function shouldPublishMinecraftOperationResult(
   op: MinecraftOperationRecord,
   output: string
 ) {
+  if (isMinecraftFileOperation(op.kind)) {
+    return false;
+  }
   const payload = (op.payload as Record<string, unknown> | null) ?? null;
   const source = typeof payload?.source === "string" ? payload.source : null;
   const normalized = sanitizeCommandResultOutput(output);
@@ -1289,6 +1296,9 @@ function publishPhantomConsoleLifecycle(serverId: string, message: string) {
 }
 
 function shouldSurfaceMinecraftOperationError(op: MinecraftOperationRecord, error: string) {
+  if (isMinecraftFileOperation(op.kind)) {
+    return false;
+  }
   const normalized = error.trim().toLowerCase();
   const payload = (op.payload as Record<string, unknown> | null) ?? null;
   const source = typeof payload?.source === "string" ? payload.source : null;

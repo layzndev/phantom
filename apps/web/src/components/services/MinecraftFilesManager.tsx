@@ -56,7 +56,7 @@ export function MinecraftFilesManager({
   };
 
   const saveFile = async () => {
-    if (!selectedFile) return;
+    if (!selectedFile || selectedFile.readOnly) return;
     setBusy("save");
     try {
       await adminApi.writeMinecraftFile(entry.server.id, selectedFile.path, content);
@@ -277,16 +277,21 @@ export function MinecraftFilesManager({
           <button
             type="button"
             onClick={() => void saveFile()}
-            disabled={!selectedFile || busy === "save"}
+            disabled={!selectedFile || selectedFile.readOnly || busy === "save"}
             className="rounded-xl border border-white/10 bg-white/[0.05] px-4 py-2 text-sm text-white transition hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-40"
           >
             {busy === "save" ? "Saving..." : "Save"}
           </button>
         </div>
+        {selectedFile?.redacted ? (
+          <p className="mt-4 rounded-xl border border-amber-500/25 bg-amber-500/[0.08] px-3 py-2 text-xs text-amber-200">
+            Sensitive secrets were redacted from this file. Editing is disabled for safety.
+          </p>
+        ) : null}
         <textarea
           value={content}
           onChange={(event) => setContent(event.target.value)}
-          disabled={!selectedFile}
+          disabled={!selectedFile || selectedFile.readOnly}
           className="mt-4 h-[520px] w-full rounded-2xl border border-white/10 bg-obsidian p-4 font-mono text-xs text-slate-200 outline-none focus:border-accent/40 disabled:opacity-50"
           placeholder="Open server.properties, whitelist.json, ops.json or another text config file."
         />

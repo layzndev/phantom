@@ -21,6 +21,8 @@ const MAX_TEXT_READ_BYTES = 2 * 1024 * 1024;
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 const FORBIDDEN_BASENAMES = new Set([
   ".env",
+  ".rcon-cli.env",
+  ".rcon-cli.yaml",
   "secrets",
   "secret",
   "token",
@@ -28,6 +30,7 @@ const FORBIDDEN_BASENAMES = new Set([
   "phantom.json",
   "phantom.yml"
 ]);
+const FORBIDDEN_NAME_PARTS = ["rcon", "secret", "token", "password"];
 
 export interface MinecraftFileEntry {
   name: string;
@@ -66,6 +69,9 @@ export class MinecraftFilesManager {
       if (childStats.isSymbolicLink()) {
         continue;
       }
+      if (isSensitivePath(entry.name)) {
+        continue;
+      }
       rows.push({
         name: entry.name,
         path: childRelative,
@@ -102,12 +108,20 @@ export class MinecraftFilesManager {
     if (looksBinary(buffer)) {
       throw new Error("Binary files cannot be edited as text.");
     }
+    const basenameValue = basename(targetPath).toLowerCase();
+    if (isSensitivePath(basenameValue)) {
+      throw new Error("Access to this file is forbidden.");
+    }
+    const decoded = buffer.toString("utf8");
+    const redaction = basenameValue === "server.properties" ? redactServerProperties(decoded) : null;
     return {
       path: toDisplayPath(relativePath),
-      content: buffer.toString("utf8"),
+      content: redaction?.content ?? decoded,
       modifiedAt: fileStats.mtime.toISOString(),
       sizeBytes: fileStats.size,
-      encoding: "utf-8" as const
+      encoding: "utf-8" as const,
+      readOnly: redaction?.redacted ?? false,
+      redacted: redaction?.redacted ?? false
     };
   }
 
@@ -214,7 +228,7 @@ export class MinecraftFilesManager {
       throw new Error("Path is not a file.");
     }
     const base = basename(targetPath).toLowerCase();
-    if (FORBIDDEN_BASENAMES.has(base) || base.includes("token") || base.includes("secret")) {
+    if (isSensitivePath(base)) {
       throw new Error("Access to this file is forbidden.");
     }
   }
@@ -225,7 +239,7 @@ export class MinecraftFilesManager {
       throw new Error("Root path is not writable.");
     }
     const base = basename(normalized).toLowerCase();
-    if (FORBIDDEN_BASENAMES.has(base) || base.includes("token") || base.includes("secret")) {
+    if (isSensitivePath(base) || base === "server.properties") {
       throw new Error("Access to this file is forbidden.");
     }
 
@@ -322,4 +336,30 @@ function toDisplayPath(relativePath: string) {
 
 function joinSandboxPath(base: string, name: string) {
   return normalizeRelativePath(base === "." ? name : join(base, name).replace(/\\/g, "/"));
+}
+
+function isSensitivePath(value: string) {
+  const lowered = value.toLowerCase();
+  return (
+    FORBIDDEN_BASENAMES.has(lowered) ||
+    FORBIDDEN_NAME_PARTS.some((part) => lowered.includes(part))
+  );
+}
+
+function redactServerProperties(content: string) {
+  let redacted = false;
+  const nextContent = content
+    .replace(/^(rcon\.password\s*=\s*).+$/gim, () => {
+      redacted = true;
+      return "rcon.password=********";
+    })
+    .replace(/^(management-server-secret\s*=\s*).+$/gim, () => {
+      redacted = true;
+      return "management-server-secret=********";
+    });
+
+  return {
+    content: nextContent,
+    redacted
+  };
 }
