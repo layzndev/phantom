@@ -97,6 +97,7 @@ export interface CompanyNode {
     createdAt: string;
   }>;
   statusEvents?: NodeStatusEvent[];
+  logs?: string[];
 }
 
 export interface NodeSummary {

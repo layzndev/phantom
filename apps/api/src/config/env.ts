@@ -30,7 +30,7 @@ export const env = {
   hostingApiNodesPath: process.env.HOSTING_API_NODES_PATH ?? "/admin/nodes",
   hostingApiTimeoutMs: Number(process.env.HOSTING_API_TIMEOUT_MS ?? 7000),
   hostingApiRetryAttempts: Number(process.env.HOSTING_API_RETRY_ATTEMPTS ?? 1),
-  nodeHeartbeatTimeoutMs: Number(process.env.NODE_HEARTBEAT_TIMEOUT_MS ?? 45_000),
+  nodeHeartbeatTimeoutMs: Number(process.env.NODE_HEARTBEAT_TIMEOUT_MS ?? 15_000),
   nodeMonitorTickMs: Number(process.env.NODE_MONITOR_TICK_MS ?? 1_000),
   nodeMonitorEnabled: (process.env.NODE_MONITOR_ENABLED ?? "true").toLowerCase() !== "false",
   freeTierMaxRamPercent: Number(process.env.FREE_TIER_MAX_RAM_PERCENT ?? 85),

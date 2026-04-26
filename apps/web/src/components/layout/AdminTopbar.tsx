@@ -3,6 +3,7 @@
 import { LogOut, ShieldCheck } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { adminApi } from "@/lib/api/admin-api";
+import { NotificationBell } from "./NotificationCenter";
 
 export function AdminTopbar() {
   const router = useRouter();
@@ -24,6 +25,7 @@ export function AdminTopbar() {
             <ShieldCheck size={16} className="text-accent" />
             Session admin separee
           </div>
+          <NotificationBell />
           <button onClick={logout} className="rounded-full border border-white/10 p-2.5 text-slate-400 transition hover:border-red-400/30 hover:text-red-200" aria-label="Logout">
             <LogOut size={18} />
           </button>

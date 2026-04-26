@@ -117,7 +117,19 @@ export async function getNodeSummary() {
     usedRamMb: nodes.reduce((sum, node) => sum + node.usedRamMb, 0),
     totalCpu: nodes.reduce((sum, node) => sum + node.totalCpu, 0),
     usedCpu: nodes.reduce((sum, node) => sum + node.usedCpu, 0),
-    recentIncidents: []
+    recentIncidents: nodes
+      .flatMap((node) =>
+        (node.statusEvents ?? [])
+          .filter((event) => event.newStatus === "offline")
+          .map((event) => ({
+            id: event.id,
+            type: "node_offline",
+            message: `${node.name} went offline${event.reason ? `: ${event.reason}` : ""}`,
+            createdAt: event.createdAt
+          }))
+      )
+      .sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime())
+      .slice(0, 10)
   };
 }
 
@@ -455,6 +467,12 @@ function toCompanyNode(
       newStatus: event.newStatus as NodeStatus,
       reason: event.reason,
       createdAt: event.createdAt.toISOString()
-    }))
+    })),
+    logs: node.statusEvents
+      .map(
+        (event) =>
+          `[${event.createdAt.toISOString()}] ${event.previousStatus ?? "none"} -> ${event.newStatus}${event.reason ? ` | ${event.reason}` : ""}`
+      )
+      .slice(0, 50)
   };
 }
