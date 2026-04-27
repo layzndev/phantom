@@ -40,7 +40,9 @@ export const env = {
     (process.env.QUEUED_START_MONITOR_ENABLED ?? "true").toLowerCase() !== "false",
   autoSleepEnabled: (process.env.AUTO_SLEEP_ENABLED ?? "true").toLowerCase() !== "false",
   autoSleepIdleMinutes: Number(process.env.AUTO_SLEEP_IDLE_MINUTES ?? 10),
-  autoSleepMonitorTickMs: Number(process.env.AUTO_SLEEP_MONITOR_TICK_MS ?? 30_000),
+  autoSleepMonitorTickMs: Number(process.env.AUTO_SLEEP_MONITOR_TICK_MS ?? 2_000),
+  autoSleepProbeIntervalMs: Number(process.env.AUTO_SLEEP_PROBE_INTERVAL_MS ?? 20_000),
+  autoSleepSampleFreshnessMs: Number(process.env.AUTO_SLEEP_SAMPLE_FRESHNESS_MS ?? 60_000),
   incidentMonitorTickMs: Number(process.env.INCIDENT_MONITOR_TICK_MS ?? 5_000),
   hostingRootDomain: process.env.HOSTING_ROOT_DOMAIN ?? "nptnz.co.uk",
   dnsProvider: (process.env.DNS_PROVIDER ?? "noop").toLowerCase(),
@@ -70,6 +72,8 @@ export function assertRuntimeConfig() {
     !Number.isFinite(env.queuedStartMonitorTickMs) ||
     !Number.isFinite(env.autoSleepIdleMinutes) ||
     !Number.isFinite(env.autoSleepMonitorTickMs) ||
+    !Number.isFinite(env.autoSleepProbeIntervalMs) ||
+    !Number.isFinite(env.autoSleepSampleFreshnessMs) ||
     !Number.isFinite(env.incidentMonitorTickMs) ||
     !Number.isFinite(env.workloadDeleteTimeoutMs) ||
     !Number.isFinite(env.workloadDeleteMonitorTickMs) ||
@@ -82,6 +86,8 @@ export function assertRuntimeConfig() {
     env.queuedStartMonitorTickMs <= 0 ||
     env.autoSleepIdleMinutes <= 0 ||
     env.autoSleepMonitorTickMs <= 0 ||
+    env.autoSleepProbeIntervalMs <= 0 ||
+    env.autoSleepSampleFreshnessMs <= 0 ||
     env.incidentMonitorTickMs <= 0 ||
     env.workloadDeleteTimeoutMs <= 0 ||
     env.workloadDeleteMonitorTickMs <= 0

@@ -989,17 +989,26 @@ export async function runMinecraftAutoSleepTick() {
   let slept = 0;
 
   for (const record of candidates) {
-    const activeProbe = await findActiveMinecraftOperationByWorkloadAndKind(
-      record.workloadId,
-      "players"
-    );
-    if (!activeProbe) {
-      await createMinecraftOperation({
-        workloadId: record.workloadId,
-        kind: "players",
-        payload: { source: "autosleep" } as Prisma.InputJsonValue,
-        actorEmail: "system"
-      });
+    // Rate-limit player probes — only enqueue a fresh one when the last
+    // sample is missing or older than the configured probe interval.
+    // The autosleep tick itself runs much faster (default 2s) so the
+    // threshold check is quasi-instant once the sample is in.
+    const sampleAgeMs = record.lastPlayerSampleAt
+      ? Date.now() - record.lastPlayerSampleAt.getTime()
+      : Number.POSITIVE_INFINITY;
+    if (sampleAgeMs >= env.autoSleepProbeIntervalMs) {
+      const activeProbe = await findActiveMinecraftOperationByWorkloadAndKind(
+        record.workloadId,
+        "players"
+      );
+      if (!activeProbe) {
+        await createMinecraftOperation({
+          workloadId: record.workloadId,
+          kind: "players",
+          payload: { source: "autosleep" } as Prisma.InputJsonValue,
+          actorEmail: "system"
+        });
+      }
     }
 
     const effectiveConfig = resolveEffectiveAutoSleepConfig(record, globalSettings);
@@ -1853,7 +1862,9 @@ function parsePlayerCountDeltaFromLog(line: string) {
 }
 
 function evaluateAutoSleepPlayerCheck(record: MinecraftServerRecord) {
-  const freshnessWindowMs = Math.max(env.autoSleepMonitorTickMs * 3, 90_000);
+  // Sample must be fresher than the configured freshness window for the
+  // autosleep decision to be trustworthy (default 60s).
+  const freshnessWindowMs = env.autoSleepSampleFreshnessMs;
   if (record.lastPlayerCheckFailedAt !== null) {
     if (
       record.lastPlayerSampleAt === null ||
