@@ -17,6 +17,7 @@ import {
 import { MinecraftServiceConsole } from "./MinecraftServiceConsole";
 import { MinecraftFilesManager } from "./MinecraftFilesManager";
 import { MinecraftSettingsForm } from "./MinecraftSettingsForm";
+import { MinecraftUptimeHistory } from "./MinecraftUptimeHistory";
 import type { MinecraftGlobalSettings, MinecraftServerWithWorkload } from "@/types/admin";
 
 const REFRESH_MS = 10_000;
@@ -29,7 +30,7 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [hostnameSlug, setHostnameSlug] = useState("");
   const [optimisticRuntimeState, setOptimisticRuntimeState] = useState<MinecraftServerWithWorkload["server"]["runtimeState"] | null>(null);
-  const [activeTab, setActiveTab] = useState<"console" | "files" | "settings">("console");
+  const [activeTab, setActiveTab] = useState<"console" | "files" | "settings" | "uptime">("console");
   const [globalSettings, setGlobalSettings] = useState<MinecraftGlobalSettings | null>(null);
   const [liveRefreshAt, setLiveRefreshAt] = useState(0);
   const [copiedAddress, setCopiedAddress] = useState(false);
@@ -328,6 +329,7 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
             }}
           />
         }
+        uptimeContent={<MinecraftUptimeHistory entry={displayEntry} />}
       />
 
       <section className="grid grid-cols-1 gap-6 xl:grid-cols-3">

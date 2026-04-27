@@ -147,6 +147,14 @@ export function createWorkloadStatusEventRecord(input: {
   });
 }
 
+export function listWorkloadStatusEvents(workloadId: string, options: { limit?: number } = {}) {
+  return db.workloadStatusEvent.findMany({
+    where: { workloadId },
+    orderBy: { createdAt: "asc" },
+    take: options.limit
+  });
+}
+
 export function deleteWorkloadRecord(id: string) {
   return db.workload.delete({ where: { id } });
 }

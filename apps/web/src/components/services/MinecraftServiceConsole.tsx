@@ -21,19 +21,21 @@ export function MinecraftServiceConsole({
   onRestart,
   actionInFlight,
   filesContent,
-  settingsContent
+  settingsContent,
+  uptimeContent
 }: {
   entry: MinecraftServerWithWorkload;
   onRefresh: () => Promise<void> | void;
   onLiveActivity?: () => Promise<void> | void;
-  activeTab: "console" | "files" | "settings";
-  onTabChange: (tab: "console" | "files" | "settings") => void;
+  activeTab: "console" | "files" | "settings" | "uptime";
+  onTabChange: (tab: "console" | "files" | "settings" | "uptime") => void;
   onStart: () => Promise<void> | void;
   onStop: () => Promise<void> | void;
   onRestart: () => Promise<void> | void;
   actionInFlight: "start" | "stop" | "restart" | null;
   filesContent?: ReactNode;
   settingsContent?: ReactNode;
+  uptimeContent?: ReactNode;
 }) {
   const [lines, setLines] = useState<MinecraftConsoleLine[]>([]);
   const [commandInput, setCommandInput] = useState("");
@@ -400,6 +402,7 @@ export function MinecraftServiceConsole({
       onTabChange={onTabChange}
       filesContent={filesContent}
       settingsContent={settingsContent}
+      uptimeContent={uptimeContent}
     />
   );
 }

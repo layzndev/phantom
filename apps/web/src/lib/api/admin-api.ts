@@ -14,6 +14,7 @@ import type {
   Incident,
   IncidentSummary,
   MinecraftServerWithWorkload,
+  MinecraftUptimeHistory,
   MinecraftFilesListResult,
   MinecraftFileReadResult,
   MinecraftGlobalSettings,
@@ -214,6 +215,10 @@ export const adminApi = {
     }),
   minecraftServer: (id: string) =>
     apiRequest<MinecraftServerWithWorkload>(`/minecraft/servers/${encodeURIComponent(id)}`),
+  minecraftServerUptime: (id: string, limit = 50) =>
+    apiRequest<MinecraftUptimeHistory>(
+      `/minecraft/servers/${encodeURIComponent(id)}/uptime?limit=${limit}`
+    ),
   minecraftFiles: (id: string, path = "/") =>
     apiRequest<MinecraftFilesListResult>(
       `/minecraft/servers/${encodeURIComponent(id)}/files?path=${encodeURIComponent(path)}`

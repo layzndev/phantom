@@ -36,15 +36,17 @@ interface MinecraftConsoleProps {
   actionState?: "start" | "stop" | "restart" | null;
   operatorLabel?: string;
   phantomIdentity?: string;
-  activeTab?: "console" | "files" | "settings";
-  onTabChange?: (tab: "console" | "files" | "settings") => void;
+  activeTab?: "console" | "files" | "settings" | "uptime";
+  onTabChange?: (tab: "console" | "files" | "settings" | "uptime") => void;
   filesContent?: ReactNode;
   settingsContent?: ReactNode;
+  uptimeContent?: ReactNode;
 }
 
 const TABS = [
   { value: "console", label: "Console" },
   { value: "files", label: "Files" },
+  { value: "uptime", label: "Uptime" },
   { value: "settings", label: "Settings" }
 ] as const;
 
@@ -67,7 +69,8 @@ export function MinecraftConsole({
   activeTab = "console",
   onTabChange,
   filesContent,
-  settingsContent
+  settingsContent,
+  uptimeContent
 }: MinecraftConsoleProps) {
   const consoleReady = entry?.server.runtimeState === "running" && Boolean(entry?.server.readyAt);
   const singleServerView = servers.length <= 1;
@@ -266,6 +269,10 @@ export function MinecraftConsole({
 
       <div className={activeTab === "files" ? "mt-4 block" : "hidden"}>
         {filesContent ?? <p className="text-sm text-slate-500">Files panel unavailable.</p>}
+      </div>
+
+      <div className={activeTab === "uptime" ? "mt-4 block" : "hidden"}>
+        {uptimeContent ?? <p className="text-sm text-slate-500">Uptime panel unavailable.</p>}
       </div>
 
       <div className={activeTab === "settings" ? "mt-4 block" : "hidden"}>

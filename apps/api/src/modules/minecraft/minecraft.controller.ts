@@ -14,6 +14,7 @@ import {
   getMinecraftOperation,
   getMinecraftGlobalSettings,
   getMinecraftServer,
+  getMinecraftServerUptimeHistory,
   getMinecraftTemplates,
   listMinecraftFiles,
   listMinecraftServers,
@@ -358,6 +359,17 @@ minecraftController.get(
       targetType: "system",
       targetId: req.params.id
     });
+    res.json(result);
+  })
+);
+
+minecraftController.get(
+  "/servers/:id/uptime",
+  validateParams(minecraftServerParamsSchema),
+  asyncHandler(async (req, res) => {
+    const limitParam = Number.parseInt(String(req.query.limit ?? ""), 10);
+    const limit = Number.isFinite(limitParam) && limitParam > 0 && limitParam <= 200 ? limitParam : 50;
+    const result = await getMinecraftServerUptimeHistory(req.params.id, { limit });
     res.json(result);
   })
 );

@@ -28,6 +28,7 @@ import {
 import { authenticateRuntimeNode } from "../nodes/nodes.service.js";
 import { findNodeFromRegistry } from "../nodes/nodes.repository.js";
 import { findWorkloadFromRegistry } from "../workloads/workloads.repository.js";
+import { listWorkloadStatusEvents } from "../../db/workloadRepository.js";
 import {
   createWorkload,
   getWorkload,
@@ -1250,6 +1251,89 @@ export async function getMinecraftConsoleSession(id: string) {
     throw new AppError(400, "Workload is not a Minecraft server.", "MINECRAFT_WORKLOAD_INVALID");
   }
   return detail;
+}
+
+export interface MinecraftUptimeSession {
+  startedAt: string;
+  stoppedAt: string | null;
+  durationSeconds: number;
+  reason: string | null;
+  ongoing: boolean;
+}
+
+export interface MinecraftUptimeHistory {
+  serverId: string;
+  sessions: MinecraftUptimeSession[];
+}
+
+export async function getMinecraftServerUptimeHistory(
+  id: string,
+  options: { limit?: number } = {}
+): Promise<MinecraftUptimeHistory> {
+  const record = await ensureMinecraftServerRecord(id);
+  // Pull more raw events than sessions because each session is built from
+  // a (start, stop) pair so the visible count ends up roughly halved.
+  const fetchLimit = Math.max((options.limit ?? 20) * 4, 40);
+  const events = await listWorkloadStatusEvents(record.workloadId, { limit: fetchLimit });
+
+  const sessions: MinecraftUptimeSession[] = [];
+  let openStart: { startedAt: Date; reason: string | null } | null = null;
+
+  for (const event of events) {
+    if (event.newStatus === "running") {
+      if (openStart) {
+        // Re-entered "running" without a terminal event in between (e.g.
+        // health flapped). Treat the previous start as superseded.
+        sessions.push({
+          startedAt: openStart.startedAt.toISOString(),
+          stoppedAt: event.createdAt.toISOString(),
+          durationSeconds: durationSeconds(openStart.startedAt, event.createdAt),
+          reason: openStart.reason,
+          ongoing: false
+        });
+      }
+      openStart = { startedAt: event.createdAt, reason: event.reason ?? null };
+      continue;
+    }
+
+    if (
+      openStart &&
+      (event.newStatus === "stopped" ||
+        event.newStatus === "crashed" ||
+        event.newStatus === "deleted" ||
+        event.newStatus === "deleting")
+    ) {
+      sessions.push({
+        startedAt: openStart.startedAt.toISOString(),
+        stoppedAt: event.createdAt.toISOString(),
+        durationSeconds: durationSeconds(openStart.startedAt, event.createdAt),
+        reason: event.reason ?? null,
+        ongoing: false
+      });
+      openStart = null;
+    }
+  }
+
+  if (openStart) {
+    const now = new Date();
+    sessions.push({
+      startedAt: openStart.startedAt.toISOString(),
+      stoppedAt: null,
+      durationSeconds: durationSeconds(openStart.startedAt, now),
+      reason: openStart.reason,
+      ongoing: true
+    });
+  }
+
+  // Newest first, capped at the requested limit.
+  sessions.reverse();
+  const limited = options.limit ? sessions.slice(0, options.limit) : sessions;
+
+  return { serverId: record.id, sessions: limited };
+}
+
+function durationSeconds(start: Date, end: Date) {
+  return Math.max(0, Math.floor((end.getTime() - start.getTime()) / 1000));
 }
 
 async function waitForMinecraftOperation(operationId: string, timeoutMs: number) {

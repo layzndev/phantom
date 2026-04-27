@@ -451,6 +451,19 @@ export interface MinecraftServerWithWorkload {
   connectAddress: string | null;
 }
 
+export interface MinecraftUptimeSession {
+  startedAt: string;
+  stoppedAt: string | null;
+  durationSeconds: number;
+  reason: string | null;
+  ongoing: boolean;
+}
+
+export interface MinecraftUptimeHistory {
+  serverId: string;
+  sessions: MinecraftUptimeSession[];
+}
+
 export interface CreateMinecraftServerPayload {
   name: string;
   hostnameSlug?: string;
