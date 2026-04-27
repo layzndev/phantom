@@ -152,23 +152,13 @@ export function MinecraftServiceConsole({
 
   useEffect(() => {
     if (lastRuntimeStartedAtRef.current !== entry.workload.runtimeStartedAt) {
-      const previousRuntimeStartedAt = lastRuntimeStartedAtRef.current;
       lastRuntimeStartedAtRef.current = entry.workload.runtimeStartedAt;
       lastStatusRef.current = null;
       commandHistoryRef.current.clear();
       lineFingerprintsRef.current.clear();
       lifecycleDedupRef.current.clear();
-      if (previousRuntimeStartedAt && entry.workload.runtimeStartedAt) {
-        appendLines([
-          {
-            timestamp: entry.workload.runtimeStartedAt,
-            kind: "divider",
-            text: "Starting"
-          }
-        ]);
-      }
     }
-  }, [appendLines, entry.workload.runtimeStartedAt]);
+  }, [entry.workload.runtimeStartedAt]);
 
   useEffect(() => {
     shouldReconnectRef.current = true;
