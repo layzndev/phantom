@@ -70,11 +70,11 @@ export function MinecraftServiceConsole({
       const normalized = incoming
         .map((line) => toConsoleLine(line))
         .filter((line) => {
-          if (line.channel !== "PHANTOM") {
+          if (line.channel !== "PHANTOM" && line.kind !== "divider") {
             return true;
           }
           const now = Date.parse(line.timestamp) || Date.now();
-          const key = line.text.trim().toLowerCase();
+          const key = `${line.kind}:${line.text.trim().toLowerCase()}`;
           const lastSeenAt = lifecycleDedupRef.current.get(key) ?? 0;
           if (now - lastSeenAt < 30_000) {
             return false;
@@ -116,8 +116,8 @@ export function MinecraftServiceConsole({
     lineFingerprintsRef.current = new Set(next.map((line) => buildLineFingerprint(line)));
     lifecycleDedupRef.current = new Map(
       next
-        .filter((line) => line.channel === "PHANTOM")
-        .map((line) => [line.text.trim().toLowerCase(), Date.parse(line.timestamp) || Date.now()])
+        .filter((line) => line.channel === "PHANTOM" || line.kind === "divider")
+        .map((line) => [`${line.kind}:${line.text.trim().toLowerCase()}`, Date.parse(line.timestamp) || Date.now()])
     );
     linesRef.current = next;
     setLines(next);
@@ -243,6 +243,9 @@ export function MinecraftServiceConsole({
                 : payload.status;
             if (lastStatusRef.current !== normalizedStatus) {
               lastStatusRef.current = normalizedStatus;
+              if (normalizedStatus === "stopped") {
+                appendLines([createStoppedDivider(timestamp)]);
+              }
               scheduleRefresh();
             }
           } else if (payload.type === "command_result") {
@@ -432,25 +435,55 @@ function buildLineFingerprint(line: Pick<MinecraftConsoleLine, "timestamp" | "ki
   return [line.timestamp, line.kind, line.channel ?? "", line.text].join("|");
 }
 
+function createStoppedDivider(timestamp: string): MinecraftConsoleLine {
+  return {
+    id: crypto.randomUUID(),
+    timestamp,
+    kind: "divider",
+    text: "Server stopped"
+  };
+}
+
 function renderHistory(
   events: ConsoleHistoryEvent[],
   pendingAdminIds: Set<string>
 ): MinecraftConsoleLine[] {
   const out: MinecraftConsoleLine[] = [];
+  const lifecycleSeenAt = new Map<string, number>();
+  const pushLine = (line: MinecraftConsoleLine) => {
+    if (line.channel === "PHANTOM" || line.kind === "divider") {
+      const now = Date.parse(line.timestamp) || Date.now();
+      const key = `${line.kind}:${line.text.trim().toLowerCase()}`;
+      const lastSeenAt = lifecycleSeenAt.get(key) ?? 0;
+      if (now - lastSeenAt < 30_000) {
+        return;
+      }
+      lifecycleSeenAt.set(key, now);
+    }
+    out.push(line);
+  };
+
   for (const event of events) {
     const timestamp = event.timestamp ?? new Date().toISOString();
     if (event.type === "log") {
       for (const text of event.line.split(/\r?\n/)) {
-        out.push(...normalizeConsoleLogLine(text, timestamp));
+        for (const line of normalizeConsoleLogLine(text, timestamp)) {
+          pushLine(line);
+        }
       }
     } else if (event.type === "status") {
+      if (event.status === "stopped") {
+        pushLine(createStoppedDivider(timestamp));
+      }
       continue;
     } else if (event.type === "command_result") {
       const isAdminCommand = pendingAdminIds.has(event.id);
       pendingAdminIds.delete(event.id);
-      out.push(...normalizeCommandResult(event.output, timestamp, isAdminCommand));
+      for (const line of normalizeCommandResult(event.output, timestamp, isAdminCommand)) {
+        pushLine(line);
+      }
     } else if (event.type === "error") {
-      out.push({
+      pushLine({
         id: crypto.randomUUID(),
         timestamp,
         kind: "error",
@@ -472,13 +505,18 @@ function normalizeConsoleLogLine(
   }
 
   if (line.startsWith("__PHANTOM__ ")) {
+    const text = line.slice("__PHANTOM__ ".length);
+    if (isStoppedLifecycleMessage(text)) {
+      return [createStoppedDivider(timestamp)];
+    }
+
     return [
       {
         id: crypto.randomUUID(),
         timestamp,
         kind: "info",
         channel: "PHANTOM",
-        text: line.slice("__PHANTOM__ ".length)
+        text
       }
     ];
   }
@@ -629,6 +667,11 @@ function isHiddenRconNoise(message: string) {
     /^Thread RCON Listener .* started$/i.test(message) ||
     /^RCON running on /.test(message)
   );
+}
+
+function isStoppedLifecycleMessage(message: string) {
+  const normalized = message.trim().toLowerCase();
+  return normalized === "server stopped" || normalized === "server marked as stopped";
 }
 
 function isPlayerActivityLine(message: string) {

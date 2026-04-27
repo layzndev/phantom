@@ -118,6 +118,11 @@ export function MinecraftConsole({
   const renderedLines = lines.length === 0 && entry
     ? [welcomeLine(entry)]
     : lines;
+  const lastStoppedDividerIndex = findLastStoppedDividerIndex(renderedLines);
+  const showVirtualStoppedDivider = Boolean(entry && isStoppedState && lastStoppedDividerIndex === -1);
+  const staleLineCutoff = showVirtualStoppedDivider
+    ? renderedLines.length
+    : lastStoppedDividerIndex;
 
   return (
     <section className="rounded-2xl border border-line bg-panel/78 p-5 shadow-soft">
@@ -280,35 +285,39 @@ export function MinecraftConsole({
 
         <div
           ref={scrollRef}
-          className={`relative h-[480px] overflow-y-auto p-4 font-mono text-[13px] leading-6 text-slate-100 transition ${
-            isStoppedState ? "opacity-45 saturate-50" : ""
-          }`}
+          className="relative h-[480px] overflow-y-auto p-4 font-mono text-[13px] leading-6 text-slate-100"
         >
           {!entry ? (
             <p className="text-slate-600">Pick a server to attach the console.</p>
           ) : (
-            renderedLines.map((line) =>
-              line.kind === "divider" ? (
-                <div key={line.id} className="my-5 flex items-center gap-4">
-                  <div className="h-px flex-1 bg-white/12" />
-                  <span className="rounded-full border border-white/10 bg-white/[0.08] px-4 py-1 text-sm font-medium text-slate-300">
-                    {line.text}
-                  </span>
-                  <div className="h-px flex-1 bg-white/12" />
-                </div>
-              ) : (
-                <p key={line.id} className="whitespace-pre-wrap">
-                  <span className="text-slate-500">[{formatClock(line.timestamp)} </span>
-                  <span className={sourceTone(line.kind, line.channel)}>
-                    {lineSource(line.kind, operatorLabel, line.channel)}
-                  </span>
-                  <span className="text-slate-500">] </span>
-                  <span className={lineTone(line.kind, line.channel)}>
-                    {line.channel === "PHANTOM" ? `${phantomIdentity} ${line.text}` : line.text}
-                  </span>
-                </p>
-              )
-            )
+            <>
+              {renderedLines.map((line, index) =>
+                line.kind === "divider" ? (
+                  <ConsoleDivider
+                    key={line.id}
+                    label={line.text}
+                    variant={isStoppedDividerLine(line) ? "stopped" : "default"}
+                  />
+                ) : (
+                  <p
+                    key={line.id}
+                    className={`whitespace-pre-wrap transition-opacity ${
+                      staleLineCutoff >= 0 && index < staleLineCutoff ? "opacity-40 saturate-50" : ""
+                    }`}
+                  >
+                    <span className="text-slate-500">[{formatClock(line.timestamp)} </span>
+                    <span className={sourceTone(line.kind, line.channel)}>
+                      {lineSource(line.kind, operatorLabel, line.channel)}
+                    </span>
+                    <span className="text-slate-500">] </span>
+                    <span className={lineTone(line.kind, line.channel)}>
+                      {line.channel === "PHANTOM" ? `${phantomIdentity} ${line.text}` : line.text}
+                    </span>
+                  </p>
+                )
+              )}
+              {showVirtualStoppedDivider ? <ConsoleDivider label="Server stopped" variant="stopped" /> : null}
+            </>
           )}
           {entry ? (
             <span
@@ -320,16 +329,6 @@ export function MinecraftConsole({
             />
           ) : null}
         </div>
-
-        {entry && isStoppedState ? (
-          <div className="pointer-events-none absolute inset-x-6 bottom-12 z-10 flex items-center gap-4">
-            <div className="h-px flex-1 bg-white/12" />
-            <span className="rounded-full border border-white/10 bg-white/[0.08] px-4 py-1 font-medium text-sm text-slate-300 shadow-[0_0_30px_rgba(0,0,0,0.25)]">
-              Server stopped
-            </span>
-            <div className="h-px flex-1 bg-white/12" />
-          </div>
-        ) : null}
 
         <form
           className={`relative flex h-11 items-center gap-3 border-t border-white/10 px-4 font-mono text-sm transition ${
@@ -367,6 +366,47 @@ function templateFamilyLabel(templateId: string) {
   const family = templateId.split("-")[0] ?? templateId;
   if (!family) return templateId;
   return family.charAt(0).toUpperCase() + family.slice(1);
+}
+
+function ConsoleDivider({
+  label,
+  variant = "default"
+}: {
+  label: string;
+  variant?: "default" | "stopped";
+}) {
+  if (variant === "stopped") {
+    return (
+      <div className="my-4 flex items-center gap-3 text-xs text-slate-500">
+        <span className="h-px flex-1 bg-white/12" />
+        <span className="shrink-0 font-medium">{label}</span>
+        <span className="h-px flex-1 bg-white/12" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="my-5 flex items-center gap-4">
+      <div className="h-px flex-1 bg-white/12" />
+      <span className="rounded-full border border-white/10 bg-white/[0.08] px-4 py-1 text-sm font-medium text-slate-300">
+        {label}
+      </span>
+      <div className="h-px flex-1 bg-white/12" />
+    </div>
+  );
+}
+
+function findLastStoppedDividerIndex(lines: MinecraftConsoleLine[]) {
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    if (isStoppedDividerLine(lines[index])) {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function isStoppedDividerLine(line: MinecraftConsoleLine | undefined) {
+  return line?.kind === "divider" && line.text.trim().toLowerCase() === "server stopped";
 }
 
 function lineTone(kind: ConsoleLineKind, channel?: MinecraftConsoleLine["channel"]) {
