@@ -106,9 +106,11 @@ export function MinecraftConsole({
   const showStoppingBadge =
     actionState === "stop" || runtimeState === "stopping";
   // Strict per-state gating so transient states do not allow conflicting actions.
+  // Stop is intentionally NOT available while starting/waking — users must
+  // wait for the server to be ready before they can stop it.
   const canStart = !!entry && ["stopped", "crashed", "error"].includes(runtimeState ?? "");
   const canRestart = !!entry && runtimeState === "running";
-  const canStop = !!entry && ["running", "starting", "restarting", "stopping"].includes(runtimeState ?? "");
+  const canStop = !!entry && ["running", "restarting", "stopping"].includes(runtimeState ?? "");
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -203,9 +205,7 @@ export function MinecraftConsole({
                 ))}
               </select>
             ) : null}
-            {showStartingBadge ? (
-              <StartingButton onClick={onStop} disabled={busy || !canStop} />
-            ) : null}
+            {showStartingBadge ? <StartingBadge /> : null}
             {showStoppingBadge ? (
               <div className="inline-flex h-11 items-center gap-3 rounded-xl border border-red-500/45 bg-red-500/[0.06] px-6 text-sm font-semibold text-red-300 shadow-[0_0_30px_rgba(239,68,68,0.08)]">
                 <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-red-500/30 border-t-red-300" />
@@ -367,28 +367,17 @@ function templateFamilyLabel(templateId: string) {
   return family.charAt(0).toUpperCase() + family.slice(1);
 }
 
-function StartingButton({
-  disabled,
-  onClick
-}: {
-  disabled: boolean;
-  onClick: () => void;
-}) {
+function StartingBadge() {
+  // Read-only progress indicator — clicks must NOT cancel the start.
   return (
-    <button
-      type="button"
-      aria-label="Force stop"
-      title="Click to force stop"
-      onClick={onClick}
-      disabled={disabled}
-      className="inline-flex h-8 w-28 items-center justify-center gap-1.5 rounded-md border border-amber-500/45 bg-transparent px-3 text-xs font-medium text-amber-300 transition-all duration-150 hover:bg-amber-500/[0.10] disabled:pointer-events-none disabled:opacity-40"
+    <div
+      role="status"
+      aria-label="Server is starting"
+      className="inline-flex h-11 items-center gap-3 rounded-xl border border-amber-500/45 bg-amber-500/[0.06] px-6 text-sm font-semibold text-amber-300 shadow-[0_0_30px_rgba(245,158,11,0.08)]"
     >
-      <svg className="h-3.5 w-3.5 animate-spin" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-        <circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeOpacity="0.25" strokeWidth="1.5" />
-        <path d="M12.5 7a5.5 5.5 0 0 0-5.5-5.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-      </svg>
-      <span>Starting</span>
-    </button>
+      <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-amber-500/30 border-t-amber-300" />
+      Starting
+    </div>
   );
 }
 
