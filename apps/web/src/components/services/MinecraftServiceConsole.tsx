@@ -49,6 +49,8 @@ export function MinecraftServiceConsole({
   const lastStatusRef = useRef<string | null>(null);
   const lastRuntimeStartedAtRef = useRef<string | null>(entry.workload.runtimeStartedAt);
   const currentRuntimeStateRef = useRef(entry.server.runtimeState);
+  const actionInFlightRef = useRef(actionInFlight);
+  const suppressStoppedDividerRef = useRef(false);
   const lineFingerprintsRef = useRef(new Set<string>());
   const lifecycleDedupRef = useRef(new Map<string, number>());
   const linesRef = useRef<MinecraftConsoleLine[]>([]);
@@ -151,6 +153,15 @@ export function MinecraftServiceConsole({
   }, [entry.server.runtimeState]);
 
   useEffect(() => {
+    actionInFlightRef.current = actionInFlight;
+    if (actionInFlight === "start" || actionInFlight === "restart") {
+      suppressStoppedDividerRef.current = true;
+    } else if (actionInFlight === "stop") {
+      suppressStoppedDividerRef.current = false;
+    }
+  }, [actionInFlight]);
+
+  useEffect(() => {
     if (lastRuntimeStartedAtRef.current !== entry.workload.runtimeStartedAt) {
       lastRuntimeStartedAtRef.current = entry.workload.runtimeStartedAt;
       lastStatusRef.current = null;
@@ -191,6 +202,7 @@ export function MinecraftServiceConsole({
 
           if (payload.type === "history") {
             const replay = renderHistory(payload.events, commandHistoryRef.current);
+            updateStoppedDividerModeFromLines(replay, suppressStoppedDividerRef);
             if (linesRef.current.length === 0) {
               replaceLines(replay);
             } else {
@@ -218,11 +230,11 @@ export function MinecraftServiceConsole({
             const hasPlayerActivity = payload.line
               .split(/\r?\n/)
               .some((text) => isPlayerActivityLine(text));
-            appendLines(
-              payload.line
-                .split(/\r?\n/)
-                .flatMap((text) => normalizeConsoleLogLine(text, timestamp))
-            );
+            const normalizedLines = payload.line
+              .split(/\r?\n/)
+              .flatMap((text) => normalizeConsoleLogLine(text, timestamp));
+            updateStoppedDividerModeFromLines(normalizedLines, suppressStoppedDividerRef);
+            appendLines(normalizedLines);
             if (hasPlayerActivity) {
               scheduleLiveActivityRefresh();
             }
@@ -234,7 +246,15 @@ export function MinecraftServiceConsole({
             if (lastStatusRef.current !== normalizedStatus) {
               lastStatusRef.current = normalizedStatus;
               if (normalizedStatus === "stopped") {
-                appendLines([createStoppedDivider(timestamp)]);
+                if (shouldAppendStoppedDivider({
+                  actionInFlight: actionInFlightRef.current,
+                  runtimeState: currentRuntimeStateRef.current,
+                  suppressed: suppressStoppedDividerRef.current
+                })) {
+                  appendLines([createStoppedDivider(timestamp)]);
+                }
+              } else {
+                updateStoppedDividerModeFromStatus(normalizedStatus, suppressStoppedDividerRef);
               }
               scheduleRefresh();
             }
@@ -324,11 +344,13 @@ export function MinecraftServiceConsole({
 
   const runStop = async () => {
     lastStatusRef.current = "stopping";
+    suppressStoppedDividerRef.current = false;
     await onStop();
   };
 
   const runStart = async () => {
     lastStatusRef.current = "starting";
+    suppressStoppedDividerRef.current = true;
     await onStart();
     manuallyClosedRef.current = false;
     shouldReconnectRef.current = true;
@@ -337,6 +359,7 @@ export function MinecraftServiceConsole({
 
   const runRestart = async () => {
     lastStatusRef.current = "restarting";
+    suppressStoppedDividerRef.current = true;
     await onRestart();
     manuallyClosedRef.current = false;
     shouldReconnectRef.current = true;
@@ -434,13 +457,74 @@ function createStoppedDivider(timestamp: string): MinecraftConsoleLine {
   };
 }
 
+function shouldAppendStoppedDivider({
+  actionInFlight,
+  runtimeState,
+  suppressed
+}: {
+  actionInFlight: "start" | "stop" | "restart" | null;
+  runtimeState: string | undefined;
+  suppressed: boolean;
+}) {
+  return (
+    !suppressed &&
+    actionInFlight !== "start" &&
+    actionInFlight !== "restart" &&
+    runtimeState !== "starting" &&
+    runtimeState !== "restarting"
+  );
+}
+
+function updateStoppedDividerModeFromStatus(
+  status: string,
+  suppressedRef: { current: boolean }
+) {
+  if (status === "starting" || status === "restarting") {
+    suppressedRef.current = true;
+    return;
+  }
+
+  if (status === "stopping" || status === "running" || status === "crashed" || status === "error") {
+    suppressedRef.current = false;
+  }
+}
+
+function updateStoppedDividerModeFromLines(
+  lines: MinecraftConsoleLine[],
+  suppressedRef: { current: boolean }
+) {
+  for (const line of lines) {
+    if (line.channel !== "PHANTOM") {
+      continue;
+    }
+
+    if (isStartingLifecycleMessage(line.text)) {
+      suppressedRef.current = true;
+    } else if (isStoppingLifecycleMessage(line.text)) {
+      suppressedRef.current = false;
+    }
+  }
+}
+
 function renderHistory(
   events: ConsoleHistoryEvent[],
   pendingAdminIds: Set<string>
 ): MinecraftConsoleLine[] {
   const out: MinecraftConsoleLine[] = [];
   const lifecycleSeenAt = new Map<string, number>();
+  let suppressStoppedDivider = false;
   const pushLine = (line: MinecraftConsoleLine) => {
+    if (line.kind === "divider" && isStoppedLifecycleMessage(line.text)) {
+      if (suppressStoppedDivider) {
+        return;
+      }
+      suppressStoppedDivider = false;
+    } else if (line.channel === "PHANTOM" && isStartingLifecycleMessage(line.text)) {
+      suppressStoppedDivider = true;
+    } else if (line.channel === "PHANTOM" && isStoppingLifecycleMessage(line.text)) {
+      suppressStoppedDivider = false;
+    }
+
     if (line.channel === "PHANTOM" || line.kind === "divider") {
       const now = Date.parse(line.timestamp) || Date.now();
       const key = `${line.kind}:${line.text.trim().toLowerCase()}`;
@@ -465,6 +549,11 @@ function renderHistory(
       if (event.status === "stopped") {
         pushLine(createStoppedDivider(timestamp));
       }
+      if (event.status === "starting" || event.status === "restarting") {
+        suppressStoppedDivider = true;
+      } else if (event.status === "stopping" || event.status === "running" || event.status === "crashed" || event.status === "error") {
+        suppressStoppedDivider = false;
+      }
       continue;
     } else if (event.type === "command_result") {
       const isAdminCommand = pendingAdminIds.has(event.id);
@@ -482,7 +571,17 @@ function renderHistory(
       });
     }
   }
-  return out;
+  return trimHistoryBeforeLastStoppedDivider(out);
+}
+
+function trimHistoryBeforeLastStoppedDivider(lines: MinecraftConsoleLine[]) {
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    const line = lines[index];
+    if (line.kind === "divider" && isStoppedLifecycleMessage(line.text)) {
+      return lines.slice(index);
+    }
+  }
+  return lines;
 }
 
 function normalizeConsoleLogLine(
@@ -662,6 +761,15 @@ function isHiddenRconNoise(message: string) {
 function isStoppedLifecycleMessage(message: string) {
   const normalized = message.trim().toLowerCase();
   return normalized === "server stopped" || normalized === "server marked as stopped";
+}
+
+function isStartingLifecycleMessage(message: string) {
+  const normalized = message.trim().toLowerCase();
+  return normalized === "starting server..." || normalized === "restarting server...";
+}
+
+function isStoppingLifecycleMessage(message: string) {
+  return message.trim().toLowerCase() === "stopping server...";
 }
 
 function isPlayerActivityLine(message: string) {
