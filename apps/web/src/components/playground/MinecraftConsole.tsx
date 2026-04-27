@@ -73,8 +73,10 @@ export function MinecraftConsole({
   const singleServerView = servers.length <= 1;
 
   const startedAtMs = useMemo(() => {
-    if (!entry || !entry.workload.runtimeStartedAt) return null;
-    return new Date(entry.workload.runtimeStartedAt).getTime();
+    // Anchor uptime on the moment "Server marked as running" was emitted
+    // (server.readyAt), not on the container boot timestamp.
+    if (!entry || !entry.server.readyAt) return null;
+    return new Date(entry.server.readyAt).getTime();
   }, [entry]);
 
   const finishedAtMs = useMemo(() => {

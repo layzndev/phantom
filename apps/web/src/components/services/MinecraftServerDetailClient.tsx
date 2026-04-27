@@ -119,10 +119,12 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
     if (!entry) {
       return null;
     }
+    // Uptime is measured from `readyAt` — the moment the API emits the
+    // "Server marked as running" PHANTOM line — not from container boot.
     const uptimeSeconds = getRuntimeUptimeSeconds(
-      entry.workload.runtimeStartedAt,
+      entry.server.readyAt,
       entry.workload.runtimeFinishedAt,
-      entry.workload.status === "running"
+      entry.workload.status === "running" && Boolean(entry.server.readyAt)
     );
     return {
       startedAt: entry.workload.runtimeStartedAt,
@@ -229,7 +231,12 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
         action: displayEntry.server.autoSleepAction,
         source: "override" as const
       };
-  const uptimeLabel = isWorkloadRunning ? formatHms(runtime.uptimeSeconds) : "—";
+  // Show "—" until the server is fully ready so the timer doesn't display
+  // a stale value during the boot phase.
+  const uptimeLabel =
+    isWorkloadRunning && displayEntry.server.readyAt
+      ? formatHms(runtime.uptimeSeconds)
+      : "—";
   const templateLabel = templateFamilyLabel(displayEntry.server.templateId);
 
   return (
