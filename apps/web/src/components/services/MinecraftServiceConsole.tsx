@@ -179,7 +179,10 @@ export function MinecraftServiceConsole({
     };
 
     const connect = () => {
-      lastStatusRef.current = null;
+      // Intentionally do NOT reset lastStatusRef on reconnect: the gateway
+      // re-sends the current status on attach, and resetting would cause
+      // the frontend to surface a fresh "Server stopped" divider every
+      // time the WebSocket reconnects (eg. after an idle timeout).
       setConnectionState((current) =>
         current === "connected" ? "connected" : current === "disconnected" ? "reconnecting" : "connecting"
       );
@@ -285,14 +288,9 @@ export function MinecraftServiceConsole({
       });
 
       socket.addEventListener("error", () => {
-        appendLines([
-          {
-            timestamp: new Date().toISOString(),
-            kind: "error",
-            channel: "ERROR",
-            text: "WebSocket error"
-          }
-        ]);
+        // WebSocket error events fire on every idle disconnect / reconnect
+        // cycle. The connection-state badge in the header already reflects
+        // this, so don't pollute the console log.
       });
     };
 
