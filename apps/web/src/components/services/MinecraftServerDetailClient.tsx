@@ -17,10 +17,12 @@ import {
 import { MinecraftServiceConsole } from "./MinecraftServiceConsole";
 import { MinecraftFilesManager } from "./MinecraftFilesManager";
 import { MinecraftSettingsForm } from "./MinecraftSettingsForm";
-<<<<<<< HEAD
 import { MinecraftUptimeHistory } from "./MinecraftUptimeHistory";
-import type { MinecraftGlobalSettings, MinecraftServerWithWorkload } from "@/types/admin";
-import type { GuardServerSummary, MinecraftGlobalSettings, MinecraftServerWithWorkload } from "@/types/admin";
+import type {
+  GuardServerSummary,
+  MinecraftGlobalSettings,
+  MinecraftServerWithWorkload
+} from "@/types/admin";
 
 const REFRESH_MS = 10_000;
 

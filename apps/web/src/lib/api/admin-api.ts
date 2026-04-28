@@ -23,6 +23,8 @@ import type {
   IncidentSummary,
   MinecraftServerWithWorkload,
   MinecraftUptimeHistory,
+  PlatformTokenIssued,
+  PlatformTokenSummary,
   MinecraftFilesListResult,
   MinecraftFileReadResult,
   MinecraftGlobalSettings,
@@ -82,6 +84,18 @@ export const adminApi = {
       method: "PUT",
       body: JSON.stringify({ entries })
     }),
+  listPlatformTokens: () =>
+    apiRequest<{ tokens: PlatformTokenSummary[] }>("/platform-admin/tokens"),
+  issuePlatformToken: (input: { name: string; expiresAt?: string | null }) =>
+    apiRequest<{ token: PlatformTokenIssued }>("/platform-admin/tokens", {
+      method: "POST",
+      body: JSON.stringify(input)
+    }),
+  revokePlatformToken: (id: string) =>
+    apiRequest<{ token: PlatformTokenSummary }>(
+      `/platform-admin/tokens/${encodeURIComponent(id)}/revoke`,
+      { method: "POST" }
+    ),
   incidents: (options?: {
     status?: string;
     severity?: string;

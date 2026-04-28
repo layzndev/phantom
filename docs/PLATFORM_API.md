@@ -1,0 +1,177 @@
+# Phantom — Platform API (`/platform/*`)
+
+The platform API is the **machine-to-machine** surface Phantom exposes to the
+Hosting product (codename **Nebula**). It is **not** a public customer API:
+end users never authenticate against it directly. The Hosting backend holds
+a single bearer token, manages its own customer accounts, and calls
+`/platform/*` on their behalf.
+
+```
+Customer browser ──▶ Nebula (web + api) ──▶ Phantom /platform/*
+                                            │
+                                            ▼
+                                          Postgres
+                                          Nodes
+```
+
+## Authentication
+
+Every request must include a bearer token issued in the Phantom admin panel
+(see *Settings → Platform tokens*).
+
+```
+Authorization: Bearer phs_live_<32-byte-base64-secret>
+```
+
+- Tokens are stored as SHA-256 hashes in `platform_tokens.token_hash`.
+- The plain-text token is shown **only once** at creation.
+- Tokens can be revoked instantly from the admin panel.
+- `last_used_at` is updated fire-and-forget on every authenticated request.
+- Optional `expires_at` for time-bound tokens.
+- Scope strings are persisted (`platform_tokens.scopes`); enforcement lands
+  in v2. For now `["*"]` (full access) is granted.
+
+Failure modes:
+
+| Status | Code                       | Reason                                         |
+| ------ | -------------------------- | ---------------------------------------------- |
+| 401    | `PLATFORM_AUTH_REQUIRED`   | Missing/invalid header, unknown or revoked id  |
+
+## Conventions
+
+- All requests/responses are JSON. UTF-8.
+- Timestamps are ISO-8601.
+- Errors use the standard Phantom shape: `{ "error": string, "code"?: string, "details"?: any }`.
+- The platform plane is **NOT** behind `ADMIN_IP_ALLOWLIST` (the Hosting
+  backend usually runs on a different network). Combine with `RUNTIME_IP_ALLOWLIST`
+  if you want to lock the source IP at the network layer.
+- Audit log entries are written for every mutation (`platform.tenant.create`,
+  `platform.tenant.update`, `platform.tenant.delete`, `platform.tenants.list`).
+  The actor email is `platform-token:<token-name>`.
+
+## Tenants
+
+### `POST /platform/tenants`
+
+Create a new tenant.
+
+```http
+POST /platform/tenants
+Content-Type: application/json
+Authorization: Bearer phs_live_…
+
+{
+  "name": "Anthony Bouchet",
+  "slug": "anthony",
+  "planTier": "free",
+  "quota": {
+    "maxServers": 1,
+    "maxRamMb": 2048,
+    "maxCpu": 1,
+    "maxDiskGb": 5
+  }
+}
+```
+
+| Field      | Required | Notes                                                |
+| ---------- | -------- | ---------------------------------------------------- |
+| `name`     | yes      | 2-80 chars                                           |
+| `slug`     | yes      | `[a-z0-9-]{1,32}`, no leading/trailing hyphen, unique |
+| `planTier` | no       | `"free"` (default) or `"premium"`                    |
+| `quota`    | no       | partial — defaults: 1 server / 2 GB RAM / 1 vCPU / 5 GB disk |
+
+**Response 201**: `{ "tenant": Tenant }`.
+
+### `GET /platform/tenants`
+
+List all (non-deleted) tenants. Returns tenants with current usage
+aggregated from `workloads` (cumulative RAM / CPU / disk).
+
+```json
+{
+  "tenants": [
+    {
+      "id": "...", "name": "...", "slug": "...", "planTier": "free",
+      "suspended": false,
+      "quota": { "maxServers": 1, "maxRamMb": 2048, "maxCpu": 1, "maxDiskGb": 5 },
+      "usage": { "workloadCount": 1, "ramMb": 2048, "cpu": 1, "diskGb": 5 },
+      "createdAt": "…", "updatedAt": "…"
+    }
+  ]
+}
+```
+
+### `GET /platform/tenants/:id`
+
+Fetch a single tenant including current usage. `404 TENANT_NOT_FOUND` if
+absent or soft-deleted.
+
+### `PATCH /platform/tenants/:id`
+
+Partial update. All fields optional.
+
+```json
+{
+  "name": "Anthony — premium",
+  "planTier": "premium",
+  "suspended": false,
+  "quota": { "maxRamMb": 4096 }
+}
+```
+
+### `DELETE /platform/tenants/:id`
+
+Soft-delete (`tenants.deleted_at` set, `suspended=true`). Workloads owned
+by the tenant keep their `tenant_id` foreign key — they are NOT auto-stopped.
+The Hosting backend is expected to terminate them through the standard
+workload mutations before calling delete.
+
+### `GET /platform/tenants/:id/servers`
+
+List Minecraft servers owned by the tenant (filtered by `minecraft_servers.tenant_id`).
+
+```json
+{
+  "servers": [
+    {
+      "id": "...", "name": "...", "slug": "...",
+      "hostname": "anthony.nptnz.co.uk",
+      "planTier": "free",
+      "runtimeState": "running",
+      "currentPlayerCount": 0,
+      "createdAt": "…"
+    }
+  ]
+}
+```
+
+> Provisioning (`POST /platform/tenants/:id/servers`) and lifecycle
+> (`start`, `stop`, `restart`, `delete`) are coming in PR 2.
+
+## Roadmap (PR 2+)
+
+- `POST /platform/tenants/:id/servers` — provision an MC server within the
+  tenant's quota.
+- `POST /platform/servers/:id/start|stop|restart` — lifecycle.
+- `POST /platform/servers/:id/console-url` — short-lived signed URL for the
+  Hosting frontend to open the WebSocket console without exposing the
+  bearer.
+- Outbound webhooks (`server.ready`, `server.stopped`, `server.crashed`,
+  `tenant.over_quota`) signed with HMAC.
+- Scope enforcement (`tenants.read`, `tenants.write`, `servers.write`).
+- Idempotency-Key support on POST routes.
+- OpenAPI spec emitted from the zod schemas.
+
+## Operator checklist
+
+```dotenv
+# Phantom side
+RUNTIME_IP_ALLOWLIST=<nebula-backend-public-ip>   # optional, defense in depth
+
+# Nebula side
+PHANTOM_API_BASE_URL=https://api.phantom.local
+PHANTOM_PLATFORM_TOKEN=phs_live_…
+```
+
+Mint the token in *Phantom → Settings → Platform tokens*. Store it in your
+secret manager — Phantom only displays it once.

@@ -1,5 +1,6 @@
 import { AdminShell } from "@/components/layout/AdminShell";
 import { IpAllowlistCard } from "@/components/settings/IpAllowlistCard";
+import { PlatformTokensCard } from "@/components/settings/PlatformTokensCard";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 
 export default function SettingsPage() {
@@ -15,6 +16,8 @@ export default function SettingsPage() {
         </div>
 
         <IpAllowlistCard />
+
+        <PlatformTokensCard />
 
         <section className="rounded-2xl border border-line bg-panel/78 p-5 shadow-soft">
           <h3 className="text-sm font-semibold text-white">Roadmap</h3>

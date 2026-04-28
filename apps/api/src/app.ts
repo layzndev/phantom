@@ -9,6 +9,8 @@ import { incidentsController } from "./modules/incidents/incidents.controller.js
 import { nodesController } from "./modules/nodes/nodes.controller.js";
 import { nodesRuntimeController } from "./modules/nodes/nodes.runtime.controller.js";
 import { notificationsController } from "./modules/notifications/notifications.controller.js";
+import { platformController } from "./modules/platform/platform.controller.js";
+import { platformAdminController } from "./modules/platform/platform.admin.controller.js";
 import { workloadsController } from "./modules/workloads/workloads.controller.js";
 import { workloadsRuntimeController } from "./modules/workloads/workloads.runtime.controller.js";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
@@ -47,24 +49,22 @@ export function createApp() {
   app.use("/incidents", requireAllowedAdminIp, incidentsController);
   app.use("/notifications", requireAllowedAdminIp, notificationsController);
   app.use("/audit-logs", requireAllowedAdminIp, auditController);
+  app.use("/guard", requireAllowedAdminIp, guardController);
+  app.use("/platform-admin", requireAllowedAdminIp, platformAdminController);
+
+  // Machine-to-machine surface consumed by the Hosting backend (Nebula).
+  // Auth is a bearer platform token, NOT an admin session — it intentionally
+  // does NOT sit behind the admin IP allowlist (the Hosting backend will
+  // typically run on a different network).
+  app.use("/platform", platformController);
 
   // Runtime / agent channel — locked down to RUNTIME_IP_ALLOWLIST (when set)
   // in addition to the per-request bearer token check inside each route.
   app.use("/runtime/nodes", requireAllowedRuntimeIp, nodesRuntimeController);
   app.use("/runtime/workloads", requireAllowedRuntimeIp, workloadsRuntimeController);
   app.use("/runtime/minecraft", requireAllowedRuntimeIp, minecraftRuntimeController);
-  app.use("/auth", authController);
-  app.use("/nodes", nodesController);
-  app.use("/workloads", workloadsController);
-  app.use("/minecraft", minecraftController);
-  app.use("/incidents", incidentsController);
-  app.use("/notifications", notificationsController);
-  app.use("/guard", guardController);
-  app.use("/runtime/nodes", nodesRuntimeController);
-  app.use("/runtime/workloads", workloadsRuntimeController);
-  app.use("/runtime/minecraft", minecraftRuntimeController);
-  app.use("/runtime/guard", guardRuntimeController);
-  app.use("/audit-logs", auditController);
+  app.use("/runtime/guard", requireAllowedRuntimeIp, guardRuntimeController);
+
   app.use(notFoundHandler);
   app.use(errorHandler);
 

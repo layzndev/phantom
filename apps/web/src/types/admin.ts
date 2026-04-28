@@ -465,6 +465,23 @@ export interface MinecraftUptimeHistory {
   sessions: MinecraftUptimeSession[];
 }
 
+export interface PlatformTokenSummary {
+  id: string;
+  name: string;
+  prefix: string;
+  last4: string;
+  scopes: string[];
+  createdAt: string;
+  lastUsedAt: string | null;
+  expiresAt: string | null;
+  revokedAt: string | null;
+}
+
+export interface PlatformTokenIssued extends PlatformTokenSummary {
+  /** Plain-text token, only available right after creation. */
+  token: string;
+}
+
 export interface CreateMinecraftServerPayload {
   name: string;
   hostnameSlug?: string;
