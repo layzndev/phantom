@@ -128,6 +128,7 @@ model Node {
   notifications   SystemNotification[]
   incidents       Incident[]
   workloads       Workload[]
+  connectionEvents ConnectionEvent[]
 
   @@index([status])
   @@index([health])
@@ -366,6 +367,8 @@ model MinecraftServer {
   createdAt        DateTime  @default(now()) @map("created_at")
   updatedAt        DateTime  @updatedAt @map("updated_at")
   deletedAt        DateTime? @map("deleted_at")
+  connectionEvents ConnectionEvent[]
+  playerRelations PlayerServerRelation[]
 
   @@index([templateId])
   @@index([deletedAt])
@@ -406,4 +409,127 @@ model MinecraftOperation {
   @@index([status])
   @@index([createdAt])
   @@map("minecraft_operations")
+}
+
+model ConnectionEvent {
+  id                 String          @id @default(uuid())
+  createdAt          DateTime        @default(now()) @map("created_at")
+  serverId           String?         @map("server_id")
+  server             MinecraftServer? @relation(fields: [serverId], references: [id], onDelete: SetNull)
+  nodeId             String?         @map("node_id")
+  node               Node?           @relation(fields: [nodeId], references: [id], onDelete: SetNull)
+  hostname           String?
+  sourceIp           String?         @map("source_ip")
+  sourceIpHash       String          @map("source_ip_hash")
+  countryCode        String?         @map("country_code")
+  region             String?
+  city               String?
+  asn                String?
+  isp                String?
+  usernameAttempted  String?         @map("username_attempted")
+  normalizedUsername String?         @map("normalized_username")
+  onlineMode         Boolean?        @map("online_mode")
+  protocolVersion    Int?            @map("protocol_version")
+  clientBrand        String?         @map("client_brand")
+  action             String
+  disconnectReason   String?         @map("disconnect_reason")
+  latencyMs          Int?            @map("latency_ms")
+  sessionId          String?         @map("session_id")
+  metadata           Json            @default("{}")
+
+  @@index([createdAt])
+  @@index([serverId, createdAt])
+  @@index([nodeId, createdAt])
+  @@index([sourceIpHash, createdAt])
+  @@index([countryCode, createdAt])
+  @@index([normalizedUsername, createdAt])
+  @@index([action, createdAt])
+  @@index([sessionId])
+  @@map("connection_events")
+}
+
+model PlayerProfile {
+  normalizedUsername String   @id @map("normalized_username")
+  displayUsername    String?  @map("display_username")
+  firstSeenAt        DateTime @default(now()) @map("first_seen_at")
+  lastSeenAt         DateTime @default(now()) @map("last_seen_at")
+  totalConnections   Int      @default(0) @map("total_connections")
+  totalServersVisited Int     @default(0) @map("total_servers_visited")
+  totalPlaySessions  Int      @default(0) @map("total_play_sessions")
+  riskScore          Int      @default(0) @map("risk_score")
+  trusted            Boolean  @default(false)
+  notes              String?
+  serverRelations    PlayerServerRelation[]
+
+  @@index([lastSeenAt])
+  @@index([riskScore])
+  @@map("player_profiles")
+}
+
+model PlayerServerRelation {
+  id                 String          @id @default(uuid())
+  username           String          @map("normalized_username")
+  player             PlayerProfile   @relation(fields: [username], references: [normalizedUsername], onDelete: Cascade)
+  serverId           String          @map("server_id")
+  server             MinecraftServer @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  joins              Int             @default(0)
+  lastSeenAt         DateTime        @default(now()) @map("last_seen_at")
+  totalPlayMinutes   Int             @default(0) @map("total_play_minutes")
+
+  @@unique([username, serverId])
+  @@index([serverId])
+  @@index([lastSeenAt])
+  @@map("player_server_relations")
+}
+
+model GuardIpProfile {
+  sourceIpHash       String   @id @map("source_ip_hash")
+  sourceIp           String?  @map("source_ip")
+  firstSeenAt        DateTime @default(now()) @map("first_seen_at")
+  lastSeenAt         DateTime @default(now()) @map("last_seen_at")
+  totalConnections   Int      @default(0) @map("total_connections")
+  totalServersTargeted Int    @default(0) @map("total_servers_targeted")
+  totalUsernames     Int      @default(0) @map("total_usernames")
+  riskScore          Int      @default(0) @map("risk_score")
+  trusted            Boolean  @default(false)
+  notes              String?
+
+  @@index([lastSeenAt])
+  @@index([riskScore])
+  @@map("guard_ip_profiles")
+}
+
+model GuardRule {
+  id                 String    @id @default(uuid())
+  targetScope        String    @map("target_scope")
+  targetValue        String?   @map("target_value")
+  targetHash         String?   @map("target_hash")
+  action             String
+  reason             String?
+  note               String?
+  rateLimitPerMinute Int?      @map("rate_limit_per_minute")
+  delayMs            Int?      @map("delay_ms")
+  expiresAt          DateTime? @map("expires_at")
+  createdByAdminId   String?   @map("created_by_admin_id")
+  createdByEmail     String?   @map("created_by_email")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  @@index([targetScope, targetValue])
+  @@index([targetScope, targetHash])
+  @@index([action])
+  @@index([expiresAt])
+  @@map("guard_rules")
+}
+
+model GuardSettings {
+  id                      String   @id
+  rawIpRetentionDays      Int      @default(30) @map("raw_ip_retention_days")
+  aggregateRetentionDays  Int      @default(365) @map("aggregate_retention_days")
+  hashIpsAfterRetention   Boolean  @default(true) @map("hash_ips_after_retention")
+  privacyMode             Boolean  @default(false) @map("privacy_mode")
+  createdAt               DateTime @default(now()) @map("created_at")
+  updatedAt               DateTime @updatedAt @map("updated_at")
+
+  @@map("guard_settings")
 }

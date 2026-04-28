@@ -44,6 +44,11 @@ export const env = {
   autoSleepProbeIntervalMs: Number(process.env.AUTO_SLEEP_PROBE_INTERVAL_MS ?? 20_000),
   autoSleepSampleFreshnessMs: Number(process.env.AUTO_SLEEP_SAMPLE_FRESHNESS_MS ?? 60_000),
   incidentMonitorTickMs: Number(process.env.INCIDENT_MONITOR_TICK_MS ?? 5_000),
+  guardRetentionSweepMs: Number(process.env.GUARD_RETENTION_SWEEP_MS ?? 6 * 60 * 60 * 1000),
+  guardIpHashSalt: process.env.GUARD_IP_HASH_SALT ?? process.env.SESSION_SECRET ?? "dev-phantom-guard-salt-change-me",
+  guardGeoLiteCityPath: process.env.GUARD_GEOLITE_CITY_PATH ?? "",
+  guardGeoLiteAsnPath: process.env.GUARD_GEOLITE_ASN_PATH ?? "",
+  guardGeoJsonPath: process.env.GUARD_GEO_JSON_PATH ?? "",
   hostingRootDomain: process.env.HOSTING_ROOT_DOMAIN ?? "nptnz.co.uk",
   dnsProvider: (process.env.DNS_PROVIDER ?? "noop").toLowerCase(),
   dnsRecordType: (process.env.DNS_RECORD_TYPE ?? "CNAME").toUpperCase(),
@@ -87,6 +92,7 @@ export function assertRuntimeConfig() {
     !Number.isFinite(env.autoSleepProbeIntervalMs) ||
     !Number.isFinite(env.autoSleepSampleFreshnessMs) ||
     !Number.isFinite(env.incidentMonitorTickMs) ||
+    !Number.isFinite(env.guardRetentionSweepMs) ||
     !Number.isFinite(env.workloadDeleteTimeoutMs) ||
     !Number.isFinite(env.workloadDeleteMonitorTickMs) ||
     env.nodeHeartbeatTimeoutMs <= 0 ||
@@ -101,11 +107,12 @@ export function assertRuntimeConfig() {
     env.autoSleepProbeIntervalMs <= 0 ||
     env.autoSleepSampleFreshnessMs <= 0 ||
     env.incidentMonitorTickMs <= 0 ||
+    env.guardRetentionSweepMs <= 0 ||
     env.workloadDeleteTimeoutMs <= 0 ||
     env.workloadDeleteMonitorTickMs <= 0
   ) {
     throw new Error(
-      "NODE_HEARTBEAT_TIMEOUT_MS, NODE_MONITOR_TICK_MS, WORKLOAD_DELETE_TIMEOUT_MS and WORKLOAD_DELETE_MONITOR_TICK_MS must be positive integers."
+      "NODE_HEARTBEAT_TIMEOUT_MS, NODE_MONITOR_TICK_MS, GUARD_RETENTION_SWEEP_MS, WORKLOAD_DELETE_TIMEOUT_MS and WORKLOAD_DELETE_MONITOR_TICK_MS must be positive integers."
     );
   }
 

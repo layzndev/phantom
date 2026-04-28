@@ -1,5 +1,7 @@
 import net from "node:net";
+import { randomUUID } from "node:crypto";
 import type { ProxyConfig } from "./config.js";
+import type { GuardTelemetryClient, GuardDecision, GuardAction } from "./guard-telemetry.js";
 import { log } from "./logger.js";
 import { metrics } from "./metrics.js";
 import { normalizeHostname, isValidHostnameShape } from "./hostname.js";
@@ -9,14 +11,16 @@ import {
   encodeStatusResponse,
   readNextPacket,
   tryParseHandshake,
+  tryParseLoginStart,
   type MinecraftHandshake
 } from "./protocol.js";
-import { buildProxyV2Header } from "./proxy-protocol.js";
+import { buildProxyV2Header, tryParseProxyProtocolHeader } from "./proxy-protocol.js";
 import type { PhantomRoutingClient, RoutingRecord, RoutingStatus } from "./routing.js";
 
 interface HandlerDeps {
   config: ProxyConfig;
   routing: PhantomRoutingClient;
+  guardTelemetry: GuardTelemetryClient;
 }
 
 const MOTD_UNKNOWN = "Unknown Phantom server";
@@ -31,13 +35,20 @@ const DISCONNECT_RESTARTING = "Server is restarting, try again shortly.";
 const DISCONNECT_MAINTENANCE = "Server temporarily unavailable.";
 
 export function handleConnection(socket: net.Socket, deps: HandlerDeps) {
-  const { config, routing } = deps;
-  const remoteAddress = socket.remoteAddress ?? "0.0.0.0";
-  const remotePort = socket.remotePort ?? 0;
+  const { config, routing, guardTelemetry } = deps;
+  let remoteAddress = socket.remoteAddress ?? "0.0.0.0";
+  let remotePort = socket.remotePort ?? 0;
 
   let buffer = Buffer.alloc(0);
   let phase: "await-handshake" | "post-handshake" | "proxying" | "closed" = "await-handshake";
   let handshake: MinecraftHandshake | null = null;
+  let proxyProtocolChecked = !config.acceptProxyProtocol;
+  let currentRoute: RoutingRecord | null = null;
+  let currentHostname: string | null = null;
+  let usernameAttempted: string | null = null;
+  let sessionId: string | null = null;
+  let sessionStartedAt: number | null = null;
+  let disconnectRecorded = false;
 
   const handshakeTimer = setTimeout(() => {
     if (phase === "await-handshake") {
@@ -49,6 +60,7 @@ export function handleConnection(socket: net.Socket, deps: HandlerDeps) {
 
   function destroy(reason: string) {
     if (phase === "closed") return;
+    recordDisconnect(reason);
     phase = "closed";
     clearTimeout(handshakeTimer);
     if (!socket.destroyed) {
@@ -73,6 +85,25 @@ export function handleConnection(socket: net.Socket, deps: HandlerDeps) {
     }
 
     buffer = Buffer.concat([buffer, chunk]);
+
+    if (!proxyProtocolChecked) {
+      const proxyHeader = tryParseProxyProtocolHeader(buffer);
+      if (proxyHeader.status === "pending") {
+        return;
+      }
+      proxyProtocolChecked = true;
+      if (proxyHeader.status === "invalid") {
+        log.warn("proxy_protocol.invalid", { remoteAddress, reason: proxyHeader.reason });
+        destroy(proxyHeader.reason);
+        return;
+      }
+      if (proxyHeader.status === "valid") {
+        if (proxyHeader.sourceAddress) remoteAddress = proxyHeader.sourceAddress;
+        if (proxyHeader.sourcePort) remotePort = proxyHeader.sourcePort;
+        buffer = buffer.subarray(proxyHeader.bytesConsumed);
+        log.info("proxy_protocol.accepted", { remoteAddress, remotePort });
+      }
+    }
 
     if (phase === "await-handshake") {
       const parsed = tryParseHandshake(buffer);
@@ -102,9 +133,20 @@ export function handleConnection(socket: net.Socket, deps: HandlerDeps) {
       nextState: hs.nextState,
       protocol: hs.protocolVersion
     });
+    currentHostname = normalized.hostname;
 
     if (!isValidHostnameShape(normalized.hostname)) {
+      recordEvent(hs.nextState === 1 ? "ping" : "login_attempt", {
+        hostname: normalized.hostname,
+        disconnectReason: "invalid_hostname",
+        metadata: { routeResult: "invalid_hostname" }
+      });
       respondUnavailable(hs.nextState, MOTD_UNKNOWN, DISCONNECT_UNKNOWN);
+      return;
+    }
+
+    const decision = await guardTelemetry.checkDecision(remoteAddress, normalized.hostname);
+    if (await applyGuardDecision(hs, normalized.hostname, decision)) {
       return;
     }
 
@@ -124,9 +166,15 @@ export function handleConnection(socket: net.Socket, deps: HandlerDeps) {
 
     if (!route) {
       log.info("routing.unknown", { hostname: normalized.hostname });
+      recordEvent(hs.nextState === 1 ? "ping" : "login_attempt", {
+        hostname: normalized.hostname,
+        disconnectReason: "unknown_server",
+        metadata: { routeResult: "unknown" }
+      });
       respondUnavailable(hs.nextState, MOTD_UNKNOWN, DISCONNECT_UNKNOWN);
       return;
     }
+    currentRoute = route;
 
     log.info("routing.resolved", {
       hostname: normalized.hostname,
@@ -141,6 +189,21 @@ export function handleConnection(socket: net.Socket, deps: HandlerDeps) {
 
   function routeByStatus(hs: MinecraftHandshake, route: RoutingRecord, hostname: string) {
     const status = route.status as RoutingStatus;
+    usernameAttempted = getUsernameAttempted(hs);
+    if (hs.nextState === 1) {
+      recordEvent("ping", {
+        route,
+        hostname,
+        metadata: { routeStatus: status }
+      });
+    } else {
+      recordEvent("login_attempt", {
+        route,
+        hostname,
+        usernameAttempted,
+        metadata: { routeStatus: status }
+      });
+    }
     log.info("route.dispatch", {
       hostname,
       status,
@@ -162,6 +225,13 @@ export function handleConnection(socket: net.Socket, deps: HandlerDeps) {
         if (hs.nextState === 2) {
           routing.invalidate(hostname);
           void routing.wake(route.serverId, hostname);
+          recordEvent("disconnect", {
+            route,
+            hostname,
+            usernameAttempted,
+            disconnectReason: "wake_triggered",
+            metadata: { routeStatus: status, wakeTriggered: true }
+          });
           respondLoginDisconnect(DISCONNECT_WAKING);
         } else {
           respondStatusOnly(MOTD_SLEEPING, route);
@@ -171,6 +241,13 @@ export function handleConnection(socket: net.Socket, deps: HandlerDeps) {
       case "waking":
       case "starting":
         if (hs.nextState === 2) {
+          recordEvent("disconnect", {
+            route,
+            hostname,
+            usernameAttempted,
+            disconnectReason: "server_waking",
+            metadata: { routeStatus: status }
+          });
           respondLoginDisconnect(DISCONNECT_WAKING);
         } else {
           respondStatusOnly(MOTD_WAKING, route);
@@ -179,6 +256,13 @@ export function handleConnection(socket: net.Socket, deps: HandlerDeps) {
 
       case "stopping":
         if (hs.nextState === 2) {
+          recordEvent("disconnect", {
+            route,
+            hostname,
+            usernameAttempted,
+            disconnectReason: "server_restarting",
+            metadata: { routeStatus: status }
+          });
           respondLoginDisconnect(DISCONNECT_RESTARTING);
         } else {
           respondStatusOnly(MOTD_RESTARTING, route);
@@ -187,6 +271,13 @@ export function handleConnection(socket: net.Socket, deps: HandlerDeps) {
 
       case "stopped":
         if (hs.nextState === 2) {
+          recordEvent("disconnect", {
+            route,
+            hostname,
+            usernameAttempted,
+            disconnectReason: "server_stopped",
+            metadata: { routeStatus: status }
+          });
           respondLoginDisconnect("Server is stopped. Start it from your panel.");
         } else {
           respondStatusOnly("Server is offline", route);
@@ -195,6 +286,13 @@ export function handleConnection(socket: net.Socket, deps: HandlerDeps) {
 
       case "crashed":
         if (hs.nextState === 2) {
+          recordEvent("disconnect", {
+            route,
+            hostname,
+            usernameAttempted,
+            disconnectReason: "server_crashed",
+            metadata: { routeStatus: status }
+          });
           respondLoginDisconnect("Server crashed. Restart from your panel.");
         } else {
           respondStatusOnly("Server crashed", route);
@@ -228,6 +326,9 @@ export function handleConnection(socket: net.Socket, deps: HandlerDeps) {
       clearTimeout(connectTimer);
       phase = "proxying";
       metrics.proxiedSessions += 1;
+      sessionId = randomUUID();
+      sessionStartedAt = Date.now();
+      usernameAttempted = getUsernameAttempted(hs);
 
       if (config.enableProxyProtocol) {
         const header = buildProxyV2Header(
@@ -259,6 +360,17 @@ export function handleConnection(socket: net.Socket, deps: HandlerDeps) {
         bytesReplayed: replayBytes,
         mode: "backend_relay"
       });
+      recordEvent("login_success", {
+        route,
+        hostname,
+        usernameAttempted,
+        sessionId,
+        metadata: {
+          routeStatus: route.status,
+          backendHost: route.host,
+          backendPort: route.port
+        }
+      });
     });
 
     backend.once("error", (error) => {
@@ -272,6 +384,17 @@ export function handleConnection(socket: net.Socket, deps: HandlerDeps) {
         error: error instanceof Error ? error.message : "unknown"
       });
       if (!connected) {
+        recordEvent("disconnect", {
+          route,
+          hostname,
+          usernameAttempted,
+          disconnectReason: "backend_connect_failed",
+          metadata: {
+            backendHost: route.host,
+            backendPort: route.port,
+            error: error instanceof Error ? error.message : "unknown"
+          }
+        });
         respondUnavailable(hs.nextState, MOTD_MAINTENANCE, DISCONNECT_MAINTENANCE);
       } else if (!socket.destroyed) {
         socket.destroy();
@@ -283,8 +406,125 @@ export function handleConnection(socket: net.Socket, deps: HandlerDeps) {
     };
     socket.once("close", teardownBackend);
     backend.once("close", () => {
+      recordDisconnect("backend-closed");
       if (!socket.destroyed) socket.destroy();
     });
+  }
+
+  async function applyGuardDecision(
+    hs: MinecraftHandshake,
+    hostname: string,
+    decision: GuardDecision
+  ) {
+    if (decision.action === "shadow_throttle") {
+      const delayMs = Math.max(250, Math.min(decision.delayMs ?? 1500, 30_000));
+      recordEvent(hs.nextState === 1 ? "ping" : "login_attempt", {
+        hostname,
+        usernameAttempted: getUsernameAttempted(hs),
+        metadata: {
+          guardDecision: "shadow_throttle",
+          delayMs,
+          riskScore: decision.riskScore ?? 0
+        }
+      });
+      await delay(delayMs);
+      return false;
+    }
+
+    if (decision.action === "rate_limited") {
+      const allowed = guardTelemetry.allowRateLimitedDecision(
+        remoteAddress,
+        hostname,
+        decision.rateLimitPerMinute ?? 10
+      );
+      if (allowed) {
+        return false;
+      }
+    }
+
+    if (decision.action === "blocked" || decision.action === "rate_limited") {
+      const action = decision.action === "blocked" ? "blocked" : "rate_limited";
+      recordEvent(action, {
+        hostname,
+        usernameAttempted: getUsernameAttempted(hs),
+        disconnectReason: decision.reason ?? action,
+        metadata: {
+          guardDecision: action,
+          riskScore: decision.riskScore ?? 0,
+          expiresAt: decision.expiresAt ?? null
+        }
+      });
+      respondUnavailable(
+        hs.nextState,
+        decision.action === "blocked" ? "Connection blocked" : "Rate limited",
+        decision.action === "blocked"
+          ? "Connection blocked by Phantom Guard."
+          : "Too many connections. Try again shortly."
+      );
+      return true;
+    }
+
+    return false;
+  }
+
+  function recordEvent(
+    action: GuardAction,
+    options: {
+      route?: RoutingRecord | null;
+      hostname?: string | null;
+      usernameAttempted?: string | null;
+      sessionId?: string | null;
+      disconnectReason?: string | null;
+      latencyMs?: number | null;
+      metadata?: Record<string, unknown>;
+    } = {}
+  ) {
+    const route = options.route ?? currentRoute;
+    guardTelemetry.record({
+      sourceIp: remoteAddress,
+      serverId: route?.serverId ?? null,
+      nodeId: route?.nodeId ?? null,
+      hostname: options.hostname ?? currentHostname,
+      usernameAttempted: options.usernameAttempted ?? usernameAttempted,
+      onlineMode: route?.onlineMode ?? null,
+      protocolVersion: handshake?.protocolVersion ?? null,
+      action,
+      disconnectReason: options.disconnectReason ?? null,
+      latencyMs: options.latencyMs ?? null,
+      sessionId: options.sessionId ?? sessionId,
+      metadata: {
+        ...options.metadata,
+        remotePort,
+        nextState: handshake?.nextState ?? null
+      }
+    });
+  }
+
+  function recordDisconnect(reason: string) {
+    if (disconnectRecorded || !sessionId || !sessionStartedAt) {
+      return;
+    }
+    disconnectRecorded = true;
+    recordEvent("disconnect", {
+      disconnectReason: reason,
+      sessionId,
+      usernameAttempted,
+      metadata: {
+        durationMs: Math.max(0, Date.now() - sessionStartedAt)
+      }
+    });
+  }
+
+  function getUsernameAttempted(hs: MinecraftHandshake) {
+    if (usernameAttempted) return usernameAttempted;
+    if (hs.nextState !== 2) return null;
+    const loginBuffer = buffer.subarray(hs.bytesConsumed);
+    usernameAttempted = tryParseLoginStart(loginBuffer);
+    return usernameAttempted;
+  }
+
+  function delay(ms: number) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   function respondLoginDisconnect(message: string) {
