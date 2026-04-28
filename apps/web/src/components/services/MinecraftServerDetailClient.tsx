@@ -17,8 +17,10 @@ import {
 import { MinecraftServiceConsole } from "./MinecraftServiceConsole";
 import { MinecraftFilesManager } from "./MinecraftFilesManager";
 import { MinecraftSettingsForm } from "./MinecraftSettingsForm";
+<<<<<<< HEAD
 import { MinecraftUptimeHistory } from "./MinecraftUptimeHistory";
 import type { MinecraftGlobalSettings, MinecraftServerWithWorkload } from "@/types/admin";
+import type { GuardServerSummary, MinecraftGlobalSettings, MinecraftServerWithWorkload } from "@/types/admin";
 
 const REFRESH_MS = 10_000;
 
@@ -32,17 +34,20 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
   const [optimisticRuntimeState, setOptimisticRuntimeState] = useState<MinecraftServerWithWorkload["server"]["runtimeState"] | null>(null);
   const [activeTab, setActiveTab] = useState<"console" | "files" | "settings" | "uptime">("console");
   const [globalSettings, setGlobalSettings] = useState<MinecraftGlobalSettings | null>(null);
+  const [guardSummary, setGuardSummary] = useState<GuardServerSummary | null>(null);
   const [liveRefreshAt, setLiveRefreshAt] = useState(0);
   const [copiedAddress, setCopiedAddress] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
-      const [next, globalResponse] = await Promise.all([
+      const [next, globalResponse, guardResponse] = await Promise.all([
         adminApi.minecraftServer(id),
-        adminApi.minecraftFreeTierSettings()
+        adminApi.minecraftFreeTierSettings(),
+        adminApi.guardServerSummary(id)
       ]);
       setEntry(next);
       setGlobalSettings(globalResponse.settings);
+      setGuardSummary(guardResponse.summary);
       setHostnameSlug(next.server.hostnameSlug);
       setHostnameError(null);
       setError(null);
@@ -260,6 +265,11 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
               <span className="rounded-full border border-white/10 bg-white/[0.035] px-3 py-1 text-[11px] text-slate-300">
                 {displayEntry.server.planTier}
               </span>
+              {guardSummary ? (
+                <span className={guardBadgeClass(guardSummary.threatLevel)}>
+                  Protected by Phantom Guard · {guardSummary.threatLevel}
+                </span>
+              ) : null}
             </div>
 
             <dl className="mt-6 grid gap-4 text-sm md:grid-cols-2 xl:grid-cols-4">
@@ -380,6 +390,16 @@ export function MinecraftServerDetailClient({ id }: { id: string }) {
 
         <DetailCard title="Network">
           <div className="grid min-w-0 gap-3 text-sm">
+            {guardSummary ? (
+              <div className="rounded-2xl border border-accent/15 bg-accent/[0.06] px-4 py-4">
+                <p className="text-sm font-semibold text-accent">Protected by Phantom Guard</p>
+                <div className="mt-3 grid gap-2 text-sm">
+                  <MetricRow label="Threat level" value={guardSummary.threatLevel} />
+                  <MetricRow label="Suspicious IPs" value={String(guardSummary.recentSuspiciousIps)} />
+                  <MetricRow label="Guard events 24h" value={String(guardSummary.eventsLast24h)} />
+                </div>
+              </div>
+            ) : null}
             <MetricRow
               label="Node"
               value={displayEntry.node?.name ?? "Unassigned"}
@@ -503,6 +523,16 @@ function StatePill({ label }: { label: string }) {
       {label}
     </span>
   );
+}
+
+function guardBadgeClass(level: GuardServerSummary["threatLevel"]) {
+  if (level === "High") {
+    return "rounded-full border border-red-300/25 bg-red-400/[0.08] px-3 py-1 text-[11px] font-semibold text-red-100";
+  }
+  if (level === "Medium") {
+    return "rounded-full border border-amber/25 bg-amber/[0.08] px-3 py-1 text-[11px] font-semibold text-amber";
+  }
+  return "rounded-full border border-accent/25 bg-accent/[0.08] px-3 py-1 text-[11px] font-semibold text-accent";
 }
 
 function formatRuntimeState(value: MinecraftServerWithWorkload["server"]["runtimeState"]) {

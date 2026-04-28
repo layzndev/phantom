@@ -94,6 +94,23 @@ export function readNextPacket(buffer: Buffer): ParsedPacket | null {
   }
 }
 
+export function tryParseLoginStart(buffer: Buffer): string | null {
+  try {
+    const packet = readNextPacket(buffer);
+    if (!packet) return null;
+
+    let offset = 0;
+    const packetId = readVarInt(packet.packet, offset);
+    offset += packetId.size;
+    if (packetId.value !== 0) return null;
+
+    const username = readString(packet.packet, offset, 64);
+    return username.value || null;
+  } catch {
+    return null;
+  }
+}
+
 export function encodeLoginDisconnect(message: string) {
   const json = JSON.stringify({ text: message });
   const payload = Buffer.concat([encodeVarInt(0), encodeString(json)]);

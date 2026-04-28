@@ -782,6 +782,7 @@ export interface RuntimeMinecraftRoutingResult {
   motd: string | null;
   version: string;
   planTier: PlanTier;
+  onlineMode: boolean;
 }
 
 export async function listRuntimeMinecraftOperations(rawToken: string) {
@@ -880,7 +881,8 @@ export async function getRuntimeMinecraftRouting(rawToken: string, hostname: str
     port: gamePort,
     motd: record.motd,
     version: record.minecraftVersion,
-    planTier: record.planTier as PlanTier
+    planTier: record.planTier as PlanTier,
+    onlineMode: record.onlineMode
   } satisfies RuntimeMinecraftRoutingResult;
 }
 

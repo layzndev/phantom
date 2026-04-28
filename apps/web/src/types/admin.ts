@@ -511,6 +511,142 @@ export interface DeleteMinecraftServerResult {
   finalized: boolean;
 }
 
+export type GuardAction =
+  | "ping"
+  | "login_attempt"
+  | "login_success"
+  | "disconnect"
+  | "invalid_session"
+  | "rate_limited"
+  | "blocked";
+
+export interface GuardConnectionEvent {
+  id: string;
+  createdAt: string;
+  serverId: string | null;
+  nodeId: string | null;
+  hostname: string | null;
+  sourceIp: string | null;
+  sourceIpHash: string;
+  countryCode: string | null;
+  region: string | null;
+  city: string | null;
+  asn: string | null;
+  isp: string | null;
+  usernameAttempted: string | null;
+  normalizedUsername: string | null;
+  onlineMode: boolean | null;
+  protocolVersion: number | null;
+  clientBrand: string | null;
+  action: GuardAction;
+  disconnectReason: string | null;
+  latencyMs: number | null;
+  sessionId: string | null;
+  metadata: Record<string, unknown>;
+  riskScore: number;
+  server: { id: string; name: string; hostname: string | null } | null;
+  node: { id: string; name: string } | null;
+}
+
+export interface GuardOverview {
+  cards: {
+    activeConnections: number;
+    uniqueIpsToday: number;
+    uniqueUsernamesToday: number;
+    topAttackedServer: { id: string; name: string; hostname: string | null; suspiciousEvents: number } | null;
+    invalidSessionRate: number;
+    suspectedBots: number;
+  };
+  charts: {
+    joinsPerHour: Array<{ hour: string; count: number }>;
+    failedLoginsPerHour: Array<{ hour: string; count: number }>;
+    topServers: Array<{ serverId: string; serverName: string; hostname: string | null; count: number }>;
+    topCountries: Array<{ countryCode: string; count: number }>;
+  };
+}
+
+export interface GuardPlayerProfile {
+  profile: {
+    normalizedUsername: string;
+    displayUsername: string | null;
+    firstSeenAt: string;
+    lastSeenAt: string;
+    totalConnections: number;
+    totalServersVisited: number;
+    totalPlaySessions: number;
+    riskScore: number;
+    trusted: boolean;
+    notes: string | null;
+  };
+  servers: Array<{
+    serverId: string;
+    serverName: string;
+    hostname: string | null;
+    joins: number;
+    lastSeenAt: string;
+    totalPlayMinutes: number;
+  }>;
+  countries: Array<{ countryCode: string; count: number }>;
+  recentIps: Array<{ sourceIp: string | null; sourceIpHash: string; countryCode: string | null; lastSeenAt: string }>;
+  suspiciousEvents: GuardConnectionEvent[];
+  timeline: GuardConnectionEvent[];
+}
+
+export interface GuardRule {
+  id: string;
+  targetScope: string;
+  targetValue: string | null;
+  targetHash: string | null;
+  action: string;
+  reason: string | null;
+  note: string | null;
+  rateLimitPerMinute: number | null;
+  delayMs: number | null;
+  expiresAt: string | null;
+  createdByAdminId: string | null;
+  createdByEmail: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface GuardIpProfile {
+  profile: {
+    sourceIp: string | null;
+    sourceIpHash: string;
+    firstSeenAt: string;
+    lastSeenAt: string;
+    totalConnections: number;
+    totalServersTargeted: number;
+    totalUsernames: number;
+    riskScore: number;
+    trusted: boolean;
+    notes: string | null;
+    blocked: boolean;
+  };
+  countries: Array<{ countryCode: string; count: number }>;
+  usernames: Array<{ username: string; count: number }>;
+  servers: Array<{ serverId: string; serverName: string; hostname: string | null; count: number }>;
+  requestsLastHour: number;
+  requestsLastDay: number;
+  activeRules: GuardRule[];
+  timeline: GuardConnectionEvent[];
+}
+
+export interface GuardServerSummary {
+  protected: boolean;
+  threatLevel: "Low" | "Medium" | "High";
+  recentSuspiciousIps: number;
+  eventsLast24h: number;
+  maxRiskScore: number;
+}
+
+export interface GuardSettings {
+  rawIpRetentionDays: 7 | 30 | 90;
+  aggregateRetentionDays: number;
+  hashIpsAfterRetention: boolean;
+  privacyMode: boolean;
+}
+
 export type MinecraftOperationKind =
   | "command"
   | "save"

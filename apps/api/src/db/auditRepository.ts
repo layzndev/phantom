@@ -1,4 +1,4 @@
-import type { AuditAction } from "../modules/audit/audit.types.js";
+import type { AuditAction, AuditTargetType } from "../modules/audit/audit.types.js";
 import type { DbJsonInput } from "./types.js";
 import { db } from "./client.js";
 
@@ -6,7 +6,7 @@ export function createAuditLogRecord(input: {
   action: AuditAction;
   actorId?: string;
   actorEmail: string;
-  targetType?: "node" | "admin" | "system";
+  targetType?: AuditTargetType;
   targetId?: string;
   metadata?: DbJsonInput;
   ipAddress?: string;

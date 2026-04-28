@@ -16,6 +16,8 @@ import {
   requireAllowedAdminIp,
   requireAllowedRuntimeIp
 } from "./middleware/ipAccessControl.js";
+import { guardController } from "./modules/guard/guard.controller.js";
+import { guardRuntimeController } from "./modules/guard/guard.runtime.controller.js";
 import { requestContext } from "./middleware/requestContext.js";
 import { adminSession, corsMiddleware, helmetMiddleware } from "./middleware/security.js";
 import { env } from "./config/env.js";
@@ -51,7 +53,18 @@ export function createApp() {
   app.use("/runtime/nodes", requireAllowedRuntimeIp, nodesRuntimeController);
   app.use("/runtime/workloads", requireAllowedRuntimeIp, workloadsRuntimeController);
   app.use("/runtime/minecraft", requireAllowedRuntimeIp, minecraftRuntimeController);
-
+  app.use("/auth", authController);
+  app.use("/nodes", nodesController);
+  app.use("/workloads", workloadsController);
+  app.use("/minecraft", minecraftController);
+  app.use("/incidents", incidentsController);
+  app.use("/notifications", notificationsController);
+  app.use("/guard", guardController);
+  app.use("/runtime/nodes", nodesRuntimeController);
+  app.use("/runtime/workloads", workloadsRuntimeController);
+  app.use("/runtime/minecraft", minecraftRuntimeController);
+  app.use("/runtime/guard", guardRuntimeController);
+  app.use("/audit-logs", auditController);
   app.use(notFoundHandler);
   app.use(errorHandler);
 

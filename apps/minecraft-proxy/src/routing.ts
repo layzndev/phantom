@@ -21,6 +21,7 @@ export interface RoutingRecord {
   motd: string | null;
   version: string;
   planTier: string;
+  onlineMode?: boolean;
 }
 
 export interface ResolveOptions {

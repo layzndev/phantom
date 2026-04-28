@@ -11,6 +11,14 @@ import type {
   DeleteMinecraftServerResult,
   DeleteWorkloadOptions,
   DeleteWorkloadResult,
+  GuardAction,
+  GuardConnectionEvent,
+  GuardIpProfile,
+  GuardOverview,
+  GuardPlayerProfile,
+  GuardRule,
+  GuardServerSummary,
+  GuardSettings,
   Incident,
   IncidentSummary,
   MinecraftServerWithWorkload,
@@ -326,6 +334,97 @@ export const adminApi = {
     apiRequest<DeleteMinecraftServerResult>(
       `/minecraft/servers/${encodeURIComponent(id)}?hardDeleteData=${options.hardDeleteData === true}`,
       { method: "DELETE" }
+    ),
+  guardOverview: (timeframe: "1h" | "24h" | "7d" | "30d" = "24h") =>
+    apiRequest<GuardOverview>(`/guard/overview?timeframe=${timeframe}`),
+  guardConnections: (options: {
+    username?: string;
+    ip?: string;
+    country?: string;
+    server?: string;
+    action?: GuardAction | "all";
+    timeframe?: "1h" | "24h" | "7d" | "30d" | "all";
+    limit?: number;
+  } = {}) =>
+    apiRequest<{ connections: GuardConnectionEvent[] }>(
+      `/guard/connections?${new URLSearchParams(
+        Object.entries({
+          username: options.username,
+          ip: options.ip,
+          country: options.country,
+          server: options.server,
+          action: options.action === "all" ? undefined : options.action,
+          timeframe: options.timeframe,
+          limit: options.limit !== undefined ? String(options.limit) : undefined
+        }).filter(([, value]) => typeof value === "string" && value.length > 0) as Array<
+          [string, string]
+        >
+      ).toString()}`
+    ),
+  guardPlayer: (username: string) =>
+    apiRequest<GuardPlayerProfile>(`/guard/players/${encodeURIComponent(username)}`),
+  guardIp: (ip: string) => apiRequest<GuardIpProfile>(`/guard/ip/${encodeURIComponent(ip)}`),
+  guardServerSummary: (serverId: string) =>
+    apiRequest<{ summary: GuardServerSummary }>(
+      `/guard/servers/${encodeURIComponent(serverId)}/summary`
+    ),
+  guardSettings: () => apiRequest<{ settings: GuardSettings }>("/guard/settings"),
+  updateGuardSettings: (payload: GuardSettings) =>
+    apiRequest<{ settings: GuardSettings }>("/guard/settings", {
+      method: "PATCH",
+      body: JSON.stringify(payload)
+    }),
+  blockGuardIp: (ip: string, payload: { expiresMinutes?: number; note?: string; reason?: string } = {}) =>
+    apiRequest<{ rule: GuardRule }>(`/guard/ip/${encodeURIComponent(ip)}/block`, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
+  rateLimitGuardIp: (
+    ip: string,
+    payload: { expiresMinutes?: number; note?: string; reason?: string; rateLimitPerMinute?: number } = {}
+  ) =>
+    apiRequest<{ rule: GuardRule }>(`/guard/ip/${encodeURIComponent(ip)}/rate-limit`, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
+  trustGuardIp: (ip: string, payload: { expiresMinutes?: number; note?: string } = {}) =>
+    apiRequest<{ rule: GuardRule }>(`/guard/ip/${encodeURIComponent(ip)}/trust`, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
+  clearGuardIpScore: (ip: string) =>
+    apiRequest<{ ok: true }>(`/guard/ip/${encodeURIComponent(ip)}/clear-score`, {
+      method: "POST"
+    }),
+  addGuardIpNote: (ip: string, note: string) =>
+    apiRequest(`/guard/ip/${encodeURIComponent(ip)}/note`, {
+      method: "POST",
+      body: JSON.stringify({ note })
+    }),
+  trustGuardPlayer: (username: string, payload: { expiresMinutes?: number; note?: string } = {}) =>
+    apiRequest<{ rule: GuardRule }>(`/guard/players/${encodeURIComponent(username)}/trust`, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
+  clearGuardPlayerScore: (username: string) =>
+    apiRequest<{ ok: true }>(`/guard/players/${encodeURIComponent(username)}/clear-score`, {
+      method: "POST"
+    }),
+  addGuardPlayerNote: (username: string, note: string) =>
+    apiRequest(`/guard/players/${encodeURIComponent(username)}/note`, {
+      method: "POST",
+      body: JSON.stringify({ note })
+    }),
+  shadowThrottleHostname: (
+    hostname: string,
+    payload: { expiresMinutes?: number; note?: string; reason?: string; delayMs?: number } = {}
+  ) =>
+    apiRequest<{ rule: GuardRule }>(
+      `/guard/hostnames/${encodeURIComponent(hostname)}/shadow-throttle`,
+      {
+        method: "POST",
+        body: JSON.stringify(payload)
+      }
     ),
   auditLogs: () => apiRequest<{ auditLogs: AuditLogEntry[] }>("/audit-logs")
 };

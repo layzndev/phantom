@@ -39,6 +39,36 @@ export function buildProxyV2Header(
   return buildHeader(TCP6, addresses);
 }
 
+export type ProxyProtocolParseResult =
+  | { status: "pending" }
+  | { status: "none" }
+  | { status: "invalid"; reason: string }
+  | {
+      status: "valid";
+      bytesConsumed: number;
+      sourceAddress: string | null;
+      sourcePort: number | null;
+    };
+
+export function tryParseProxyProtocolHeader(buffer: Buffer): ProxyProtocolParseResult {
+  if (buffer.length === 0) return { status: "pending" };
+
+  const asciiPrefix = buffer.subarray(0, Math.min(buffer.length, 6)).toString("ascii");
+  if ("PROXY ".startsWith(asciiPrefix) && buffer.length < 6) {
+    return { status: "pending" };
+  }
+
+  if (buffer.subarray(0, Math.min(buffer.length, SIG.length)).equals(SIG.subarray(0, Math.min(buffer.length, SIG.length)))) {
+    return parseProxyV2Header(buffer);
+  }
+
+  if (buffer.length >= 6 && buffer.subarray(0, 6).toString("ascii") === "PROXY ") {
+    return parseProxyV1Header(buffer);
+  }
+
+  return { status: "none" };
+}
+
 function buildHeader(protoByte: number, addresses: Buffer) {
   const header = Buffer.alloc(16 + addresses.length);
   SIG.copy(header, 0);
@@ -47,6 +77,76 @@ function buildHeader(protoByte: number, addresses: Buffer) {
   header.writeUInt16BE(addresses.length, 14);
   addresses.copy(header, 16);
   return header;
+}
+
+function parseProxyV1Header(buffer: Buffer): ProxyProtocolParseResult {
+  const end = buffer.indexOf("\r\n");
+  if (end === -1) {
+    return buffer.length > 108 ? { status: "invalid", reason: "proxy-v1-too-long" } : { status: "pending" };
+  }
+
+  const line = buffer.subarray(0, end).toString("ascii");
+  const parts = line.split(" ");
+  if (parts.length < 2 || parts[0] !== "PROXY") {
+    return { status: "invalid", reason: "proxy-v1-malformed" };
+  }
+  if (parts[1] === "UNKNOWN") {
+    return { status: "valid", bytesConsumed: end + 2, sourceAddress: null, sourcePort: null };
+  }
+  if ((parts[1] !== "TCP4" && parts[1] !== "TCP6") || parts.length < 6) {
+    return { status: "invalid", reason: "proxy-v1-unsupported" };
+  }
+
+  const sourceAddress = parts[2];
+  const sourcePort = Number.parseInt(parts[4], 10);
+  if ((!isIPv4(sourceAddress) && !isIPv6(sourceAddress)) || !Number.isInteger(sourcePort)) {
+    return { status: "invalid", reason: "proxy-v1-invalid-source" };
+  }
+
+  return { status: "valid", bytesConsumed: end + 2, sourceAddress, sourcePort };
+}
+
+function parseProxyV2Header(buffer: Buffer): ProxyProtocolParseResult {
+  if (buffer.length < 16) return { status: "pending" };
+  if (!buffer.subarray(0, SIG.length).equals(SIG)) {
+    return { status: "none" };
+  }
+
+  const command = buffer.readUInt8(12);
+  const family = buffer.readUInt8(13);
+  const length = buffer.readUInt16BE(14);
+  if (buffer.length < 16 + length) return { status: "pending" };
+
+  if ((command & 0xf0) !== 0x20) {
+    return { status: "invalid", reason: "proxy-v2-version" };
+  }
+  if ((command & 0x0f) === 0x00) {
+    return { status: "valid", bytesConsumed: 16 + length, sourceAddress: null, sourcePort: null };
+  }
+
+  const payload = buffer.subarray(16, 16 + length);
+  if (family === TCP4 && payload.length >= 12) {
+    return {
+      status: "valid",
+      bytesConsumed: 16 + length,
+      sourceAddress: [...payload.subarray(0, 4)].join("."),
+      sourcePort: payload.readUInt16BE(8)
+    };
+  }
+  if (family === TCP6 && payload.length >= 36) {
+    const words: string[] = [];
+    for (let offset = 0; offset < 16; offset += 2) {
+      words.push(payload.readUInt16BE(offset).toString(16));
+    }
+    return {
+      status: "valid",
+      bytesConsumed: 16 + length,
+      sourceAddress: words.join(":"),
+      sourcePort: payload.readUInt16BE(32)
+    };
+  }
+
+  return { status: "valid", bytesConsumed: 16 + length, sourceAddress: null, sourcePort: null };
 }
 
 function buildLocalHeader() {

@@ -24,7 +24,16 @@ export interface ProxyConfig {
   rateLimitBurst: number;
 
   enableProxyProtocol: boolean;
+  acceptProxyProtocol: boolean;
   metricsLogIntervalMs: number;
+
+  guardEnabled: boolean;
+  guardDecisionEnabled: boolean;
+  guardBatchSize: number;
+  guardFlushIntervalMs: number;
+  guardTelemetryTimeoutMs: number;
+  guardDecisionTimeoutMs: number;
+  guardDecisionCacheTtlMs: number;
 
   rootDomain: string;
   protocolVersion: number;
@@ -62,7 +71,16 @@ export function loadConfig(): ProxyConfig {
     rateLimitBurst: positiveInt(process.env.PROXY_RATE_LIMIT_BURST, 20),
 
     enableProxyProtocol: boolFlag(process.env.PROXY_ENABLE_PROXY_PROTOCOL, false),
+    acceptProxyProtocol: boolFlag(process.env.PROXY_ACCEPT_PROXY_PROTOCOL, false),
     metricsLogIntervalMs: positiveInt(process.env.PROXY_METRICS_LOG_INTERVAL_MS, 60_000),
+
+    guardEnabled: boolFlag(process.env.PHANTOM_GUARD_ENABLED, true),
+    guardDecisionEnabled: boolFlag(process.env.PHANTOM_GUARD_DECISION_ENABLED, true),
+    guardBatchSize: positiveInt(process.env.PHANTOM_GUARD_BATCH_SIZE, 100),
+    guardFlushIntervalMs: positiveInt(process.env.PHANTOM_GUARD_FLUSH_INTERVAL_MS, 1_000),
+    guardTelemetryTimeoutMs: positiveInt(process.env.PHANTOM_GUARD_TELEMETRY_TIMEOUT_MS, 1_000),
+    guardDecisionTimeoutMs: positiveInt(process.env.PHANTOM_GUARD_DECISION_TIMEOUT_MS, 300),
+    guardDecisionCacheTtlMs: positiveInt(process.env.PHANTOM_GUARD_DECISION_CACHE_TTL_MS, 2_000),
 
     rootDomain: (process.env.PROXY_ROOT_DOMAIN ?? "nptnz.co.uk").toLowerCase(),
     protocolVersion: positiveInt(process.env.PROXY_PROTOCOL_VERSION, 767),

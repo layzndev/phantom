@@ -56,6 +56,17 @@ export type AuditAction =
   | "minecraft.server.file.delete"
   | "minecraft.server.file.archive"
   | "minecraft.server.file.extract"
+  | "guard.settings.update"
+  | "guard.retention.run"
+  | "guard.ip.block"
+  | "guard.ip.rate_limit"
+  | "guard.ip.trust"
+  | "guard.ip.clear_score"
+  | "guard.ip.note"
+  | "guard.player.trust"
+  | "guard.player.clear_score"
+  | "guard.player.note"
+  | "guard.hostname.shadow_throttle"
   | "system.critical_error";
 
 export interface AuditLogEntry {
@@ -63,10 +74,12 @@ export interface AuditLogEntry {
   action: AuditAction;
   actorId?: string;
   actorEmail: string;
-  targetType?: "node" | "admin" | "system";
+  targetType?: AuditTargetType;
   targetId?: string;
   metadata?: Record<string, unknown>;
   ip?: string;
   userAgent?: string;
   createdAt: string;
 }
+
+export type AuditTargetType = "node" | "admin" | "system" | "ip" | "player" | "guard";

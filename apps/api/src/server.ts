@@ -18,6 +18,10 @@ import {
   type IncidentMonitorHandle
 } from "./modules/incidents/incidents.monitor.js";
 import {
+  startGuardRetentionMonitor,
+  type GuardRetentionMonitorHandle
+} from "./modules/guard/guard.service.js";
+import {
   startNodeRuntimeMonitor,
   type NodeRuntimeMonitorHandle
 } from "./modules/nodes/nodes.runtime.monitor.js";
@@ -78,6 +82,7 @@ const minecraftAutoSleepMonitor: MinecraftAutoSleepMonitorHandle | null = env.au
   ? startMinecraftAutoSleepMonitor()
   : null;
 const incidentMonitor: IncidentMonitorHandle = startIncidentMonitor();
+const guardRetentionMonitor: GuardRetentionMonitorHandle = startGuardRetentionMonitor();
 
 let shuttingDown = false;
 
@@ -119,6 +124,12 @@ async function shutdown(signal: string, exitCode = 0) {
     await incidentMonitor.stop();
   } catch (err) {
     console.error("[server] error while stopping incident monitor", err);
+  }
+
+  try {
+    await guardRetentionMonitor.stop();
+  } catch (err) {
+    console.error("[server] error while stopping guard retention monitor", err);
   }
 
   try {
