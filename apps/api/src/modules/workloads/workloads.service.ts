@@ -64,7 +64,10 @@ export async function getWorkload(id: string) {
   return toCompanyWorkload(record);
 }
 
-export async function createWorkload(input: CreateWorkloadInput): Promise<CreateWorkloadResult> {
+export async function createWorkload(
+  input: CreateWorkloadInput,
+  context: { tenantId?: string | null } = {}
+): Promise<CreateWorkloadResult> {
   const configJson = (input.config ?? {}) as Prisma.InputJsonValue;
   const ports = input.ports ?? [];
 
@@ -77,7 +80,8 @@ export async function createWorkload(input: CreateWorkloadInput): Promise<Create
     requestedDiskGb: input.requestedDiskGb,
     requiredPool: input.requiredPool,
     ports,
-    config: configJson
+    config: configJson,
+    tenantId: context.tenantId ?? null
   });
 
   if (placement.placed) {
@@ -102,7 +106,8 @@ export async function createWorkload(input: CreateWorkloadInput): Promise<Create
     requestedRamMb: input.requestedRamMb,
     requestedDiskGb: input.requestedDiskGb,
     config: configJson,
-    ports: []
+    ports: [],
+    tenantId: context.tenantId ?? null
   });
 
   return {

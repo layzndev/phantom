@@ -55,6 +55,39 @@ export const platformTokenParamsSchema = z.object({
   id: z.string().uuid()
 });
 
+export const platformTenantServerParamsSchema = z.object({
+  id: z.string().uuid(),
+  serverId: z.string().uuid()
+});
+
+export const provisionTenantServerSchema = z
+  .object({
+    name: z.string().trim().min(2).max(60),
+    templateId: z.string().min(1).max(100).optional(),
+    version: z.string().max(20).optional(),
+    motd: z.string().max(120).optional(),
+    difficulty: z.enum(["peaceful", "easy", "normal", "hard"]).optional(),
+    gameMode: z.enum(["survival", "creative", "adventure", "spectator"]).optional(),
+    maxPlayers: z.coerce.number().int().min(1).max(500).optional(),
+    hostnameSlug: z
+      .string()
+      .trim()
+      .toLowerCase()
+      .min(1)
+      .max(32)
+      .regex(/^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/)
+      .optional(),
+    cpu: z.coerce.number().positive().max(32).optional(),
+    ramMb: z.coerce.number().int().positive().max(65_536).optional(),
+    diskGb: z.coerce.number().int().positive().max(512).optional()
+  })
+  .strict();
+
+export const deleteTenantServerQuerySchema = z.object({
+  hardDeleteData: z.coerce.boolean().optional().default(false)
+});
+
 export type CreateTenantInputSchema = z.infer<typeof createTenantSchema>;
 export type UpdateTenantInputSchema = z.infer<typeof updateTenantSchema>;
 export type IssuePlatformTokenInputSchema = z.infer<typeof issuePlatformTokenSchema>;
+export type ProvisionTenantServerInputSchema = z.infer<typeof provisionTenantServerSchema>;

@@ -18,6 +18,7 @@ export interface CreateWorkloadRecordInput {
   requestedDiskGb: number;
   config: Prisma.InputJsonValue;
   ports: WorkloadPortAllocation[];
+  tenantId?: string | null;
 }
 
 export interface WorkloadFilter {
@@ -60,6 +61,7 @@ export function createWorkloadRecord(input: CreateWorkloadRecordInput) {
       type: input.type,
       image: input.image,
       nodeId: input.nodeId,
+      tenantId: input.tenantId ?? null,
       status: input.status,
       requestedCpu: input.requestedCpu,
       requestedRamMb: input.requestedRamMb,

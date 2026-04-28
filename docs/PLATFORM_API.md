@@ -126,9 +126,16 @@ by the tenant keep their `tenant_id` foreign key — they are NOT auto-stopped.
 The Hosting backend is expected to terminate them through the standard
 workload mutations before calling delete.
 
+## Servers (scoped per tenant)
+
+All server endpoints live under `/platform/tenants/:tenantId/servers/...`.
+Phantom validates that `serverId` belongs to `tenantId` on every call —
+mismatched ids return `404 SERVER_NOT_FOUND` (same shape as a missing
+server, so we don't leak ownership across tenants).
+
 ### `GET /platform/tenants/:id/servers`
 
-List Minecraft servers owned by the tenant (filtered by `minecraft_servers.tenant_id`).
+List Minecraft servers owned by the tenant.
 
 ```json
 {
@@ -145,17 +152,96 @@ List Minecraft servers owned by the tenant (filtered by `minecraft_servers.tenan
 }
 ```
 
-> Provisioning (`POST /platform/tenants/:id/servers`) and lifecycle
-> (`start`, `stop`, `restart`, `delete`) are coming in PR 2.
+### `POST /platform/tenants/:id/servers`
 
-## Roadmap (PR 2+)
+Provision a Minecraft server. Defaults are inherited from the resolved
+template (`vanilla-1.21` if `templateId` is omitted). Quota is enforced
+**before** the workload is placed: any check that fails returns
+`409 QUOTA_EXCEEDED` with the violating field.
 
-- `POST /platform/tenants/:id/servers` — provision an MC server within the
-  tenant's quota.
-- `POST /platform/servers/:id/start|stop|restart` — lifecycle.
-- `POST /platform/servers/:id/console-url` — short-lived signed URL for the
-  Hosting frontend to open the WebSocket console without exposing the
-  bearer.
+```http
+POST /platform/tenants/<tenant-uuid>/servers
+Content-Type: application/json
+Authorization: Bearer phs_live_…
+
+{
+  "name": "Anthony's main server",
+  "templateId": "vanilla-1.21",
+  "version": "1.21.4",
+  "motd": "Welcome to Anthony's server",
+  "difficulty": "normal",
+  "gameMode": "survival",
+  "maxPlayers": 20,
+  "hostnameSlug": "anthony",
+  "ramMb": 2048,
+  "cpu": 1,
+  "diskGb": 5
+}
+```
+
+| Field          | Required | Notes                                             |
+| -------------- | -------- | ------------------------------------------------- |
+| `name`         | yes      | 2-60 chars                                        |
+| `templateId`   | no       | defaults to `vanilla-1.21`                        |
+| `version`      | no       | must be supported by the template                 |
+| `motd`         | no       |                                                   |
+| `difficulty`   | no       | `peaceful` / `easy` / `normal` (default) / `hard` |
+| `gameMode`     | no       | `survival` (default) / `creative` / etc.          |
+| `maxPlayers`   | no       | 1-500, default 20                                 |
+| `hostnameSlug` | no       | Custom subdomain prefix; otherwise auto-generated |
+| `cpu`          | no       | vCPUs; default = template default                 |
+| `ramMb`        | no       | MB; default = template default                    |
+| `diskGb`       | no       | GB; default = template default                    |
+
+**Response 201**: full `MinecraftServerWithWorkload` shape (server +
+workload + node + hostname).
+
+**Quota error 409**:
+
+```json
+{
+  "error": "Tenant quota exceeded.",
+  "code": "QUOTA_EXCEEDED",
+  "details": {
+    "field": "maxRamMb",
+    "current": 1024,
+    "requested": 2048,
+    "limit": 2048,
+    "wouldBe": 3072
+  }
+}
+```
+
+### `GET /platform/tenants/:id/servers/:serverId`
+
+Detail view, scoped to the tenant.
+
+### `POST /platform/tenants/:id/servers/:serverId/start`
+### `POST /platform/tenants/:id/servers/:serverId/stop`
+### `POST /platform/tenants/:id/servers/:serverId/restart`
+
+Lifecycle. Returns `{ server, workload }` reflecting the new desired
+state. Note that runtime state catches up asynchronously — poll
+`GET /tenants/:id/servers/:serverId` (or wait for a webhook in PR 3) to
+see when the server is actually `running` (the API publishes
+`readyAt` on the server detail when MC reports `Done (X)!`).
+
+### `DELETE /platform/tenants/:id/servers/:serverId`
+
+Soft-delete. Pass `?hardDeleteData=true` to wipe the workload data
+volume too (irreversible).
+
+Returns:
+
+- `200 { finalized: true, ... }` if the workload was removed synchronously.
+- `202 { finalized: false, ... }` if the deletion is in progress on the
+  agent.
+
+## Roadmap
+
+- `POST /platform/tenants/:id/servers/:serverId/console-url` — short-lived
+  signed URL for the Hosting frontend to open the WebSocket console
+  without exposing the bearer.
 - Outbound webhooks (`server.ready`, `server.stopped`, `server.crashed`,
   `tenant.over_quota`) signed with HMAC.
 - Scope enforcement (`tenants.read`, `tenants.write`, `servers.write`).

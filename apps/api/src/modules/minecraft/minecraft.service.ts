@@ -278,7 +278,8 @@ export async function reconcileReservedMinecraftProxyPorts() {
 
 export async function createMinecraftServer(
   input: CreateMinecraftServerInput,
-  actor?: { email?: string | null }
+  actor?: { email?: string | null },
+  context: { tenantId?: string | null } = {}
 ): Promise<CreateMinecraftServerResult> {
   const template = await findMinecraftTemplate(input.templateId);
   if (!template) {
@@ -347,17 +348,20 @@ export async function createMinecraftServer(
     }
   };
 
-  const placement = await createWorkload({
-    name: input.name,
-    type: "minecraft",
-    image: resolveMinecraftImageForVersion(version),
-    requestedCpu: cpu,
-    requestedRamMb: ramMb,
-    requestedDiskGb: diskGb,
-    requiredPool,
-    ports: [{ internalPort: MINECRAFT_INTERNAL_GAME_PORT, protocol: "tcp" }],
-    config
-  });
+  const placement = await createWorkload(
+    {
+      name: input.name,
+      type: "minecraft",
+      image: resolveMinecraftImageForVersion(version),
+      requestedCpu: cpu,
+      requestedRamMb: ramMb,
+      requestedDiskGb: diskGb,
+      requiredPool,
+      ports: [{ internalPort: MINECRAFT_INTERNAL_GAME_PORT, protocol: "tcp" }],
+      config
+    },
+    { tenantId: context.tenantId ?? null }
+  );
 
   try {
     const record = await createMinecraftServerRecord({
@@ -389,7 +393,8 @@ export async function createMinecraftServer(
         onlineMode,
         whitelistEnabled: false
       }) as Prisma.InputJsonValue,
-      rconPassword
+      rconPassword,
+      tenantId: context.tenantId ?? null
     });
 
     return {

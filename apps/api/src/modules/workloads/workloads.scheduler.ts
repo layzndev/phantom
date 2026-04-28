@@ -16,6 +16,7 @@ export interface PlacementRequest {
   requiredPool: NodePool;
   ports: WorkloadPortSpec[];
   config: Prisma.InputJsonValue;
+  tenantId?: string | null;
 }
 
 export interface SchedulerDiagnostics {
@@ -222,6 +223,7 @@ export async function placeWorkload(request: PlacementRequest): Promise<Placemen
           type: request.type,
           image: request.image,
           nodeId: candidate.id,
+          tenantId: request.tenantId ?? null,
           status: initialStatus,
           requestedCpu: request.requestedCpu,
           requestedRamMb: request.requestedRamMb,

@@ -27,6 +27,7 @@ export interface CreateMinecraftServerRecordInput {
   autoSleepAction?: string;
   onlineMode?: boolean;
   whitelistEnabled?: boolean;
+  tenantId?: string | null;
 }
 
 export interface MinecraftServerFilter {
@@ -61,7 +62,8 @@ export function createMinecraftServerRecord(input: CreateMinecraftServerRecordIn
       onlineMode: input.onlineMode ?? true,
       whitelistEnabled: input.whitelistEnabled ?? false,
       serverProperties: input.serverProperties,
-      rconPassword: input.rconPassword
+      rconPassword: input.rconPassword,
+      tenantId: input.tenantId ?? null
     }
   });
 }

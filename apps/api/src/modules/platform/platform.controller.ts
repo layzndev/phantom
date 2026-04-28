@@ -14,8 +14,19 @@ import {
   updatePlatformTenant
 } from "./platform.service.js";
 import {
+  deletePlatformTenantServer,
+  getPlatformTenantServer,
+  provisionPlatformTenantServer,
+  restartPlatformTenantServer,
+  startPlatformTenantServer,
+  stopPlatformTenantServer
+} from "./platform.servers.service.js";
+import {
   createTenantSchema,
+  deleteTenantServerQuerySchema,
   platformTenantParamsSchema,
+  platformTenantServerParamsSchema,
+  provisionTenantServerSchema,
   updateTenantSchema
 } from "./platform.schema.js";
 
@@ -90,13 +101,105 @@ platformController.get(
   })
 );
 
+platformController.post(
+  "/tenants/:id/servers",
+  validateParams(platformTenantParamsSchema),
+  validateBody(provisionTenantServerSchema),
+  asyncHandler(async (req, res) => {
+    const detail = await provisionPlatformTenantServer(req.params.id, req.body);
+    await audit(req, "platform.server.create", {
+      targetId: detail.server.id,
+      metadata: {
+        tenantId: req.params.id,
+        slug: detail.server.slug,
+        templateId: detail.server.templateId,
+        version: detail.server.minecraftVersion,
+        ramMb: detail.workload.requestedRamMb,
+        cpu: detail.workload.requestedCpu,
+        diskGb: detail.workload.requestedDiskGb
+      }
+    });
+    res.status(201).json({ server: detail });
+  })
+);
+
+platformController.get(
+  "/tenants/:id/servers/:serverId",
+  validateParams(platformTenantServerParamsSchema),
+  asyncHandler(async (req, res) => {
+    const detail = await getPlatformTenantServer(req.params.id, req.params.serverId);
+    res.json({ server: detail });
+  })
+);
+
+platformController.post(
+  "/tenants/:id/servers/:serverId/start",
+  validateParams(platformTenantServerParamsSchema),
+  asyncHandler(async (req, res) => {
+    const result = await startPlatformTenantServer(req.params.id, req.params.serverId);
+    await audit(req, "platform.server.start", {
+      targetId: req.params.serverId,
+      metadata: { tenantId: req.params.id }
+    });
+    res.json(result);
+  })
+);
+
+platformController.post(
+  "/tenants/:id/servers/:serverId/stop",
+  validateParams(platformTenantServerParamsSchema),
+  asyncHandler(async (req, res) => {
+    const result = await stopPlatformTenantServer(req.params.id, req.params.serverId);
+    await audit(req, "platform.server.stop", {
+      targetId: req.params.serverId,
+      metadata: { tenantId: req.params.id }
+    });
+    res.json(result);
+  })
+);
+
+platformController.post(
+  "/tenants/:id/servers/:serverId/restart",
+  validateParams(platformTenantServerParamsSchema),
+  asyncHandler(async (req, res) => {
+    const result = await restartPlatformTenantServer(req.params.id, req.params.serverId);
+    await audit(req, "platform.server.restart", {
+      targetId: req.params.serverId,
+      metadata: { tenantId: req.params.id }
+    });
+    res.json(result);
+  })
+);
+
+platformController.delete(
+  "/tenants/:id/servers/:serverId",
+  validateParams(platformTenantServerParamsSchema),
+  asyncHandler(async (req, res) => {
+    const parsed = deleteTenantServerQuerySchema.safeParse(req.query);
+    const hardDeleteData = parsed.success ? parsed.data.hardDeleteData : false;
+    const result = await deletePlatformTenantServer(req.params.id, req.params.serverId, {
+      hardDeleteData
+    });
+    await audit(req, "platform.server.delete", {
+      targetId: req.params.serverId,
+      metadata: { tenantId: req.params.id, hardDeleteData, finalized: result.finalized }
+    });
+    res.status(result.finalized ? 200 : 202).json(result);
+  })
+);
+
 async function audit(
   req: import("express").Request,
   action:
     | "platform.tenants.list"
     | "platform.tenant.create"
     | "platform.tenant.update"
-    | "platform.tenant.delete",
+    | "platform.tenant.delete"
+    | "platform.server.create"
+    | "platform.server.start"
+    | "platform.server.stop"
+    | "platform.server.restart"
+    | "platform.server.delete",
   options: { targetId?: string; metadata?: Record<string, unknown> } = {}
 ) {
   await createAuditLog({
