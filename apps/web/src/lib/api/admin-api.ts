@@ -69,6 +69,11 @@ export const adminApi = {
     apiRequest<{ admin: AdminUser }>("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
   logout: () => apiRequest<void>("/auth/logout", { method: "POST" }),
   me: () => apiRequest<{ admin: AdminUser }>("/auth/me"),
+  updateAdminIpAllowlist: (entries: string[]) =>
+    apiRequest<{ admin: { id: string; ipAllowlist: string[] } }>("/auth/me/ip-allowlist", {
+      method: "PUT",
+      body: JSON.stringify({ entries })
+    }),
   incidents: (options?: {
     status?: string;
     severity?: string;

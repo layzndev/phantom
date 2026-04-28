@@ -12,6 +12,10 @@ import { notificationsController } from "./modules/notifications/notifications.c
 import { workloadsController } from "./modules/workloads/workloads.controller.js";
 import { workloadsRuntimeController } from "./modules/workloads/workloads.runtime.controller.js";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
+import {
+  requireAllowedAdminIp,
+  requireAllowedRuntimeIp
+} from "./middleware/ipAccessControl.js";
 import { requestContext } from "./middleware/requestContext.js";
 import { adminSession, corsMiddleware, helmetMiddleware } from "./middleware/security.js";
 import { env } from "./config/env.js";
@@ -33,16 +37,20 @@ export function createApp() {
     res.json({ ok: true, service: "phantom-api" });
   });
 
-  app.use("/auth", authController);
-  app.use("/nodes", nodesController);
-  app.use("/workloads", workloadsController);
-  app.use("/minecraft", minecraftController);
-  app.use("/incidents", incidentsController);
-  app.use("/notifications", notificationsController);
-  app.use("/runtime/nodes", nodesRuntimeController);
-  app.use("/runtime/workloads", workloadsRuntimeController);
-  app.use("/runtime/minecraft", minecraftRuntimeController);
-  app.use("/audit-logs", auditController);
+  // Admin control plane — locked down to ADMIN_IP_ALLOWLIST (when set).
+  app.use("/auth", requireAllowedAdminIp, authController);
+  app.use("/nodes", requireAllowedAdminIp, nodesController);
+  app.use("/workloads", requireAllowedAdminIp, workloadsController);
+  app.use("/minecraft", requireAllowedAdminIp, minecraftController);
+  app.use("/incidents", requireAllowedAdminIp, incidentsController);
+  app.use("/notifications", requireAllowedAdminIp, notificationsController);
+  app.use("/audit-logs", requireAllowedAdminIp, auditController);
+
+  // Runtime / agent channel — locked down to RUNTIME_IP_ALLOWLIST (when set)
+  // in addition to the per-request bearer token check inside each route.
+  app.use("/runtime/nodes", requireAllowedRuntimeIp, nodesRuntimeController);
+  app.use("/runtime/workloads", requireAllowedRuntimeIp, workloadsRuntimeController);
+  app.use("/runtime/minecraft", requireAllowedRuntimeIp, minecraftRuntimeController);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

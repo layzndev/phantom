@@ -2,7 +2,16 @@ import bcrypt from "bcryptjs";
 import { env } from "../../config/env.js";
 import type { AdminWithRoleRecord } from "../../db/types.js";
 import type { AdminUser, SafeAdminUser } from "./admins.types.js";
-import { createAdmin, ensureAdminRole, findAdminByEmailRecord, findAdminByIdRecord, markAdminLogin, recordFailedAdminLogin, resetAdminLoginFailures } from "./admins.repository.js";
+import {
+  createAdmin,
+  ensureAdminRole,
+  findAdminByEmailRecord,
+  findAdminByIdRecord,
+  markAdminLogin,
+  recordFailedAdminLogin,
+  resetAdminLoginFailures,
+  updateAdminIpAllowlist
+} from "./admins.repository.js";
 
 export async function seedBootstrapAdmin() {
   const superadminRole = await ensureAdminRole("superadmin", "Full access to the Phantom control plane.");
@@ -37,8 +46,14 @@ export function toSafeAdmin(admin: AdminUser): SafeAdminUser {
     email: admin.email,
     displayName: admin.displayName,
     role: admin.role,
-    twoFactorEnabled: admin.twoFactorEnabled
+    twoFactorEnabled: admin.twoFactorEnabled,
+    ipAllowlist: admin.ipAllowlist
   };
+}
+
+export async function setAdminIpAllowlist(adminId: string, allowlist: string[]) {
+  const updated = await updateAdminIpAllowlist(adminId, allowlist);
+  return toAdminUser(updated);
 }
 
 export async function registerSuccessfulLogin(adminId: string) {

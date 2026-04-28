@@ -5,6 +5,7 @@ import {
   markAdminLoginRecord,
   recordFailedAdminLoginRecord,
   resetAdminLoginFailuresRecord,
+  updateAdminIpAllowlistRecord,
   upsertAdminRole
 } from "../../db/adminRepository.js";
 
@@ -40,4 +41,8 @@ export function recordFailedAdminLogin(adminId: string) {
 
 export function resetAdminLoginFailures(adminId: string) {
   return resetAdminLoginFailuresRecord(adminId);
+}
+
+export function updateAdminIpAllowlist(adminId: string, allowlist: string[]) {
+  return updateAdminIpAllowlistRecord(adminId, allowlist);
 }

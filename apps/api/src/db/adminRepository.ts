@@ -71,3 +71,11 @@ export function resetAdminLoginFailuresRecord(adminId: string) {
     data: { failedLoginAttempts: 0, lockedUntil: null }
   });
 }
+
+export function updateAdminIpAllowlistRecord(adminId: string, allowlist: string[]) {
+  return db.admin.update({
+    where: { id: adminId },
+    data: { ipAllowlist: allowlist },
+    include: { role: true }
+  });
+}

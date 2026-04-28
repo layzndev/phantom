@@ -20,4 +20,5 @@ export interface SafeAdminUser {
   displayName: string;
   role: AdminRole;
   twoFactorEnabled: boolean;
+  ipAllowlist: string[];
 }

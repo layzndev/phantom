@@ -1,7 +1,12 @@
 export type AuditAction =
   | "admin.login"
   | "admin.login_failed"
+  | "admin.login_ip_locked"
   | "admin.logout"
+  | "admin.session_revoked"
+  | "admin.ip_blocked"
+  | "admin.ip_allowlist.update"
+  | "runtime.ip_blocked"
   | "node.list"
   | "node.create"
   | "node.detail"

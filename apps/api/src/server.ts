@@ -31,6 +31,9 @@ import {
 } from "./modules/workloads/workloads.queued-start.monitor.js";
 import { adminSession } from "./middleware/security.js";
 import { acceptWebSocket } from "./lib/websocket.js";
+import { normalizeIp, parseIpAllowlist } from "./lib/ipAccess.js";
+
+const wsAdminAllowlist = parseIpAllowlist(env.adminIpAllowlist);
 
 assertRuntimeConfig();
 
@@ -162,6 +165,27 @@ async function handleMinecraftConsoleUpgrade(
     });
     rejectUpgrade(socket, 400, "Bad Request");
     return;
+  }
+
+  // Apply the same admin IP allowlist used for HTTP routes (Express
+  // middleware doesn't run on the upgrade path).
+  if (!wsAdminAllowlist.isEmpty) {
+    const ip = normalizeIp(extractWsClientIp(req, socket));
+    if (!ip || !wsAdminAllowlist.matches(ip)) {
+      console.warn("[server] websocket upgrade rejected", {
+        reason: "ip_not_in_admin_allowlist",
+        path: pathname,
+        ip: ip ?? "unknown"
+      });
+      void createAuditLog({
+        action: "admin.ip_blocked",
+        actorEmail: "anonymous",
+        targetType: "system",
+        metadata: { ip: ip ?? "unknown", path: pathname, channel: "websocket" }
+      }).catch(() => undefined);
+      rejectUpgrade(socket, 403, "Forbidden");
+      return;
+    }
   }
 
   await loadAdminSession(req);
@@ -321,6 +345,20 @@ function isWebSocketUpgradeRequest(req: IncomingMessage) {
   const upgrade = typeof req.headers.upgrade === "string" ? req.headers.upgrade.toLowerCase() : "";
   const connection = typeof req.headers.connection === "string" ? req.headers.connection.toLowerCase() : "";
   return upgrade === "websocket" && connection.includes("upgrade");
+}
+
+function extractWsClientIp(req: IncomingMessage, socket: import("node:stream").Duplex) {
+  // Honor X-Forwarded-For only when the deployment is configured to trust
+  // the proxy in front (matches Express's `trust proxy` behavior).
+  if (env.trustProxy) {
+    const forwarded = req.headers["x-forwarded-for"];
+    if (typeof forwarded === "string" && forwarded.length > 0) {
+      const first = forwarded.split(",")[0]?.trim();
+      if (first) return first;
+    }
+  }
+  const remote = (socket as unknown as { remoteAddress?: string }).remoteAddress;
+  return remote ?? null;
 }
 
 function safeRequestPath(req: IncomingMessage) {

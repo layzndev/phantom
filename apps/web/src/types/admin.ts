@@ -12,6 +12,7 @@ export interface AdminUser {
   displayName: string;
   role: AdminRole;
   twoFactorEnabled: boolean;
+  ipAllowlist?: string[];
 }
 
 export interface HostedServer {

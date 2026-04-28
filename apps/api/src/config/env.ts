@@ -52,7 +52,19 @@ export const env = {
   workloadDeleteTimeoutMs: Number(process.env.WORKLOAD_DELETE_TIMEOUT_MS ?? 120_000),
   workloadDeleteMonitorTickMs: Number(process.env.WORKLOAD_DELETE_MONITOR_TICK_MS ?? 10_000),
   workloadDeleteMonitorEnabled:
-    (process.env.WORKLOAD_DELETE_MONITOR_ENABLED ?? "true").toLowerCase() !== "false"
+    (process.env.WORKLOAD_DELETE_MONITOR_ENABLED ?? "true").toLowerCase() !== "false",
+  // Comma/space separated CIDR or single-IP list. Empty = allow all.
+  adminIpAllowlist: process.env.ADMIN_IP_ALLOWLIST ?? "",
+  runtimeIpAllowlist: process.env.RUNTIME_IP_ALLOWLIST ?? "",
+  // Per-admin session pinning: bind the cookie to the IP/UA captured at login.
+  sessionPinIp: (process.env.SESSION_PIN_IP ?? "true").toLowerCase() !== "false",
+  sessionPinUserAgent: (process.env.SESSION_PIN_USER_AGENT ?? "true").toLowerCase() !== "false",
+  // Per-IP login brute-force lockout.
+  loginIpLockoutThreshold: Number(process.env.LOGIN_IP_LOCKOUT_THRESHOLD ?? 10),
+  loginIpLockoutMs: Number(process.env.LOGIN_IP_LOCKOUT_MS ?? 15 * 60_000),
+  loginIpFailureWindowMs: Number(process.env.LOGIN_IP_FAILURE_WINDOW_MS ?? 15 * 60_000),
+  // Strict transport security in production.
+  hstsMaxAgeSeconds: Number(process.env.HSTS_MAX_AGE_SECONDS ?? 60 * 60 * 24 * 365)
 };
 
 export function assertRuntimeConfig() {

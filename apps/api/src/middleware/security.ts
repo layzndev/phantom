@@ -18,12 +18,43 @@ export const corsMiddleware = cors({
 });
 
 export const helmetMiddleware = helmet({
-  crossOriginResourcePolicy: { policy: "same-site" }
+  // Conservative CSP — same-origin only for everything except inline styles
+  // (Next.js statically generated HTML uses a few inline <style> blocks).
+  contentSecurityPolicy: env.isProduction
+    ? {
+        useDefaults: true,
+        directives: {
+          "default-src": ["'self'"],
+          "script-src": ["'self'"],
+          "style-src": ["'self'", "'unsafe-inline'"],
+          "img-src": ["'self'", "data:"],
+          "connect-src": ["'self'", ...env.corsOrigins],
+          "object-src": ["'none'"],
+          "frame-ancestors": ["'none'"],
+          "base-uri": ["'self'"],
+          "form-action": ["'self'"]
+        }
+      }
+    : false,
+  crossOriginResourcePolicy: { policy: "same-site" },
+  crossOriginOpenerPolicy: { policy: "same-origin" },
+  referrerPolicy: { policy: "strict-origin-when-cross-origin" },
+  // HSTS only in production over TLS — sending it in dev would persist on
+  // the browser and break local non-https setups.
+  strictTransportSecurity: env.isProduction
+    ? { maxAge: env.hstsMaxAgeSeconds, includeSubDomains: true, preload: true }
+    : false,
+  hidePoweredBy: true,
+  noSniff: true,
+  frameguard: { action: "deny" }
 });
 
 export const authRateLimiter = rateLimit({
   windowMs: 10 * 60 * 1000,
-  limit: 25,
+  // Stricter than before: 10 attempts per IP per 10 minutes. The per-IP
+  // brute-force tracker (loginIpThrottle) and per-account lockout add
+  // additional layers.
+  limit: 10,
   standardHeaders: "draft-7",
   legacyHeaders: false
 });
