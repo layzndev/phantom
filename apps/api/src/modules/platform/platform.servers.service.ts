@@ -7,7 +7,8 @@ import {
   getMinecraftServer,
   restartMinecraftServer,
   startMinecraftServer,
-  stopMinecraftServer
+  stopMinecraftServer,
+  updateMinecraftServerSettings
 } from "../minecraft/minecraft.service.js";
 import {
   findMinecraftTemplate,
@@ -195,6 +196,38 @@ export async function deletePlatformTenantServer(
 ) {
   await getPlatformTenantServer(tenantId, serverId);
   return deleteMinecraftServer(serverId, { hardDeleteData: options.hardDeleteData ?? false });
+}
+
+/**
+ * Platform-facing settings update. Only exposes the customer-facing
+ * subset: motd, difficulty, gameMode, maxPlayers, whitelistEnabled.
+ * The other fields (autoSleep*, onlineMode) are merged from the
+ * server's current state so the underlying admin schema is satisfied.
+ */
+export async function updatePlatformTenantServerSettings(
+  tenantId: string,
+  serverId: string,
+  input: {
+    motd?: string;
+    difficulty?: "peaceful" | "easy" | "normal" | "hard";
+    gameMode?: "survival" | "creative" | "adventure" | "spectator";
+    maxPlayers?: number;
+    whitelistEnabled?: boolean;
+  }
+) {
+  const detail = await getPlatformTenantServer(tenantId, serverId);
+  return updateMinecraftServerSettings(serverId, {
+    autoSleepUseGlobalDefaults: detail.server.autoSleepUseGlobalDefaults,
+    autoSleepEnabled: detail.server.autoSleepEnabled,
+    autoSleepIdleMinutes: detail.server.autoSleepIdleMinutes,
+    autoSleepAction: detail.server.autoSleepAction,
+    onlineMode: detail.server.onlineMode,
+    motd: input.motd ?? detail.server.motd ?? `${detail.server.name} — Phantom`,
+    difficulty: input.difficulty ?? detail.server.difficulty,
+    gameMode: input.gameMode ?? detail.server.gameMode,
+    maxPlayers: input.maxPlayers ?? detail.server.maxPlayers,
+    whitelistEnabled: input.whitelistEnabled ?? detail.server.whitelistEnabled
+  });
 }
 
 // Re-export so the controller doesn't need to know about MinecraftTemplate.

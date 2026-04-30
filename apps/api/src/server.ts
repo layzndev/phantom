@@ -36,6 +36,7 @@ import {
 import { adminSession } from "./middleware/security.js";
 import { acceptWebSocket } from "./lib/websocket.js";
 import { normalizeIp, parseIpAllowlist } from "./lib/ipAccess.js";
+import { redeemConsoleTicket } from "./modules/platform/platform.console.tickets.js";
 
 const wsAdminAllowlist = parseIpAllowlist(env.adminIpAllowlist);
 
@@ -178,39 +179,73 @@ async function handleMinecraftConsoleUpgrade(
     return;
   }
 
-  // Apply the same admin IP allowlist used for HTTP routes (Express
-  // middleware doesn't run on the upgrade path).
-  if (!wsAdminAllowlist.isEmpty) {
-    const ip = normalizeIp(extractWsClientIp(req, socket));
-    if (!ip || !wsAdminAllowlist.matches(ip)) {
-      console.warn("[server] websocket upgrade rejected", {
-        reason: "ip_not_in_admin_allowlist",
-        path: pathname,
-        ip: ip ?? "unknown"
-      });
-      void createAuditLog({
-        action: "admin.ip_blocked",
-        actorEmail: "anonymous",
-        targetType: "system",
-        metadata: { ip: ip ?? "unknown", path: pathname, channel: "websocket" }
-      }).catch(() => undefined);
-      rejectUpgrade(socket, 403, "Forbidden");
-      return;
-    }
-  }
-
-  await loadAdminSession(req);
-  const admin = (req as IncomingMessage & { session?: { admin?: { id: string; email: string; role: string } }; sessionID?: string }).session?.admin;
-  if (!admin) {
-    console.warn("[server] websocket upgrade rejected", {
-      reason: "unauthorized",
-      path: pathname
-    });
-    rejectUpgrade(socket, 401, "Unauthorized");
+  const serverId = match[1];
+  if (!serverId) {
+    rejectUpgrade(socket, 400, "Bad Request");
     return;
   }
 
-  const serverId = match[1];
+  // Two auth paths share this upgrade endpoint:
+  //   1. Admin session cookie (Phantom UI itself).
+  //   2. Single-use platform ticket (?ticket=phct_…) issued via
+  //      /platform/.../console-url for the Hosting product.
+  // Admin sessions still pay the admin IP allowlist; ticket-auth is
+  // explicitly NOT behind the admin allowlist (the customer can be
+  // anywhere on the internet).
+  const ticketParam = extractTicketParam(req);
+  let actorEmail = "admin";
+
+  if (ticketParam) {
+    const consumed = redeemConsoleTicket(ticketParam);
+    if (!consumed || consumed.serverId !== serverId) {
+      console.warn("[server] websocket upgrade rejected", {
+        reason: "invalid_or_expired_ticket",
+        path: pathname,
+        serverId
+      });
+      rejectUpgrade(socket, 401, "Unauthorized");
+      return;
+    }
+    actorEmail = `platform-token:${consumed.mintedBy}`;
+    (req as ConsoleRequest).wsActor = {
+      id: `tenant:${consumed.tenantId}`,
+      email: actorEmail,
+      role: "platform"
+    };
+  } else {
+    if (!wsAdminAllowlist.isEmpty) {
+      const ip = normalizeIp(extractWsClientIp(req, socket));
+      if (!ip || !wsAdminAllowlist.matches(ip)) {
+        console.warn("[server] websocket upgrade rejected", {
+          reason: "ip_not_in_admin_allowlist",
+          path: pathname,
+          ip: ip ?? "unknown"
+        });
+        void createAuditLog({
+          action: "admin.ip_blocked",
+          actorEmail: "anonymous",
+          targetType: "system",
+          metadata: { ip: ip ?? "unknown", path: pathname, channel: "websocket" }
+        }).catch(() => undefined);
+        rejectUpgrade(socket, 403, "Forbidden");
+        return;
+      }
+    }
+
+    await loadAdminSession(req);
+    const admin = (req as IncomingMessage & { session?: { admin?: { id: string; email: string; role: string } }; sessionID?: string }).session?.admin;
+    if (!admin) {
+      console.warn("[server] websocket upgrade rejected", {
+        reason: "unauthorized",
+        path: pathname
+      });
+      rejectUpgrade(socket, 401, "Unauthorized");
+      return;
+    }
+    actorEmail = admin.email;
+    (req as ConsoleRequest).wsActor = admin;
+  }
+
   const detail = await getMinecraftConsoleSession(serverId);
   let detach: () => void = () => {};
   const connection = acceptWebSocket(req, socket, head, {
@@ -245,7 +280,7 @@ async function handleMinecraftConsoleUpgrade(
     path: pathname,
     serverId,
     workloadId: detail.workload.id,
-    adminId: admin.id
+    actor: actorEmail
   });
   connection.sendJson({
     type: "status",
@@ -260,9 +295,9 @@ async function handleConsoleMessage(
   rawMessage: string,
   workloadId: string
 ) {
-  const admin = req.session?.admin;
+  const admin = req.wsActor ?? req.session?.admin;
   if (!admin) {
-    throw new Error("Admin authentication required.");
+    throw new Error("Authentication required.");
   }
 
   const message = JSON.parse(rawMessage) as Record<string, unknown>;
@@ -350,12 +385,23 @@ type ConsoleRequest = IncomingMessage & {
     admin?: { id: string; email: string; role: string };
   };
   sessionID?: string;
+  wsActor?: { id: string; email: string; role: string };
 };
 
 function isWebSocketUpgradeRequest(req: IncomingMessage) {
   const upgrade = typeof req.headers.upgrade === "string" ? req.headers.upgrade.toLowerCase() : "";
   const connection = typeof req.headers.connection === "string" ? req.headers.connection.toLowerCase() : "";
   return upgrade === "websocket" && connection.includes("upgrade");
+}
+
+function extractTicketParam(req: IncomingMessage): string | null {
+  try {
+    const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
+    const ticket = url.searchParams.get("ticket");
+    return ticket && ticket.length > 0 ? ticket : null;
+  } catch {
+    return null;
+  }
 }
 
 function extractWsClientIp(req: IncomingMessage, socket: import("node:stream").Duplex) {

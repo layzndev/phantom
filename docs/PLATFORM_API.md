@@ -237,11 +237,61 @@ Returns:
 - `202 { finalized: false, ... }` if the deletion is in progress on the
   agent.
 
+### `PATCH /platform/tenants/:id/servers/:serverId/settings`
+
+Customer-facing settings update. Only exposes the safe subset — autosleep
+and online-mode are infra concerns and are NOT writable from the platform
+API. All fields optional; at least one must be provided.
+
+```http
+PATCH /platform/tenants/<tenant-uuid>/servers/<server-uuid>/settings
+Content-Type: application/json
+Authorization: Bearer phs_live_…
+
+{
+  "motd": "Updated welcome message",
+  "difficulty": "hard",
+  "gameMode": "creative",
+  "maxPlayers": 50,
+  "whitelistEnabled": true
+}
+```
+
+Returns the full server detail. The other settings (autosleep, onlineMode)
+are loaded from the server's current state and persisted unchanged.
+
+### `POST /platform/tenants/:id/servers/:serverId/console-url`
+
+Issues a single-use, short-lived ticket the Hosting frontend hands to the
+customer's browser to open the Phantom console WebSocket directly,
+without ever seeing the bearer token.
+
+```http
+POST /platform/tenants/<tenant-uuid>/servers/<server-uuid>/console-url
+Authorization: Bearer phs_live_…
+```
+
+**Response 201**:
+
+```json
+{
+  "ticket": "phct_…",
+  "url": "ws://localhost:4200/runtime/minecraft/servers/<id>/console?ticket=phct_…",
+  "expiresAt": "2026-04-30T12:34:56.789Z",
+  "ttlSeconds": 60
+}
+```
+
+The ticket is consumed on the first WebSocket upgrade attempt — a second
+attempt with the same ticket fails with `401 Unauthorized`. Default TTL
+is 60 s (max 5 min). The ticket is bound to `(serverId, tenantId)`: it
+cannot be redeemed against a different server.
+
+Set `PUBLIC_WS_BASE_URL` (eg. `wss://api.phantom.example.com`) in
+production so the URL points to your TLS-terminating proxy.
+
 ## Roadmap
 
-- `POST /platform/tenants/:id/servers/:serverId/console-url` — short-lived
-  signed URL for the Hosting frontend to open the WebSocket console
-  without exposing the bearer.
 - Outbound webhooks (`server.ready`, `server.stopped`, `server.crashed`,
   `tenant.over_quota`) signed with HMAC.
 - Scope enforcement (`tenants.read`, `tenants.write`, `servers.write`).

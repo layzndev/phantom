@@ -69,7 +69,11 @@ export const env = {
   loginIpLockoutMs: Number(process.env.LOGIN_IP_LOCKOUT_MS ?? 15 * 60_000),
   loginIpFailureWindowMs: Number(process.env.LOGIN_IP_FAILURE_WINDOW_MS ?? 15 * 60_000),
   // Strict transport security in production.
-  hstsMaxAgeSeconds: Number(process.env.HSTS_MAX_AGE_SECONDS ?? 60 * 60 * 24 * 365)
+  hstsMaxAgeSeconds: Number(process.env.HSTS_MAX_AGE_SECONDS ?? 60 * 60 * 24 * 365),
+  // Optional public WS base used when minting platform console URLs.
+  // Empty = derive from HOST + PORT (good for local). Set to e.g.
+  // wss://api.phantom.example.com in production behind TLS.
+  publicWsBaseUrl: process.env.PUBLIC_WS_BASE_URL ?? ""
 };
 
 export function assertRuntimeConfig() {

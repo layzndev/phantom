@@ -18,6 +18,8 @@ export type AuditAction =
   | "platform.server.stop"
   | "platform.server.restart"
   | "platform.server.delete"
+  | "platform.server.settings"
+  | "platform.server.console_url"
   | "node.list"
   | "node.create"
   | "node.detail"

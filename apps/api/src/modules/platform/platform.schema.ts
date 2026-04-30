@@ -87,7 +87,21 @@ export const deleteTenantServerQuerySchema = z.object({
   hardDeleteData: z.coerce.boolean().optional().default(false)
 });
 
+export const updateTenantServerSettingsSchema = z
+  .object({
+    motd: z.string().trim().min(1).max(120).optional(),
+    difficulty: z.enum(["peaceful", "easy", "normal", "hard"]).optional(),
+    gameMode: z.enum(["survival", "creative", "adventure", "spectator"]).optional(),
+    maxPlayers: z.coerce.number().int().min(1).max(500).optional(),
+    whitelistEnabled: z.boolean().optional()
+  })
+  .strict()
+  .refine((value) => Object.keys(value).length > 0, {
+    message: "Provide at least one field to update."
+  });
+
 export type CreateTenantInputSchema = z.infer<typeof createTenantSchema>;
 export type UpdateTenantInputSchema = z.infer<typeof updateTenantSchema>;
 export type IssuePlatformTokenInputSchema = z.infer<typeof issuePlatformTokenSchema>;
 export type ProvisionTenantServerInputSchema = z.infer<typeof provisionTenantServerSchema>;
+export type UpdateTenantServerSettingsInputSchema = z.infer<typeof updateTenantServerSettingsSchema>;
